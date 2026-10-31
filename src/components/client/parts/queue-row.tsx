@@ -76,3 +76,4 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
     </div>
   );
 }
+

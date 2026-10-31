@@ -28,3 +28,4 @@ describe("night domain logic", () => {
     expect(isPlayerOnline(undefined, now)).toBe(false);
   });
 });
+

@@ -35,3 +35,4 @@ export function BalanceCard({ credits, onOpenRedeem }: BalanceCardProps) {
     </div>
   );
 }
+

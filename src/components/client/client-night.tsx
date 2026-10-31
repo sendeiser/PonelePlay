@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  BadgeCheck,
   Disc3,
   Info,
   ListMusic,
@@ -14,12 +15,14 @@ import { BrandMark, Wordmark } from "@/components/brand";
 import { ensureAnonymousParticipant } from "@/lib/api/anon";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { deriveNightPhase } from "@/lib/api/contracts";
+import { castVote, voteErrorMessage } from "@/lib/api/votes";
 import { useNightState } from "@/hooks/use-night-state";
 import { OfflineBanner } from "./parts/offline-banner";
 import { ClosedState } from "./parts/closed-state";
 import { NowPlayingCard } from "./parts/now-playing-card";
 import { BalanceCard } from "./parts/balance-card";
 import { QueueRow } from "./parts/queue-row";
+import { RedeemSheet } from "./parts/redeem-sheet";
 import { cn } from "@/lib/cn";
 
 type TabId = "cola" | "buscar" | "votos";
@@ -32,10 +35,15 @@ const tabs = [
 
 export function ClientNight({ slug }: { slug: string }) {
   const source = useMemo(() => createNightStateSource(slug), [slug]);
-  const { state, loading, offline } = useNightState(source);
+  const { state, loading, offline, refresh } = useNightState(source);
 
   const [tab, setTab] = useState<TabId>("cola");
-  const [toast, setToast] = useState<{ message: string; tone: "ok" | "info" } | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [pendingVotes, setPendingVotes] = useState<Set<string>>(() => new Set());
+  const [toast, setToast] = useState<{
+    message: string;
+    tone: "ok" | "error" | "info";
+  } | null>(null);
 
   useEffect(() => {
     void ensureAnonymousParticipant(slug).catch(() => {
@@ -49,12 +57,41 @@ export function ClientNight({ slug }: { slug: string }) {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  function notify(message: string, tone: "ok" | "info" = "info") {
+  function notify(message: string, tone: "ok" | "error" | "info" = "info") {
     setToast({ message, tone });
   }
 
-  function handleActionUnavailable(action: string) {
-    notify(`${action}: Próximamente en la siguiente microtarea.`, "info");
+  const credits = state?.me?.credits ?? 0;
+  const queue = state?.queue ?? [];
+
+  async function handleVote(queueItemId: string) {
+    if (credits <= 0) {
+      notify("Te quedaste sin votos. Canjeá un código.", "error");
+      setSheetOpen(true);
+      return;
+    }
+
+    setPendingVotes((prev) => new Set(prev).add(queueItemId));
+    try {
+      const res = await castVote(queueItemId);
+      if (res.ok) {
+        notify("¡Voto computado! La cola se actualizó.", "ok");
+        await refresh();
+      } else {
+        notify(voteErrorMessage(res.error), "error");
+        if (res.error === "no_credits") {
+          setSheetOpen(true);
+        }
+      }
+    } catch {
+      notify("Error de red al votar. Reintentá en unos segundos.", "error");
+    } finally {
+      setPendingVotes((prev) => {
+        const next = new Set(prev);
+        next.delete(queueItemId);
+        return next;
+      });
+    }
   }
 
   if (loading && !state) {
@@ -81,9 +118,6 @@ export function ClientNight({ slug }: { slug: string }) {
       </div>
     );
   }
-
-  const credits = state.me?.credits ?? 0;
-  const queue = state.queue;
 
   return (
     <div className="relative min-h-dvh overflow-x-hidden bg-felt-950 text-cream">
@@ -127,7 +161,7 @@ export function ClientNight({ slug }: { slug: string }) {
               </span>
               <button
                 type="button"
-                onClick={() => handleActionUnavailable("Canje")}
+                onClick={() => setSheetOpen(true)}
                 className="flex items-center gap-1.5 rounded-full bg-amber px-3 py-2 font-mono text-[11px] font-bold text-ink transition-transform active:scale-95"
                 aria-label={`Tus votos: ${credits}. Canjear código`}
               >
@@ -151,7 +185,7 @@ export function ClientNight({ slug }: { slug: string }) {
             <div className="mt-4">
               <BalanceCard
                 credits={credits}
-                onOpenRedeem={() => handleActionUnavailable("Canje de códigos")}
+                onOpenRedeem={() => setSheetOpen(true)}
               />
             </div>
 
@@ -201,7 +235,8 @@ export function ClientNight({ slug }: { slug: string }) {
                       <QueueRow
                         item={item}
                         rank={index + 1}
-                        onVote={() => handleActionUnavailable("Votación")}
+                        disabled={pendingVotes.has(item.id)}
+                        onVote={() => void handleVote(item.id)}
                       />
                     </motion.li>
                   ))}
@@ -241,10 +276,10 @@ export function ClientNight({ slug }: { slug: string }) {
             <div className="mt-8 flex flex-col items-center rounded-3xl border border-dashed border-cream/15 px-6 py-12 text-center">
               <Music2 className="size-10 text-amber/60" aria-hidden="true" />
               <h2 className="mt-4 font-display text-lg font-bold">
-                Búsqueda de canciones
+                Búsqueda y propuestas
               </h2>
               <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-cream/50">
-                La integración con la API de YouTube y búsqueda interna se habilitará en las siguientes microtareas (Fase F3).
+                Podés proponer canciones buscando en YouTube o pegando un link directo.
               </p>
               <button
                 type="button"
@@ -276,7 +311,7 @@ export function ClientNight({ slug }: { slug: string }) {
               </div>
               <button
                 type="button"
-                onClick={() => handleActionUnavailable("Canjear")}
+                onClick={() => setSheetOpen(true)}
                 className="flex items-center gap-1.5 rounded-full bg-amber px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-ink"
               >
                 <Ticket className="size-3.5" aria-hidden="true" />
@@ -304,7 +339,7 @@ export function ClientNight({ slug }: { slug: string }) {
             </div>
 
             <p className="mt-6 text-center text-xs text-cream/40">
-              El historial detallado de transacciones y votos se registrará con cada voto emitido.
+              Cada voto suma 1 crédito para ordenar las canciones de la noche.
             </p>
           </motion.div>
         ) : null}
@@ -335,6 +370,19 @@ export function ClientNight({ slug }: { slug: string }) {
         </nav>
       </div>
 
+      {/* Redeem Bottom Sheet */}
+      <AnimatePresence>
+        {sheetOpen ? (
+          <RedeemSheet
+            venueName={state.venue.name}
+            onClose={() => setSheetOpen(false)}
+            onSuccess={async () => {
+              await refresh();
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
+
       {/* Toast Feedback */}
       <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4">
         <AnimatePresence>
@@ -343,10 +391,21 @@ export function ClientNight({ slug }: { slug: string }) {
               initial={{ opacity: 0, y: 10, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8, scale: 0.98 }}
-              className="flex max-w-sm items-center gap-2 rounded-full border border-amber/30 bg-felt-800 px-4 py-2.5 text-center text-xs text-cream shadow-2xl"
+              className={cn(
+                "flex max-w-sm items-center gap-2 rounded-full border px-4 py-2.5 text-center text-xs shadow-2xl",
+                toast.tone === "ok"
+                  ? "border-mint/30 bg-felt-800 text-cream"
+                  : toast.tone === "error"
+                    ? "border-coral/40 bg-felt-800 text-cream"
+                    : "border-amber/30 bg-felt-800 text-cream",
+              )}
               role="status"
             >
-              <Info className="size-4 shrink-0 text-amber" aria-hidden="true" />
+              {toast.tone === "ok" ? (
+                <BadgeCheck className="size-4 shrink-0 text-mint" aria-hidden="true" />
+              ) : (
+                <Info className="size-4 shrink-0 text-coral" aria-hidden="true" />
+              )}
               {toast.message}
             </motion.div>
           ) : null}

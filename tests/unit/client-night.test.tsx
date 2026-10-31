@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ClientNight } from "@/components/client/client-night";
 import type { NightState } from "@/lib/api/contracts";
 
@@ -21,7 +21,22 @@ vi.mock("@/lib/api/night-state", () => ({
   }),
 }));
 
+const mockCastVote = vi.fn().mockResolvedValue({
+  ok: true,
+  voteCount: 5,
+  balance: 2,
+});
+
+vi.mock("@/lib/api/votes", () => ({
+  castVote: (id: string) => mockCastVote(id),
+  voteErrorMessage: (err: string) => `Error: ${err}`,
+}));
+
 describe("ClientNight component", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   const activeNightState: NightState = {
     venue: {
       id: "v-1",
@@ -103,6 +118,43 @@ describe("ClientNight component", () => {
       expect(screen.getByText("Crimen")).toBeInTheDocument();
       expect(screen.getByText("De Música Ligera")).toBeInTheDocument();
       expect(screen.getByText("Billar Aurora")).toBeInTheDocument();
+    });
+  });
+
+  it("casts a vote when clicking vote button", async () => {
+    mockFetch.mockResolvedValue(activeNightState);
+
+    render(<ClientNight slug="billar-aurora" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /votar por de música ligera/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /votar por de música ligera/i }));
+
+    expect(mockCastVote).toHaveBeenCalledWith("qi-1");
+  });
+
+  it("opens redeem sheet when user has 0 credits and tries to vote", async () => {
+    mockFetch.mockResolvedValue({
+      ...activeNightState,
+      me: {
+        participantId: "part-1",
+        credits: 0,
+        proposalsUsed: 0,
+      },
+    });
+
+    render(<ClientNight slug="billar-aurora" />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /votar por de música ligera/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /votar por de música ligera/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Canjeá tus votos")).toBeInTheDocument();
     });
   });
 });

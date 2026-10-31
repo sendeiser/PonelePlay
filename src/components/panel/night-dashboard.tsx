@@ -365,3 +365,4 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     </div>
   );
 }
+

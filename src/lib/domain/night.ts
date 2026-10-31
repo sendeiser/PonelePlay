@@ -18,3 +18,4 @@ export function isPlayerOnline(
   if (Number.isNaN(lastSeenMs)) return false;
   return currentTimestampMs - lastSeenMs <= 45_000;
 }
+

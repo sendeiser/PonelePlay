@@ -56,3 +56,4 @@ export function PlayerStatus({ lastSeenAt, onPair }: PlayerStatusProps) {
     </div>
   );
 }
+

@@ -80,6 +80,19 @@ export type NightActionResponse = z.infer<typeof nightActionResponseSchema>;
 
 export type NightPhase = "closed" | "empty" | "active";
 
+export const codeRowSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  credits: z.number().int().positive(),
+  status: z.enum(["active", "redeemed", "expired"]),
+  createdAt: z.string(),
+  printedCount: z.number().int().nonnegative(),
+  createdByKind: z.enum(["owner", "staff", "system"]),
+  createdByName: z.string(),
+});
+
+export type CodeRow = z.infer<typeof codeRowSchema>;
+
 export function deriveNightPhase(state: NightState): NightPhase {
   if (!state.night || state.night.status === "closed") {
     return "closed";
