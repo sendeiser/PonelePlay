@@ -163,6 +163,7 @@ La cola se ordena por cantidad de votos descendente y, en empate, por la propues
 
 ```sql
 create type track_source     as enum ('youtube', 'upload', 'spotify');
+create type track_creator    as enum ('owner', 'client');
 create type queue_status     as enum ('queued', 'playing', 'played', 'skipped', 'vetoed', 'failed');
 create type code_status      as enum ('active', 'redeemed', 'expired');
 create type night_status     as enum ('open', 'closed');
@@ -217,7 +218,7 @@ create type credit_reason    as enum ('code_redeem', 'vote', 'night_close');
 | is_explicit | boolean | Marcado por filtro o dueño |
 | status | text | `active` / `archived` |
 | dedupe_key | text | `yt:<videoId>`, `file:<sha256>`, `sp:<trackId>` |
-| created_by_kind | actor_kind | owner / client |
+| created_by_kind | track_creator | owner / client |
 | created_at | timestamptz | |
 
 Restricciones: `unique(venue_id, dedupe_key)`. Índice por `status`.
@@ -370,7 +371,7 @@ Decisión: el código se guarda en texto plano porque debe poder reimprimirse y 
 | id | uuid PK | |
 | venue_id | uuid | |
 | track_id | uuid | FK tracks |
-| position | int | Único por local |
+| position | int | Orden explícito; se renumera al reordenar |
 
 **staff_actions** — auditoría.
 

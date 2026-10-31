@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { getPanelRole, panelNavFor } from "@/lib/domain/permissions";
+import { type PanelRole, panelNavFor } from "@/lib/domain/permissions";
 
 interface PanelShellProps {
   slug: string;
-  role: "owner" | "staff" | "guest";
+  role: PanelRole;
   children: React.ReactNode;
 }
 
 export function PanelShell({ slug, role, children }: PanelShellProps) {
-  const nav = panelNavFor(role as any, slug);
+  const nav = panelNavFor(role, slug);
   return (
     <div className="min-h-screen bg-[#041611] text-cream flex">
       <aside className="w-64 border-r border-amber/10 bg-[#07211b] p-4 flex flex-col gap-2">

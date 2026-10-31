@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-felt-950: #041611;
+  --color-felt-900: #07211b;
+  --color-felt-800: #0b2c24;
+  --color-felt-700: #124437;
+  --color-cream: #f5e9d6;
+  --color-amber: #ffb703;
+  --color-coral: #ff5d5d;
+  --color-mint: #78e0b4;
+  --color-sky: #7dd3fc;
+  --color-ink: #0a0a0a;
+  --font-sans: var(--font-dm-sans);
+  --font-display: var(--font-bricolage);
+  --font-mono: var(--font-jetbrains);
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--color-felt-950);
+  color: var(--color-cream);
+  background-image:
+    radial-gradient(70% 50% at 50% -10%, rgba(255, 183, 3, 0.1), transparent 65%),
+    radial-gradient(55% 40% at 100% 100%, rgba(255, 93, 93, 0.07), transparent 65%),
+    radial-gradient(40% 30% at 0% 70%, rgba(120, 224, 180, 0.05), transparent 65%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: var(--color-amber);
+  color: var(--color-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 3px;
+}
+
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E");
+}
+
+.spin-slow {
+  animation: spin-slow 22s linear infinite;
+}
+
+.eq-bar {
+  animation: eq 900ms ease-in-out infinite;
+  transform-origin: bottom;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes eq {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin-slow,
+  .eq-bar {
+    animation: none;
+  }
+}
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-ticket,
+  .print-ticket * {
+    visibility: visible;
+  }
+
+  .print-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .print-ticket * {
+    border-color: #000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
