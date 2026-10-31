@@ -35,7 +35,7 @@ describe("queue ordering", () => {
     const earlierUtc = {
       id: "earlier",
       voteCount: 3,
-      createdAt: "2026-10-31T22:00:00Z",
+      createdAt: "2026-11-01T01:00:00Z",
     };
 
     expect(compareQueue(laterWithOffset, earlierUtc)).toBeGreaterThan(0);
