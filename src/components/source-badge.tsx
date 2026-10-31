@@ -1,6 +1,7 @@
-import { FileAudio, Play } from "lucide-react";
+import { FileAudio, Music2, Play } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { TrackSource } from "@/lib/demo-data";
+
+export type TrackSource = "youtube" | "upload" | "spotify";
 
 export function SourceBadge({
   source,
@@ -11,7 +12,11 @@ export function SourceBadge({
   className?: string;
   label?: boolean;
 }) {
-  const Icon = source === "youtube" ? Play : FileAudio;
+  const Icon =
+    source === "youtube" ? Play : source === "upload" ? FileAudio : Music2;
+
+  const labelText =
+    source === "youtube" ? "YouTube" : source === "upload" ? "MP3" : "Spotify";
 
   return (
     <span
@@ -21,7 +26,7 @@ export function SourceBadge({
       )}
     >
       <Icon className="size-3" aria-hidden="true" />
-      {label ? (source === "youtube" ? "YouTube" : "MP3") : null}
+      {label ? labelText : null}
     </span>
   );
 }

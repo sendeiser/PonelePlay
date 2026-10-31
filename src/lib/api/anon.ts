@@ -27,3 +27,4 @@ export async function ensureAnonymousParticipant(
 
   return joinNightResponseSchema.parse(data);
 }
+

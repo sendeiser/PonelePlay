@@ -104,3 +104,4 @@ describe("night contracts and schemas", () => {
     ).toBe("active");
   });
 });
+

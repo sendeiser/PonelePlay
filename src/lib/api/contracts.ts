@@ -89,3 +89,4 @@ export function deriveNightPhase(state: NightState): NightPhase {
   }
   return "active";
 }
+

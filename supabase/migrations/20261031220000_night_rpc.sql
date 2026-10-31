@@ -380,3 +380,4 @@ $$;
 
 revoke all on function public.owner_close_night() from public;
 grant execute on function public.owner_close_night() to authenticated;
+

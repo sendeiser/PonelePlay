@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { ClientDemo } from "@/components/client/client-demo";
+import { ClientNight } from "@/components/client/client-night";
 
 export const metadata: Metadata = {
-  title: "Votá la música",
+  title: "Votá la música · PonelePlay",
   description: "Escaneá, canjeá tus créditos y poné la próxima canción.",
 };
 
@@ -13,5 +13,5 @@ export default async function ClientPage({
 }) {
   const { slug } = await params;
 
-  return <ClientDemo slug={slug} />;
+  return <ClientNight slug={slug} />;
 }

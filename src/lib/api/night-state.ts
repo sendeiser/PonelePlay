@@ -46,3 +46,4 @@ export function createNightStateSource(slug: string): NightStateSource {
     },
   };
 }
+
