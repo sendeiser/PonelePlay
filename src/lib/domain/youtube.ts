@@ -36,7 +36,7 @@ export function parseYoutubeVideoId(input: string): string | null {
       if (id && /^[A-Za-z0-9_-]{11}$/.test(id)) return id;
       return null;
     }
-    if (url.pathname.startsWith("/watch")) {
+    if (url.pathname === "/watch") {
       const v = url.searchParams.get("v");
       if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
       return null;
