@@ -17,3 +17,4 @@ const PlayerScreen = dynamic(
 export function ClientPlayerScreen({ slug }: { slug: string }) {
   return <PlayerScreen slug={slug} />;
 }
+

@@ -1043,20 +1043,25 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
-            {mounted && (
-              <iframe
-                ref={iframeRef}
-                key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
-                src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
-                title={nowPlaying?.title || "TV Player"}
-                className="w-full h-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                onLoad={() => {
-                  postToIframe("listening");
-                }}
-              />
-            )}
+            {/* Stable wrapper: the iframe remounts on every song change (key), so it
+                must not have siblings that third-party code may mutate. */}
+            <div className="w-full h-full">
+              {mounted && (
+                <iframe
+                  ref={iframeRef}
+                  key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
+                  src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+                  title={nowPlaying?.title || "TV Player"}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  onLoad={() => {
+                    postToIframe("listening");
+                  }}
+                />
+              )}
+            </div>
+            {/* Unmanaged host for the YouTube IFrame API engine (React renders no children here) */}
             <div id="yt-player-target" className="hidden pointer-events-none" />
             {videoMode && (
               <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">

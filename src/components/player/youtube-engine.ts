@@ -135,7 +135,16 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         }
 
         try {
-          player = new window.YT.Player(containerId, {
+          // IMPORTANT: YT.Player REPLACES the element it receives with an <iframe>.
+          // If we pass the React-managed container directly, React keeps a stale
+          // reference and later crashes with "insertBefore: node is not a child".
+          // So we create an unmanaged child host inside the container instead.
+          const host = document.createElement("div");
+          host.style.width = "100%";
+          host.style.height = "100%";
+          el.appendChild(host);
+
+          player = new window.YT.Player(host, {
             host: "https://www.youtube-nocookie.com",
             width: "100%",
             height: "100%",
