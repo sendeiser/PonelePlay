@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X, KeyRound } from "lucide-react";
+import { Maximize2, Minimize2, Music2, Volume2, X, KeyRound } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import {
@@ -28,6 +28,16 @@ function formatDuration(seconds: number | null): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+function decodeHtml(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
 }
 
 export function PlayerScreen({ slug }: PlayerScreenProps) {
@@ -518,14 +528,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   nowPlayingRef.current = nowPlaying;
   const lastCommandSeqRef = useRef<number | null>(null);
 
-  function handleVolumeChange(newVol: number) {
-    setVolume(newVol);
-    engine.setVolume?.(newVol);
-    if (newVol > 0 && isMuted) {
-      setIsMuted(false);
-      engine.unMute?.();
-    }
-  }
 
   const handleSeek = useCallback(
     (targetSec: number) => {
@@ -921,7 +923,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     >
       {/* Realtime Master Control HUD Message Toast */}
       {hudMessage && (
-        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-[#0A0E17]/95 text-white font-mono text-sm font-bold px-6 py-2 rounded-full border border-indigo-500/50 shadow-2xl animate-fade-in flex items-center gap-2">
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#0A0E17]/95 text-white font-mono text-xs font-bold px-5 py-1.5 rounded-full border border-indigo-500/50 shadow-2xl animate-fade-in flex items-center gap-2">
           <span>{hudMessage}</span>
         </div>
       )}
@@ -936,171 +938,83 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         />
       ) : null}
 
-      {/* ================= TOP BAR (NOCTURNE PRECISION HEADER) ================= */}
+      {/* ================= TOP BAR (COMPACT & SLEEK BROADCAST HEADER) ================= */}
       {!isVideoFullscreen && (
-        <header className="w-full px-4 py-2 flex justify-between items-center z-40 bg-[#141824] border border-[#232b42] rounded-xl shadow-lg shrink-0 mb-2">
-          {/* Brand / Logo & Venue Anchor */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="size-8 rounded-lg bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/25">
-                <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  graphic_eq
-                </span>
+        <header className="w-full px-3.5 py-1.5 flex justify-between items-center z-40 bg-[#121622] border border-[#232b42] rounded-lg shadow-md shrink-0 mb-2">
+          {/* Brand & Venue Info */}
+          <div className="flex items-center gap-2.5">
+            {/* Minimal Brand */}
+            <div className="flex items-center gap-1.5">
+              <div className="size-6 rounded-md bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center text-white shadow-sm">
+                <span className="material-symbols-outlined text-[14px]">graphic_eq</span>
               </div>
-              <div className="flex flex-col">
-                <span className="font-bold text-white text-sm tracking-tight leading-none">
-                  Ponele<span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">Play</span>
-                </span>
-                <span className="font-mono text-[8px] uppercase tracking-widest text-slate-400 mt-0.5">
-                  Jukebox & TV Precision
-                </span>
-              </div>
-            </div>
-
-            <div className="h-4 w-px bg-[#232b42]" />
-
-            {/* Venue Badge */}
-            <div className="flex items-center gap-1.5 bg-[#181b25] px-2.5 py-1 rounded-lg border border-[#232b42]">
-              <span className="material-symbols-outlined text-cyan-400 text-[14px]">location_on</span>
-              <span className="font-mono text-xs uppercase tracking-wider text-slate-300 font-semibold">
-                {venueName}
+              <span className="font-bold text-white text-xs tracking-tight">
+                Ponele<span className="text-cyan-400">Play</span>
               </span>
             </div>
 
-            {/* Karaoke Mode Active Badge */}
-            {karaokeMode || nowPlaying?.isKaraoke ? (
-              <div className="flex items-center gap-1.5 bg-gradient-to-r from-pink-500/25 via-purple-500/25 to-cyan-500/25 px-2.5 py-1 rounded-full border border-pink-500/40 shadow-[0_0_12px_rgba(236,72,153,0.35)] animate-pulse">
-                <span className="material-symbols-outlined text-pink-400 text-[16px]">
-                  mic_external_on
-                </span>
-                <span className="text-pink-200 font-mono text-[11px] font-bold tracking-wider uppercase">
-                  MODO KARAOKE
-                </span>
-              </div>
-            ) : null}
+            <div className="h-3 w-px bg-[#232b42]" />
 
-            {/* Live Session Status */}
-            <div className="flex items-center gap-2 bg-indigo-500/15 px-2.5 py-1 rounded-full border border-indigo-500/30">
-              <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
-              <span className="text-[#c0c1ff] font-mono text-[11px] font-semibold tracking-wide">
-                {token ? "CANAL HOST SINCRONIZADO" : "EN VIVO · REPRODUCIENDO"}
-              </span>
+            {/* Venue Badge (Clean & Compact) */}
+            <div className="flex items-center gap-1 text-[11px] font-mono text-slate-300 bg-[#0d1017] px-2 py-0.5 rounded-md border border-[#1e2333]">
+              <span className="material-symbols-outlined text-cyan-400 text-[12px]">location_on</span>
+              <span className="uppercase font-semibold tracking-wide">{venueName}</span>
             </div>
 
-            {/* Video / Vinyl Mode Toggle Pill */}
-            <button
-              type="button"
-              onClick={toggleVideoMode}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-xs font-semibold transition-all ${
-                videoMode
-                  ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-[0_0_10px_rgba(99,102,241,0.25)]"
-                  : "bg-[#181b25] text-slate-300 border-[#232b42] hover:text-white"
-              }`}
-              title="Alternar Modo Video / Modo Vinilo (Tecla V)"
-            >
-              <span className="material-symbols-outlined text-[15px]">
-                {videoMode ? "smart_display" : "album"}
-              </span>
-              <span>{videoMode ? "Modo Video (ON)" : "Modo Vinilo"}</span>
-            </button>
+            {/* Live Indicator (Minimal Dot & Label) */}
+            <div className="flex items-center gap-1.5 text-[10px] font-mono text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-md border border-cyan-500/25">
+              <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span>EN VIVO</span>
+            </div>
+
+            {/* Karaoke Mode Badge (Only if active) */}
+            {(karaokeMode || nowPlaying?.isKaraoke) && (
+              <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-pink-300 bg-pink-500/15 px-2 py-0.5 rounded-md border border-pink-500/30 animate-pulse">
+                <span className="material-symbols-outlined text-pink-400 text-[13px]">mic_external_on</span>
+                <span>KARAOKE</span>
+              </div>
+            )}
           </div>
 
-          {/* Volume, Pairing modal trigger & Precision Clock */}
-          <div className="flex items-center gap-2.5">
-            {/* Unlock Autoplay Sound Button if needed */}
+          {/* Right utilities: Audio Unlock (if needed), Pair status, Clock, Fullscreen */}
+          <div className="flex items-center gap-2">
+            {/* Audio Unlock Button if needed */}
             {!audioUnlocked && (
               <button
                 type="button"
                 onClick={handleUnlockAudio}
-                className="animate-pulse bg-gradient-to-r from-cyan-500 to-indigo-500 text-black px-3 py-1 rounded-lg font-mono text-xs font-bold shadow-md flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+                className="animate-pulse bg-cyan-400 text-black px-2 py-0.5 rounded-md font-mono text-[10px] font-bold shadow-sm flex items-center gap-1 hover:opacity-90 transition-opacity"
               >
-                <Volume2 className="size-3.5" />
+                <Volume2 className="size-3" />
                 <span>Activar Sonido TV</span>
               </button>
             )}
 
-            {/* Volume Control Bar */}
-            <div className="flex items-center gap-1.5 bg-[#181b25] px-2.5 py-1 rounded-lg border border-[#232b42]">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPlaying((prev) => {
-                    const next = !prev;
-                    if (next) void engine.play?.();
-                    else engine.pause?.();
-                    return next;
-                  });
-                }}
-                className="text-slate-400 hover:text-white transition-colors mr-0.5"
-                title={isPlaying ? "Pausar (Espacio)" : "Reanudar (Espacio)"}
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  {isPlaying ? "pause" : "play_arrow"}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMuted((prev) => {
-                    const next = !prev;
-                    if (next) engine.mute?.();
-                    else engine.unMute?.();
-                    return next;
-                  });
-                }}
-                className="text-slate-400 hover:text-white transition-colors"
-                title="Silenciar / Activar Sonido (M)"
-              >
-                {isMuted || volume === 0 ? (
-                  <VolumeX className="size-3.5 text-rose-400" />
-                ) : (
-                  <Volume2 className="size-3.5 text-cyan-400" />
-                )}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={isMuted ? 0 : volume}
-                onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                className="w-14 accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer"
-                title={`Volumen: ${volume}%`}
-              />
-              <span className="font-mono text-[10px] text-slate-300 w-6 text-right">
-                {isMuted ? "0%" : `${volume}%`}
-              </span>
-            </div>
-
-            {/* Device Pair Pill / Status */}
+            {/* Pairing Status */}
             <button
               type="button"
               onClick={() => setPairModalOpen(true)}
-              className="flex items-center gap-1 bg-[#181b25] hover:bg-[#202534] px-2.5 py-1 rounded-lg border border-[#232b42] text-xs font-mono text-slate-300 hover:text-white transition-colors"
-              title="Vincular con token de pantalla"
+              className="flex items-center gap-1 bg-[#0d1017] hover:bg-[#181b25] px-2 py-0.5 rounded-md border border-[#1e2333] text-[10px] font-mono text-slate-300 hover:text-white transition-colors"
+              title="Vincular con PIN"
             >
-              <KeyRound className="size-3 text-indigo-400" />
-              <span>{token ? "Vincular OK" : "Vincular"}</span>
+              <KeyRound className="size-2.5 text-indigo-400" />
+              <span>{token ? "Vinculado" : "Vincular"}</span>
             </button>
 
             {/* Clock */}
-            <div className="flex items-center gap-1.5 bg-[#1c1f29] px-2.5 py-1 rounded-lg border border-[#283250] shadow-inner font-mono">
-              <span className="material-symbols-outlined text-indigo-400 text-[16px]">schedule</span>
-              <span
-                suppressHydrationWarning
-                className="text-white font-bold text-xs tracking-wider"
-              >
-                {clock}
-              </span>
+            <div className="flex items-center gap-1 bg-[#0d1017] px-2 py-0.5 rounded-md border border-[#1e2333] font-mono text-[11px] text-white font-bold tracking-wider">
+              <span className="material-symbols-outlined text-indigo-400 text-[13px]">schedule</span>
+              <span suppressHydrationWarning>{clock}</span>
             </div>
 
             {/* Fullscreen Button */}
             <button
               type="button"
               onClick={toggleFullscreen}
-              className="size-8 rounded-lg bg-[#181b25] border border-[#232b42] flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              className="size-6 rounded-md bg-[#0d1017] border border-[#1e2333] flex items-center justify-center text-slate-400 hover:text-white transition-colors"
               title="Pantalla completa (F)"
             >
-              {isFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              {isFullscreen ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
             </button>
           </div>
         </header>
@@ -1284,7 +1198,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   AMBIENTACIÓN DEL LOCAL
                 </div>
                 <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-tight truncate">
-                  {nowPlaying?.title || "Esperando tema..."}
+                  {decodeHtml(nowPlaying?.title || "Esperando tema...")}
                 </h1>
                 <h2 className="text-base font-medium text-slate-300 mt-1 truncate">
                   {nowPlaying?.artist || "Playlist activa"}
@@ -1312,8 +1226,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   <span className="size-1 rounded-full bg-cyan-400" />
                   AMBIENTACIÓN DEL LOCAL
                 </div>
-                <h1 className="text-lg lg:text-xl font-extrabold text-white tracking-tight leading-tight truncate">
-                  {nowPlaying?.title || "Esperando tema..."}
+                <h1 className="text-base lg:text-lg font-extrabold text-white tracking-tight leading-tight truncate">
+                  {decodeHtml(nowPlaying?.title || "Esperando tema...")}
                 </h1>
                 <h2 className="text-xs lg:text-sm font-medium text-slate-300 truncate">
                   {nowPlaying?.artist || "Playlist activa"}
@@ -1323,15 +1237,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1 bg-indigo-500/15 text-[#c0c1ff] px-2.5 py-1 rounded-full border border-indigo-500/30 font-mono text-[11px] font-bold">
                   <span className="material-symbols-outlined text-[14px]">thumb_up</span>
-                  <span>{nowPlaying?.voteCount ?? 14} VOTOS</span>
+                  <span>{nowPlaying?.voteCount ?? 0} VOTOS</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Bottom: Progress Bar & Direct TV Controls (HIDDEN IN FULLSCREEN) */}
+          {/* ================= BOTTOM: CLEAN BROADCAST PROGRESS TIMELINE (NO PLAYER CONTROLS ON TV) ================= */}
           {!isVideoFullscreen && (
-            <div className="z-10 mt-2 bg-[#10141f] p-2.5 rounded-lg border border-[#232b42] shadow-inner shrink-0">
+            <div className="z-10 mt-2 bg-[#0d1017] p-2.5 rounded-lg border border-[#1e2333] shadow-inner shrink-0">
               {/* Timeline Counters */}
               <div className="w-full flex items-center justify-between font-mono text-[11px] text-slate-300 mb-1">
                 <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
@@ -1339,108 +1253,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 <span className="text-slate-400 font-semibold tracking-wider">{formatDuration(duration)}</span>
               </div>
 
-              {/* Modern Interactive Scrubber Progress Bar */}
-              <div
-                onClick={handleSeekClick}
-                className="group/scrub relative w-full h-4 flex items-center cursor-pointer select-none py-1"
-                title="Hacer clic para adelantar o retroceder el video en la pantalla"
-              >
-                <div className="w-full h-2 group-hover/scrub:h-3 bg-[#0a0e17] rounded-full overflow-hidden p-0 relative shadow-inner border border-[#232b42] transition-all">
-                  <div
-                    className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_12px_rgba(99,102,241,0.5)] transition-all duration-150"
-                    style={{ width: `${progressPercent}%` }}
-                  >
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 size-3 bg-white rounded-full shadow-[0_0_6px_#ffffff] border-2 border-[#6366F1] scale-100 group-hover/scrub:scale-125 transition-transform" />
-                  </div>
-                </div>
+              {/* Progress Bar (Visual timeline only) */}
+              <div className="w-full h-2 bg-[#161a26] rounded-full overflow-hidden p-0 relative border border-[#232b42]">
+                <div
+                  className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-150"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
 
-              {/* Direct TV Control Bar */}
-              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-[#1e2333]">
-                <div className="flex items-center gap-1.5">
-                  {/* Reiniciar */}
-                  <button
-                    type="button"
-                    onClick={handleRestartOrPrev}
-                    className="size-7 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
-                    title="Reiniciar canción (R)"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">replay</span>
-                  </button>
-
-                  {/* -10s */}
-                  <button
-                    type="button"
-                    onClick={() => handleSeekDelta(-10)}
-                    className="px-2 py-0.5 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] font-mono text-[11px] font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-0.5"
-                    title="Retroceder 10 segundos (Flecha Izquierda)"
-                  >
-                    <span className="material-symbols-outlined text-[13px]">replay_10</span>
-                    <span>-10s</span>
-                  </button>
-
-                  {/* Play / Pause Primary Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsPlaying((prev) => {
-                        const next = !prev;
-                        if (next) void engine.play?.();
-                        else engine.pause?.();
-                        return next;
-                      });
-                    }}
-                    className="size-7 rounded-lg bg-gradient-to-r from-indigo-500 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/25 transition-all active:scale-95"
-                    title={isPlaying ? "Pausar video (Espacio)" : "Reanudar video (Espacio)"}
-                  >
-                    <span className="material-symbols-outlined text-[17px]">
-                      {isPlaying ? "pause" : "play_arrow"}
-                    </span>
-                  </button>
-
-                  {/* +10s */}
-                  <button
-                    type="button"
-                    onClick={() => handleSeekDelta(10)}
-                    className="px-2 py-0.5 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] font-mono text-[11px] font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-0.5"
-                    title="Adelantar 10 segundos (Flecha Derecha)"
-                  >
-                    <span>+10s</span>
-                    <span className="material-symbols-outlined text-[13px]">forward_10</span>
-                  </button>
-
-                  {/* Skip Next */}
-                  <button
-                    type="button"
-                    onClick={() => void handleSkipNext()}
-                    className="size-7 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
-                    title="Saltear al siguiente tema (S)"
-                  >
-                    <span className="material-symbols-outlined text-[15px]">skip_next</span>
-                  </button>
-
-                  {/* Video Fullscreen Mode */}
-                  {videoMode && (
-                    <button
-                      type="button"
-                      onClick={toggleVideoFullscreen}
-                      className="size-7 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 ml-1"
-                      title="Pantalla completa del video (F)"
-                    >
-                      <Maximize2 className="size-3.5" />
-                    </button>
-                  )}
+              {/* Salon Broadcast Info Row */}
+              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-[#1e2333] font-mono text-[10px] text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 text-slate-300">
+                    <span className="material-symbols-outlined text-[13px] text-indigo-400">queue_music</span>
+                    <span>Playlist: <strong className="text-white">{venueName}</strong></span>
+                  </span>
+                  <span className="text-slate-600">·</span>
+                  <span>Audio Estéreo Master</span>
                 </div>
 
-                {/* Attribution info */}
-                <div className="flex items-center gap-2">
-                  <p className="text-[11px] text-slate-300 hidden md:block">
-                    Playlist: <span className="text-white font-bold">{venueName}</span>
-                  </p>
-                  <div className="flex items-center gap-1 bg-indigo-500/15 text-[#c0c1ff] px-2 py-0.5 rounded-full border border-indigo-500/30 font-mono text-[10px] font-bold">
-                    <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-                    <span>EN SALA</span>
-                  </div>
+                <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-2 py-0.5 rounded-full border border-indigo-500/30 font-bold">
+                  <span className="material-symbols-outlined text-[12px]">graphic_eq</span>
+                  <span>TRANSMISIÓN EN SALA</span>
                 </div>
               </div>
             </div>
@@ -1519,7 +1353,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                         <BallChip n={index + 1} size="sm" />
                         <div className="min-w-0 flex-1">
                           <h4 className="text-xs font-bold text-white truncate">
-                            {item.title}
+                            {decodeHtml(item.title)}
                           </h4>
                           <p className="text-[11px] text-slate-400 truncate">
                             {item.artist}
@@ -1552,27 +1386,27 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         )}
       </main>
 
-      {/* ================= BOTTOM MARQUEE BAR (HIDDEN IN FULLSCREEN) ================= */}
+      {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER) ================= */}
       {!isVideoFullscreen && (
-        <footer className="w-full bg-[#141824] border border-[#232b42] rounded-xl py-1.5 px-4 overflow-hidden z-40 shrink-0 shadow-lg">
-          <div className="animate-marquee items-center gap-12 font-mono text-xs text-slate-400">
-            <span className="flex items-center gap-2">
+        <footer className="w-full bg-[#0d1017] border border-[#1e2333] rounded-lg py-1 px-3 overflow-hidden z-40 shrink-0 shadow-sm">
+          <div className="animate-marquee items-center gap-10 font-mono text-[10px] text-slate-400 whitespace-nowrap">
+            <span className="flex items-center gap-3 shrink-0 whitespace-nowrap">
               <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
-              <span>·</span>
+              <span className="text-slate-600">·</span>
               <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
-              <span>·</span>
-              <span>Cada consumición suma créditos de votos</span>
-              <span>·</span>
-              <span>Jukebox impulsado por PonelePlay</span>
+              <span className="text-slate-600">·</span>
+              <span>Cada consumición suma créditos para votar</span>
+              <span className="text-slate-600">·</span>
+              <span className="text-slate-300 font-semibold">PonelePlay TV Jukebox</span>
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-3 shrink-0 whitespace-nowrap">
               <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
-              <span>·</span>
+              <span className="text-slate-600">·</span>
               <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
-              <span>·</span>
-              <span>Cada consumición suma créditos de votos</span>
-              <span>·</span>
-              <span>Jukebox impulsado por PonelePlay</span>
+              <span className="text-slate-600">·</span>
+              <span>Cada consumición suma créditos para votar</span>
+              <span className="text-slate-600">·</span>
+              <span className="text-slate-300 font-semibold">PonelePlay TV Jukebox</span>
             </span>
           </div>
         </footer>

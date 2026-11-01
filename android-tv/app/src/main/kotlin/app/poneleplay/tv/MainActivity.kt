@@ -199,7 +199,7 @@ fun TVPlayerApp(
     }
 
     var displayZoom by remember {
-        mutableStateOf(prefs.getInt("display_zoom", 82))
+        mutableStateOf(prefs.getInt("display_zoom", 78))
     }
     var venueSlug by remember {
         mutableStateOf(prefs.getString("venue_slug", "billar-aurora") ?: "billar-aurora")
@@ -614,19 +614,25 @@ fun TVPlayerApp(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             TVButton(
-                                text = "75% (Compacto)",
-                                onClick = { tempZoom = 75 },
-                                isPrimary = tempZoom == 75,
+                                text = "70%",
+                                onClick = { tempZoom = 70 },
+                                isPrimary = tempZoom == 70,
                                 modifier = Modifier.weight(1f)
                             )
                             TVButton(
-                                text = "82% (Recomendado)",
-                                onClick = { tempZoom = 82 },
-                                isPrimary = tempZoom == 82,
+                                text = "78% (TV Óptimo)",
+                                onClick = { tempZoom = 78 },
+                                isPrimary = tempZoom == 78,
+                                modifier = Modifier.weight(1.3f)
+                            )
+                            TVButton(
+                                text = "90%",
+                                onClick = { tempZoom = 90 },
+                                isPrimary = tempZoom == 90,
                                 modifier = Modifier.weight(1f)
                             )
                             TVButton(
-                                text = "100% (Grande)",
+                                text = "100%",
                                 onClick = { tempZoom = 100 },
                                 isPrimary = tempZoom == 100,
                                 modifier = Modifier.weight(1f)
