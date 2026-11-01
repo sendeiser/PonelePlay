@@ -461,7 +461,14 @@ create policy credit_transactions_read
   on public.credit_transactions
   for select
   to authenticated
-  using (public.is_my_participant(participant_id) or public.is_venue_owner(venue_id));
+  using (
+    public.is_my_participant(participant_id)
+    or exists (
+      select 1 from public.participants p
+      where p.id = credit_transactions.participant_id
+        and public.is_venue_owner(p.venue_id)
+    )
+  );
 
 create policy player_devices_owner_all
   on public.player_devices

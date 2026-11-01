@@ -284,9 +284,10 @@ begin
     where night_session_id = v_night.id and status = 'redeemed';
 
     -- Credits spent
-    select coalesce(sum(abs(amount)), 0) into v_credits_spent
-    from public.credit_transactions
-    where night_session_id = v_night.id and amount < 0;
+    select coalesce(sum(abs(ct.delta)), 0) into v_credits_spent
+    from public.credit_transactions ct
+    join public.participants p on p.id = ct.participant_id
+    where p.night_session_id = v_night.id and ct.delta < 0;
 
     -- Top 5 tracks of the night
     select coalesce(
