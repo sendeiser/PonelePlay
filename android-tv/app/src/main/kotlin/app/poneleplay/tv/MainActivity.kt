@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -104,6 +105,7 @@ class MainActivity : ComponentActivity() {
 
 /**
  * TV D-Pad Focusable Button with prominent visual feedback (scale, border, bright colors).
+ * Fully responds to D-Pad Center, OK, and Enter key events.
  */
 @Composable
 fun TVButton(
@@ -144,12 +146,23 @@ fun TVButton(
                 isFocused = focusState.isFocused
             }
             .focusable()
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyUp &&
+                    (keyEvent.key == Key.DirectionCenter || keyEvent.key == Key.Enter || keyEvent.key == Key.NumPadEnter)
+                ) {
+                    view.playSoundEffect(SoundEffectConstants.CLICK)
+                    onClick()
+                    true
+                } else {
+                    false
+                }
+            }
             .clickable {
                 view.playSoundEffect(SoundEffectConstants.CLICK)
                 onClick()
             }
             .background(backgroundColor, RoundedCornerShape(12.dp))
-            .border(if (isFocused) 3.dp else 1.5.dp, borderColor, RoundedCornerShape(12.dp))
+            .border(if (isFocused) 3.5.dp else 1.5.dp, borderColor, RoundedCornerShape(12.dp))
             .padding(horizontal = 20.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -173,15 +186,23 @@ fun TVPlayerApp(
     onBindWebView: (WebView) -> Unit,
     onExitApp: () -> Unit
 ) {
-    // Default to the computer's detected local IP or saved preference
+    // Official live Netlify deployment and local LAN IP
+    val defaultCloud = "https://poneleplay.netlify.app"
     val defaultLocalIp = "http://192.168.18.2:3000"
-    val defaultCloud = "https://poneleplay.app"
+
+    // Upgrade old placeholder 'poneleplay.app' to the real Netlify deployment URL automatically
+    val savedServer = prefs.getString("server_url", null)
+    val initialServer = if (savedServer == null || savedServer.contains("poneleplay.app")) {
+        defaultCloud
+    } else {
+        savedServer
+    }
 
     var venueSlug by remember {
         mutableStateOf(prefs.getString("venue_slug", "billar-aurora") ?: "billar-aurora")
     }
     var serverUrl by remember {
-        mutableStateOf(prefs.getString("server_url", defaultLocalIp) ?: defaultLocalIp)
+        mutableStateOf(initialServer)
     }
     var currentUrl by remember {
         mutableStateOf("${serverUrl.trimEnd('/')}/player/$venueSlug")
@@ -237,6 +258,7 @@ fun TVPlayerApp(
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
+                        databaseEnabled = true
                         mediaPlaybackRequiresUserGesture = false // Key for auto-playing music/video on TV!
                         allowFileAccess = true
                         allowContentAccess = true
@@ -347,7 +369,7 @@ fun TVPlayerApp(
             ) {
                 Card(
                     modifier = Modifier
-                        .width(620.dp)
+                        .width(640.dp)
                         .padding(24.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141824)),
@@ -368,7 +390,7 @@ fun TVPlayerApp(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "La URL intentada no respondió:",
+                            text = "La dirección intentada no respondió:",
                             color = Color(0xFF94A3B8),
                             fontSize = 13.sp
                         )
@@ -384,9 +406,9 @@ fun TVPlayerApp(
 
                         Spacer(modifier = Modifier.height(24.dp))
                         Text(
-                            text = "Elegí una conexión rápida con el control remoto:",
+                            text = "Elegí una conexión rápida con las flechitas del control:",
                             color = Color(0xFFCBD5E1),
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -397,11 +419,11 @@ fun TVPlayerApp(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             TVButton(
-                                text = "💻 Conectar a PC Local ($defaultLocalIp)",
+                                text = "🌐 Conectar a Netlify ($defaultCloud)",
                                 onClick = {
-                                    serverUrl = defaultLocalIp
-                                    prefs.edit().putString("server_url", defaultLocalIp).apply()
-                                    currentUrl = "$defaultLocalIp/player/$venueSlug"
+                                    serverUrl = defaultCloud
+                                    prefs.edit().putString("server_url", defaultCloud).apply()
+                                    currentUrl = "$defaultCloud/player/$venueSlug"
                                     hasError = false
                                     isLoading = true
                                     webViewRef?.loadUrl(currentUrl)
@@ -412,11 +434,11 @@ fun TVPlayerApp(
                             )
 
                             TVButton(
-                                text = "🌐 Conectar a Servidor Cloud ($defaultCloud)",
+                                text = "💻 Conectar a PC Local ($defaultLocalIp)",
                                 onClick = {
-                                    serverUrl = defaultCloud
-                                    prefs.edit().putString("server_url", defaultCloud).apply()
-                                    currentUrl = "$defaultCloud/player/$venueSlug"
+                                    serverUrl = defaultLocalIp
+                                    prefs.edit().putString("server_url", defaultLocalIp).apply()
+                                    currentUrl = "$defaultLocalIp/player/$venueSlug"
                                     hasError = false
                                     isLoading = true
                                     webViewRef?.loadUrl(currentUrl)
@@ -439,7 +461,7 @@ fun TVPlayerApp(
                                 )
 
                                 TVButton(
-                                    text = "⚙️ Cambiar URL o Bar",
+                                    text = "⚙️ Cambiar Bar o URL",
                                     onClick = onOpenSettings,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -463,7 +485,7 @@ fun TVPlayerApp(
             ) {
                 Card(
                     modifier = Modifier
-                        .width(560.dp)
+                        .width(580.dp)
                         .padding(20.dp),
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141824)),
@@ -482,7 +504,7 @@ fun TVPlayerApp(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Configurá la dirección del servidor y el identificador del bar",
+                            text = "Configurá la dirección del servidor y el identificador de la sala",
                             color = Color(0xFF94A3B8),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
@@ -490,7 +512,7 @@ fun TVPlayerApp(
 
                         // Presets Row
                         Text(
-                            text = "Servidores Frecuentes:",
+                            text = "Selección rápida de Servidor:",
                             color = Color(0xFFCBD5E1),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -501,14 +523,16 @@ fun TVPlayerApp(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             TVButton(
-                                text = "PC Local (:3000)",
-                                onClick = { tempServer = defaultLocalIp },
+                                text = "🌐 Netlify Cloud",
+                                onClick = { tempServer = defaultCloud },
+                                isPrimary = tempServer == defaultCloud,
                                 focusRequester = settingsFocusRequester,
                                 modifier = Modifier.weight(1f)
                             )
                             TVButton(
-                                text = "PonelePlay Cloud",
-                                onClick = { tempServer = defaultCloud },
+                                text = "💻 PC Local (:3000)",
+                                onClick = { tempServer = defaultLocalIp },
+                                isPrimary = tempServer == defaultLocalIp,
                                 modifier = Modifier.weight(1f)
                             )
                         }
