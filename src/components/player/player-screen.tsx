@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
@@ -12,7 +12,6 @@ import type { PlaybackEngine } from "@/components/player/engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
-import { PlayerFooterBar } from "@/components/player/player-footer-bar";
 import { TvPairingModal } from "@/components/player/tv-pairing-modal";
 
 interface PlayerScreenProps {
@@ -55,6 +54,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [hudMessage, setHudMessage] = useState<string | null>(null);
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
+
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const postToIframe = useCallback((func: string, args: unknown[] = []) => {
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: "command", func, args }),
+          "*"
+        );
+      } catch {}
+    }
+  }, []);
 
   // Playback engine
   const engine: PlaybackEngine = useMemo(() => {
@@ -204,12 +216,34 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }
 
   const handleUnlockAudio = useCallback(() => {
+    postToIframe("unMute");
+    postToIframe("setVolume", [85]);
+    postToIframe("playVideo");
     engine.unMute?.();
     engine.setVolume?.(85);
     void engine.play?.();
     setAudioUnlocked(true);
     setIsMuted(false);
-  }, [engine]);
+  }, [engine, postToIframe]);
+
+  // Sync isPlaying with iframe
+  useEffect(() => {
+    if (isPlaying) {
+      postToIframe("playVideo");
+    } else {
+      postToIframe("pauseVideo");
+    }
+  }, [isPlaying, postToIframe]);
+
+  // Sync volume and mute with iframe
+  useEffect(() => {
+    if (isMuted) {
+      postToIframe("mute");
+    } else {
+      postToIframe("unMute");
+      postToIframe("setVolume", [volume]);
+    }
+  }, [volume, isMuted, postToIframe]);
 
   // Global click anywhere to unlock audio & video immediately
   useEffect(() => {
@@ -523,6 +557,34 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }, [nowPlaying, engine]);
 
+  // Auto-advance when YouTube video finishes or via shortcuts
+  useEffect(() => {
+    function onIframeMsg(e: MessageEvent) {
+      try {
+        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        if (data?.event === "onStateChange" && data?.info === 0) {
+          handleSkipNext();
+        }
+      } catch {}
+    }
+
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key.toLowerCase() === "s") {
+        handleSkipNext();
+      } else if (e.key.toLowerCase() === "r") {
+        handleRestartOrPrev();
+      }
+    }
+
+    window.addEventListener("message", onIframeMsg);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("message", onIframeMsg);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [handleSkipNext, handleRestartOrPrev]);
+
   return (
     <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
       {/* Realtime Master Control HUD Message Toast */}
@@ -756,7 +818,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
-            <div id="yt-player-target" className="w-full h-full" style={{ width: "100%", height: "100%" }} />
+            <iframe
+              ref={iframeRef}
+              key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
+              src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&origin=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}&widget_referrer=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}`}
+              title={nowPlaying?.title || "TV Player"}
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+            <div id="yt-player-target" className="hidden pointer-events-none" />
             {videoMode && (
               <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">
                 <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
@@ -1022,47 +1093,29 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </section>
       </main>
 
-      {/* ================= COMPREHENSIVE PLAYBACK FOOTER BAR ================= */}
-      <PlayerFooterBar
-        nowPlaying={nowPlaying}
-        isPlaying={isPlaying}
-        onTogglePlay={() => {
-          setIsPlaying((prev) => {
-            const next = !prev;
-            if (next) void engine.play?.();
-            else engine.pause?.();
-            setHudMessage(next ? "▶️ Música Reanudada" : "⏸️ Música Pausada");
-            setTimeout(() => setHudMessage(null), 2500);
-            return next;
-          });
-        }}
-        onSkipNext={handleSkipNext}
-        onRestartOrPrev={handleRestartOrPrev}
-        volume={volume}
-        isMuted={isMuted}
-        onVolumeChange={handleVolumeChange}
-        onToggleMute={() => {
-          setIsMuted((prev) => {
-            const next = !prev;
-            if (next) engine.mute?.();
-            else engine.unMute?.();
-            setHudMessage(next ? "🔇 Audio Silenciado" : "🔊 Audio Activo");
-            setTimeout(() => setHudMessage(null), 2500);
-            return next;
-          });
-        }}
-        audioUnlocked={audioUnlocked}
-        onUnlockAudio={handleUnlockAudio}
-        elapsed={elapsed}
-        duration={duration}
-        videoMode={videoMode}
-        onToggleVideoMode={toggleVideoMode}
-        isFullscreen={isFullscreen}
-        onToggleFullscreen={toggleFullscreen}
-        karaokeMode={karaokeMode || Boolean(nowPlaying?.isKaraoke)}
-        isPaired={Boolean(token)}
-        onOpenPairModal={() => setPairModalOpen(true)}
-      />
+      {/* ================= BOTTOM MARQUEE BAR ================= */}
+      <footer className="w-full bg-[#0a0e17] border-t border-[#232b42] py-2 px-6 overflow-hidden z-40">
+        <div className="animate-marquee items-center gap-12 font-mono text-xs text-slate-400">
+          <span className="flex items-center gap-2">
+            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
+            <span>·</span>
+            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
+            <span>·</span>
+            <span>Cada consumición suma créditos de votos</span>
+            <span>·</span>
+            <span>Jukebox impulsado por PonelePlay</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
+            <span>·</span>
+            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
+            <span>·</span>
+            <span>Cada consumición suma créditos de votos</span>
+            <span>·</span>
+            <span>Jukebox impulsado por PonelePlay</span>
+          </span>
+        </div>
+      </footer>
 
       {/* Smart TV Pairing Modal (6-Digit PIN & Token Support) */}
       <TvPairingModal

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type PanelRole, panelNavFor } from "@/lib/domain/permissions";
 import { LogoutButton } from "./logout-button";
+import { PanelPlaybackFooter } from "./panel-playback-footer";
 
 interface PanelShellProps {
   slug: string;
@@ -193,12 +194,15 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
         </aside>
 
         {/* Main View Area */}
-        <main className="flex-1 p-6 lg:p-8 overflow-y-auto bg-[#0a0e17]/60">
+        <main className="flex-1 p-6 lg:p-8 overflow-y-auto bg-[#0a0e17]/60 pb-28">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
         </main>
       </div>
+
+      {/* Sticky Bottom Master Remote Playback Control Footer */}
+      <PanelPlaybackFooter slug={slug} />
     </div>
   );
 }
