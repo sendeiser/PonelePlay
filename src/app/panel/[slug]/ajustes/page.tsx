@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { PanelShell } from "@/components/panel/panel-shell";
 import { SettingsManager } from "@/components/panel/settings-manager";
 
 export const metadata: Metadata = {
@@ -14,10 +13,5 @@ export default async function AjustesPage({
 }) {
   const { slug } = await params;
 
-  return (
-    <PanelShell slug={slug} role="owner">
-      <SettingsManager slug={slug} />
-    </PanelShell>
-  );
+  return <SettingsManager slug={slug} />;
 }
-

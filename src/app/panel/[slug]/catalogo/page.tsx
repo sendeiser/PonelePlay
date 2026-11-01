@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { PanelShell } from "@/components/panel/panel-shell";
 import { CatalogManager } from "@/components/panel/catalog-manager";
 
 export const metadata: Metadata = {
@@ -14,10 +13,5 @@ export default async function CatalogoPage({
 }) {
   const { slug } = await params;
 
-  return (
-    <PanelShell slug={slug} role="owner">
-      <CatalogManager slug={slug} />
-    </PanelShell>
-  );
+  return <CatalogManager slug={slug} />;
 }
-

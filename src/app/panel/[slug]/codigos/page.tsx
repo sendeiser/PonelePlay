@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { PanelShell } from "@/components/panel/panel-shell";
 import { CodesManagement } from "@/components/panel/codes-management";
 
 export const metadata: Metadata = {
@@ -14,9 +13,5 @@ export default async function CodigosPage({
 }) {
   const { slug } = await params;
 
-  return (
-    <PanelShell slug={slug} role="owner">
-      <CodesManagement slug={slug} role="owner" />
-    </PanelShell>
-  );
+  return <CodesManagement slug={slug} role="owner" />;
 }

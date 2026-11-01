@@ -17,12 +17,14 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <Link
             href="/login"
+            prefetch={true}
             className="px-4 py-2 rounded-xl bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono font-bold text-white transition-colors"
           >
             Acceso Staff / Dueño
           </Link>
           <Link
             href="/signup"
+            prefetch={true}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-xs font-mono font-bold text-white shadow-md shadow-indigo-600/30 transition-all"
           >
             Registrar Bar
@@ -50,6 +52,7 @@ export default function HomePage() {
           {/* Card 1: Cliente Móvil */}
           <Link
             href="/p/billar-aurora"
+            prefetch={true}
             className="group block bg-[#181b25] border border-[#232b42] hover:border-indigo-500/50 rounded-2xl p-6 transition-all shadow-xl hover:shadow-[0_0_24px_-4px_rgba(99,102,241,0.25)]"
           >
             <div className="size-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-105 transition-transform">
@@ -69,6 +72,7 @@ export default function HomePage() {
           {/* Card 2: Panel de Noche */}
           <Link
             href="/panel/billar-aurora"
+            prefetch={true}
             className="group block bg-[#181b25] border border-[#232b42] hover:border-indigo-500/50 rounded-2xl p-6 transition-all shadow-xl hover:shadow-[0_0_24px_-4px_rgba(99,102,241,0.25)]"
           >
             <div className="size-10 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mb-4 group-hover:scale-105 transition-transform">
@@ -88,6 +92,7 @@ export default function HomePage() {
           {/* Card 3: Reproductor TV */}
           <Link
             href="/player/billar-aurora"
+            prefetch={true}
             className="group block bg-[#181b25] border border-[#232b42] hover:border-indigo-500/50 rounded-2xl p-6 transition-all shadow-xl hover:shadow-[0_0_24px_-4px_rgba(99,102,241,0.25)]"
           >
             <div className="size-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-4 group-hover:scale-105 transition-transform">

@@ -78,6 +78,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href={`/panel/${slug}/codigos`}
+            prefetch={true}
             className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold active:scale-95 transition-all shadow-md shadow-indigo-600/30"
           >
             <span className="material-symbols-outlined text-base">confirmation_number</span>
@@ -147,6 +148,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={true}
                     className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 font-medium transition-all text-xs font-mono ${
                       isActive
                         ? "bg-indigo-600/15 text-indigo-300 font-semibold border-l-4 border-indigo-500 shadow-sm"
@@ -221,6 +223,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={true}
               className={`flex flex-col items-center justify-center flex-1 py-1 rounded-xl transition-all ${
                 isActive
                   ? "text-indigo-400 font-bold"

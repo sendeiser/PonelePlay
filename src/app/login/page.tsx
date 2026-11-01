@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signInOwner, getOwnerVenueSlug } from "@/lib/api/auth";
@@ -16,6 +16,10 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    router.prefetch(nextParam || "/panel/billar-aurora");
+  }, [router, nextParam]);
 
   const fillDemo = () => {
     setEmail("demo@poneleplay.com");

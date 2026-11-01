@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { PanelShell } from "@/components/panel/panel-shell";
 import { StaffManager } from "@/components/panel/staff-manager";
 
 export const metadata: Metadata = {
@@ -14,10 +13,5 @@ export default async function PersonalPage({
 }) {
   const { slug } = await params;
 
-  return (
-    <PanelShell slug={slug} role="owner">
-      <StaffManager slug={slug} />
-    </PanelShell>
-  );
+  return <StaffManager slug={slug} />;
 }
-

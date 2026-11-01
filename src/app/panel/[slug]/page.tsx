@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { PanelShell } from "@/components/panel/panel-shell";
 import { NightDashboard } from "@/components/panel/night-dashboard";
 
 export const metadata: Metadata = {
@@ -14,9 +13,5 @@ export default async function PanelPage({
 }) {
   const { slug } = await params;
 
-  return (
-    <PanelShell slug={slug} role="owner">
-      <NightDashboard slug={slug} role="owner" />
-    </PanelShell>
-  );
+  return <NightDashboard slug={slug} role="owner" />;
 }
