@@ -80,13 +80,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   // Video Mode: default to true so video is always visible
-  const [videoMode, setVideoMode] = useState<boolean>(() => {
+  const [videoMode, setVideoMode] = useState<boolean>(true);
+  const [mounted, setMounted] = useState<boolean>(false);
+  const [origin, setOrigin] = useState<string>("");
+
+  useEffect(() => {
+    setMounted(true);
     if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
       const saved = localStorage.getItem("poneleplay.player.videoMode");
-      return saved !== null ? saved === "true" : true;
+      if (saved !== null) {
+        setVideoMode(saved === "true");
+      }
     }
-    return true;
-  });
+  }, []);
 
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
@@ -967,7 +974,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           {/* Clock */}
           <div className="flex items-center gap-2 bg-[#1c1f29] px-3 py-1.5 rounded-lg border border-[#283250] shadow-inner font-mono">
             <span className="material-symbols-outlined text-indigo-400 text-[18px]">schedule</span>
-            <span className="text-white font-bold text-sm tracking-widest">
+            <span
+              suppressHydrationWarning
+              className="text-white font-bold text-sm tracking-widest"
+            >
               {clock}
             </span>
           </div>
@@ -1033,18 +1043,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
-            <iframe
-              ref={iframeRef}
-              key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
-              src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1&origin=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}&widget_referrer=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}`}
-              title={nowPlaying?.title || "TV Player"}
-              className="w-full h-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              onLoad={() => {
-                postToIframe("listening");
-              }}
-            />
+            {mounted && (
+              <iframe
+                ref={iframeRef}
+                key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
+                src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+                title={nowPlaying?.title || "TV Player"}
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                onLoad={() => {
+                  postToIframe("listening");
+                }}
+              />
+            )}
             <div id="yt-player-target" className="hidden pointer-events-none" />
             {videoMode && (
               <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">
