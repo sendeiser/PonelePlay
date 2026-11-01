@@ -1,19 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Ban,
-  Disc3,
-  Moon,
-  Music2,
-  Play,
-  RotateCcw,
-  SkipForward,
-  Sparkles,
-} from "lucide-react";
-import { BallChip } from "@/components/ball-chip";
-import { SourceBadge } from "@/components/source-badge";
+import Image from "next/image";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { BallChip } from "@/components/ball-chip";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import {
@@ -25,13 +15,19 @@ import {
 } from "@/lib/api/panel-actions";
 import { nightPhase } from "@/lib/domain/night";
 import { type PanelRole } from "@/lib/domain/permissions";
-import { PlayerStatus } from "./player-status";
 import { PairPlayerDialog } from "./pair-player";
 
 interface NightDashboardProps {
   slug: string;
   role: PanelRole;
   staffToken?: string;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "--:--";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) {
@@ -124,226 +120,374 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
   if (loading && !state) {
     return (
-      <div className="flex h-64 items-center justify-center text-cream/40 font-mono text-sm">
-        Cargando panel de control...
+      <div className="flex h-64 items-center justify-center text-slate-400 font-mono text-xs">
+        <span className="inline-block size-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mr-2" />
+        Cargando panel de control y telemetría nocturna...
       </div>
     );
   }
 
+  const queue = state?.queue ?? [];
+  const nowPlaying = state?.nowPlaying ?? null;
+  const isPlayerConnected = Boolean(state?.player?.lastSeenAt);
+
   return (
     <div className="space-y-6">
-      {/* Header with status and main night action */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-cream/10 pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-display font-bold text-cream">
+      {/* ==================== TOP OPERATIONAL STATUS BAR ==================== */}
+      <section className="card-panel rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+        {/* Session Live Meta */}
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col">
+            <h1 className="text-base font-bold text-white tracking-tight">
               Control de la Noche
             </h1>
-            <span
-              className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${
-                isOpen
-                  ? "bg-mint/15 text-mint border border-mint/30"
-                  : "bg-cream/10 text-cream/50 border border-cream/10"
-              }`}
-            >
-              {isOpen ? "Noche abierta" : "Noche cerrada"}
-            </span>
+            <p className="font-mono text-[10px] text-slate-400">
+              {state?.venue.name} · Modo {role}
+            </p>
           </div>
-          <p className="mt-1 text-xs text-cream/50">
-            {state?.venue.name} · Modo {role}
-          </p>
+          <div
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-xs font-bold uppercase tracking-wider ${
+              isOpen
+                ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+                : "bg-slate-800 text-slate-400 border border-slate-700"
+            }`}
+          >
+            <span
+              className={`size-2 rounded-full ${
+                isOpen ? "bg-emerald-400 pulse-dot" : "bg-slate-500"
+              }`}
+            />
+            <span>{isOpen ? "Noche Abierta" : "Noche Cerrada"}</span>
+          </div>
+
+          <div className="h-4 w-px bg-[#1E2333] hidden sm:block" />
+
+          <div className="flex items-center gap-4 text-xs font-mono text-slate-300">
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-slate-500 text-base">schedule</span>
+              <span className="text-slate-400">Estado:</span>
+              <span className="font-bold text-white">
+                {isOpen ? "Sesión Activa" : "Cerrado"}
+              </span>
+            </div>
+            <span className="text-slate-600">•</span>
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-indigo-400 text-base">group</span>
+              <span className="text-white font-semibold">{queue.length} temas</span>
+              <span className="text-slate-400">en cola</span>
+            </div>
+            <span className="text-slate-600">•</span>
+            <div className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-cyan-400 text-base">verified_user</span>
+              <span className="text-white font-semibold uppercase">{role}</span>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void refresh()}
-            aria-label="Actualizar"
-            className="grid size-9 place-items-center rounded-lg border border-cream/15 text-cream/60 hover:text-cream hover:bg-cream/5"
-          >
-            <RotateCcw className="size-4" />
-          </button>
+        {/* Operational Control Toggles & Close Shift Button */}
+        <div className="flex items-center gap-6">
+          {/* Switch Toggle: Aceptar Propuestas de Clientes */}
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div className="relative">
+              <input
+                type="checkbox"
+                id="toggle-proposals"
+                checked={state?.settings.proposalsEnabled ?? false}
+                onChange={() => void handleToggleProposals()}
+                disabled={actionLoading || !isOpen}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-[#181b25] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white peer-checked:bg-indigo-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#1E2333] after:border after:rounded-full after:size-5 after:transition-all" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white">
+                Aceptar Propuestas de Clientes
+              </span>
+              <span
+                className={`text-[10px] font-mono ${
+                  state?.settings.proposalsEnabled ? "text-emerald-400" : "text-slate-400"
+                }`}
+              >
+                {state?.settings.proposalsEnabled
+                  ? "ON · Clientes pueden proponer temas"
+                  : "OFF · Propuestas pausadas"}
+              </span>
+            </div>
+          </label>
 
+          <div className="h-6 w-px bg-[#1E2333]" />
+
+          {/* Botón: Cerrar Noche / Abrir Noche */}
           {isOpen ? (
             <button
               type="button"
               disabled={actionLoading}
               onClick={() => setConfirmClose(true)}
-              className="flex items-center gap-2 rounded-xl border border-coral/30 bg-coral/10 px-4 py-2 text-xs font-bold text-coral hover:bg-coral/20 transition-colors"
+              className="flex items-center gap-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 px-4 py-2 rounded-lg text-xs font-mono font-bold border border-rose-500/30 active:scale-95 duration-150 transition-all"
             >
-              <Moon className="size-4" />
-              Cerrar noche
+              <span className="material-symbols-outlined text-base">power_settings_new</span>
+              <span>Cerrar Noche (Fin de Turno)</span>
             </button>
           ) : (
             <button
               type="button"
               disabled={actionLoading}
               onClick={() => setConfirmOpen(true)}
-              className="flex items-center gap-2 rounded-xl bg-amber px-4 py-2 text-xs font-bold text-[#041611] hover:bg-amber/90 transition-colors"
+              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-mono font-bold active:scale-95 duration-150 transition-all shadow-md shadow-emerald-600/30"
             >
-              <Play className="size-4" />
-              Abrir noche
+              <span className="material-symbols-outlined text-base">play_arrow</span>
+              <span>Abrir Noche</span>
             </button>
           )}
         </div>
-      </div>
+      </section>
 
-      {errorMsg ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs text-coral"
-        >
-          {errorMsg}
-        </div>
-      ) : null}
-
-      {/* Grid: Player & Controls summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <PlayerStatus
-          lastSeenAt={state?.player?.lastSeenAt}
-          onPair={() => setPairDialogOpen(true)}
-        />
-
-        <div className="rounded-xl border border-cream/10 bg-[#07211b] p-3 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-cream/40">
-              Propuestas de clientes
-            </p>
-            <p className="text-sm font-semibold mt-0.5 text-cream">
-              {state?.settings.proposalsEnabled ? "Habilitadas" : "Pausadas"}
-            </p>
+      {/* ==================== HARDWARE & CONNECTIVITY BANNER ==================== */}
+      <section className="recessed-dark rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between text-xs font-mono">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-indigo-300">
+            <span className="material-symbols-outlined text-base text-cyan-400">desktop_windows</span>
+            <span className="text-slate-300">Reproductor TV PC:</span>
+            {isPlayerConnected ? (
+              <span className="text-emerald-400 font-bold">Conectado (Sync Activo)</span>
+            ) : (
+              <span className="text-amber-400 font-bold">Esperando vinculación</span>
+            )}
           </div>
+          <span className="text-slate-600">|</span>
+          <div className="flex items-center gap-2 text-slate-400">
+            <span className="material-symbols-outlined text-base text-indigo-400">volume_up</span>
+            <span>Canal Audio Principal Salón</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 text-slate-400">
           <button
             type="button"
-            disabled={actionLoading || !isOpen}
-            onClick={() => void handleToggleProposals()}
-            className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
-              state?.settings.proposalsEnabled
-                ? "bg-amber/15 text-amber border border-amber/30 hover:bg-amber/25"
-                : "bg-cream/10 text-cream/60 border border-cream/15 hover:bg-cream/15"
-            }`}
+            onClick={() => setPairDialogOpen(true)}
+            className="hover:text-indigo-300 text-indigo-400 underline text-xs transition-colors flex items-center gap-1"
           >
-            {state?.settings.proposalsEnabled ? "Pausar" : "Habilitar"}
+            <span className="material-symbols-outlined text-sm">link</span>
+            <span>Vincular Pantalla TV (Token)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            className="hover:text-white text-slate-400 text-xs flex items-center gap-1"
+            title="Actualizar datos"
+          >
+            <span className="material-symbols-outlined text-sm">refresh</span>
+            <span>Actualizar</span>
           </button>
         </div>
+      </section>
 
-        <div className="rounded-xl border border-cream/10 bg-[#07211b] p-3 flex items-center justify-between">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-cream/40">
-              Temas en cola
-            </p>
-            <p className="text-2xl font-display font-extrabold text-amber">
-              {state?.queue.length ?? 0}
-            </p>
-          </div>
-          <Sparkles className="size-6 text-cream/20" />
+      {errorMsg && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2"
+        >
+          <span className="material-symbols-outlined text-base text-red-400">error</span>
+          <span>{errorMsg}</span>
         </div>
-      </div>
+      )}
 
-      {/* Now Playing Section */}
-      <div className="rounded-2xl border border-cream/10 bg-[#07211b] p-5">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-amber font-bold">
-            Sonando ahora
-          </span>
-          {state?.nowPlaying ? (
-            <SourceBadge source={state.nowPlaying.source} />
-          ) : null}
-        </div>
+      {/* ==================== 2-COLUMN CENTRAL OPERATIONAL PANEL ==================== */}
+      <div className="grid grid-cols-12 gap-6 items-start">
+        {/* ==================== COLUMNA IZQUIERDA: AHORA SUENA & CONTROLES STAFF (5 COLS) ==================== */}
+        <section className="col-span-12 lg:col-span-5 flex flex-col gap-5">
+          {/* Tarjeta Prominente: Ahora Suena */}
+          <div className="hero-panel rounded-2xl p-5 relative overflow-hidden border border-[#2a3148] shadow-2xl">
+            {/* Ambient Neon Top Glow */}
+            <div className="absolute -top-12 -right-12 size-48 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-        {state?.nowPlaying ? (
-          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-amber/10 text-amber">
-                <Music2 className="size-6" />
+            {/* Header badge ON AIR */}
+            <div className="flex items-center justify-between mb-4 relative z-10">
+              <div className="flex items-center gap-2 bg-rose-500/15 border border-rose-500/40 px-3 py-1 rounded-full text-rose-400">
+                <span className="size-2 rounded-full bg-rose-500 pulse-dot" />
+                <span className="font-mono text-[10px] font-bold tracking-wider">
+                  EN AIRE · JUKEBOX SALÓN
+                </span>
               </div>
-              <div>
-                <h2 className="font-display text-lg font-bold text-cream">
-                  {state.nowPlaying.title}
-                </h2>
-                <p className="text-xs text-cream/50">
-                  {state.nowPlaying.artist} · {state.nowPlaying.voteCount} votos
-                </p>
+              <div className="flex items-center gap-1.5 font-mono text-xs text-indigo-300 bg-[#0a0e17]/80 px-2.5 py-1 rounded-lg border border-[#1E2333]">
+                <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  thumb_up
+                </span>
+                <span>{nowPlaying?.voteCount ?? 0} votos</span>
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={actionLoading}
-              onClick={() => void handleSkip()}
-              className="flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-cream/20 bg-cream/5 px-3 py-2 text-xs font-bold text-cream hover:bg-cream/10 transition-colors"
-            >
-              <SkipForward className="size-4" />
-              Saltar tema (Skip)
-            </button>
-          </div>
-        ) : (
-          <div className="mt-3 flex items-center gap-3 text-cream/40 text-xs">
-            <Disc3 className="size-5" />
-            No hay canción sonando en la cola. Reproduciendo playlist de fondo.
-          </div>
-        )}
-      </div>
-
-      {/* Live Queue Table */}
-      <div className="rounded-2xl border border-cream/10 bg-[#07211b] p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-lg font-bold text-cream">
-            Cola de reproducción en vivo
-          </h2>
-          <span className="font-mono text-xs text-cream/40">
-            {state?.queue.length ?? 0} en espera
-          </span>
-        </div>
-
-        {state?.queue.length ? (
-          <ul className="space-y-2">
-            {state.queue.map((item, idx) => (
-              <li
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded-xl border border-cream/5 bg-white/[0.015] p-3 hover:bg-white/[0.03] transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <BallChip n={idx + 1} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-cream">
-                      {item.title}
-                    </p>
-                    <p className="truncate text-xs text-cream/50">
-                      {item.artist}
-                    </p>
+            {/* Vinyl Showcase & Song Details */}
+            <div className="flex items-center gap-4 my-2 relative z-10">
+              {/* Vinyl Record Artwork Graphic */}
+              <div className="relative size-28 shrink-0">
+                <div className="absolute inset-0 rounded-xl overflow-hidden border border-[#2a3148] shadow-lg z-10 bg-[#181b25] flex items-center justify-center">
+                  {nowPlaying?.thumbnailUrl ? (
+                    <Image
+                      src={nowPlaying.thumbnailUrl}
+                      alt={nowPlaying.title}
+                      width={112}
+                      height={112}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined text-slate-500 text-3xl">music_note</span>
+                  )}
+                </div>
+                {/* Vinyl Record Disc Sliding Out */}
+                <div className="absolute -right-4 -top-1 size-24 rounded-full bg-[#07090e] border border-[#2a3045] flex items-center justify-center spin-vinyl z-0 shadow-xl">
+                  <div className="size-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center border-2 border-[#0a0e17]">
+                    <div className="size-2.5 rounded-full bg-[#0a0e17]" />
                   </div>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-4 shrink-0">
-                  <span className="font-mono text-xs text-amber font-bold">
-                    {item.voteCount} {item.voteCount === 1 ? "voto" : "votos"}
+              {/* Title & Artist Meta */}
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="font-mono text-[11px] text-indigo-300 uppercase tracking-widest truncate">
+                  {nowPlaying?.artist || "Playlist Local"}
+                </span>
+                <h2 className="text-lg font-bold text-white tracking-tight truncate leading-tight mt-0.5">
+                  {nowPlaying?.title || "Música de fondo activa"}
+                </h2>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-2 py-0.5 rounded-md bg-[#0a0e17] font-mono text-[10px] text-slate-300 border border-[#1E2333] flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs text-indigo-400">table_bar</span>
+                    <span>Pedido por Mesa Salón</span>
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmVetoId(item.id)}
-                    className="grid size-8 place-items-center rounded-lg border border-coral/20 bg-coral/5 text-coral hover:bg-coral/15 transition-colors"
-                    aria-label={`Vetar ${item.title}`}
-                  >
-                    <Ban className="size-3.5" />
-                  </button>
+                  <span className="font-mono text-[10px] text-slate-400">
+                    {formatDuration(nowPlaying?.durationSeconds ?? 0)}
+                  </span>
                 </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-center py-8 text-xs text-cream/40">
-            La cola está vacía por el momento.
-          </p>
-        )}
+              </div>
+            </div>
+
+            {/* Staff Moderation Actions for Now Playing */}
+            {nowPlaying && (
+              <div className="mt-4 pt-3 border-t border-[#2a3148] flex items-center gap-3 relative z-10">
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => void handleSkip()}
+                  className="flex-1 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-md shadow-indigo-600/30"
+                >
+                  <span className="material-symbols-outlined text-base">skip_next</span>
+                  <span>Saltear Tema</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={actionLoading}
+                  onClick={() => setConfirmVetoId(nowPlaying.id)}
+                  className="py-2 px-3 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-500/30 font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                >
+                  <span className="material-symbols-outlined text-base">block</span>
+                  <span>Vetar</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Card: Configuración rápida de reproducción */}
+          <div className="card-panel rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-400 text-base">tune</span>
+              Parámetros de Turno
+            </h3>
+            <div className="space-y-2 text-xs font-mono text-slate-300">
+              <div className="flex justify-between items-center py-1 border-b border-[#1E2333]">
+                <span className="text-slate-400">Límite de cola:</span>
+                <span className="font-bold text-white">{state?.settings.maxQueueSize ?? 20} canciones</span>
+              </div>
+              <div className="flex justify-between items-center py-1 border-b border-[#1E2333]">
+                <span className="text-slate-400">Créditos default ticket:</span>
+                <span className="font-bold text-indigo-300">{state?.settings.defaultCreditsPerCode ?? 3} votos</span>
+              </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-slate-400">Filtro explícito:</span>
+                <span className="font-bold text-emerald-400">
+                  {state?.settings.explicitFilterEnabled ? "Activado" : "Desactivado"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== COLUMNA DERECHA: COLA EN VIVO & MODERACIÓN (7 COLS) ==================== */}
+        <section className="col-span-12 lg:col-span-7 card-panel rounded-2xl p-5 shadow-2xl">
+          <div className="flex items-center justify-between pb-3 border-b border-[#1E2333]">
+            <div>
+              <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+                <span className="material-symbols-outlined text-indigo-400 text-lg">queue_music</span>
+                Cola en Vivo & Moderación
+              </h2>
+              <p className="font-mono text-xs text-slate-400">
+                Canciones en espera ordenadas por votos y orden de llegada
+              </p>
+            </div>
+            <span className="font-mono text-xs text-indigo-300 bg-[#181b25] px-2.5 py-1 rounded-full border border-[#1E2333]">
+              {queue.length} temas en cola
+            </span>
+          </div>
+
+          {/* Queue List */}
+          {queue.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-500 font-mono space-y-2">
+              <span className="material-symbols-outlined text-slate-600 text-3xl">playlist_remove</span>
+              <p>No hay canciones en la cola en este momento.</p>
+              <p className="text-slate-600">Cuando los clientes propongan temas, aparecerán aquí para moderar.</p>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-2.5">
+              {queue.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="p-3 rounded-xl bg-[#131722] border border-[#1e2333] flex items-center justify-between gap-3 hover:border-[#2a344e] transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <BallChip n={index + 1} size="md" />
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-bold text-white truncate">
+                        {item.title}
+                      </h4>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 font-mono text-[10px] text-slate-400">
+                        <span className="text-indigo-400 font-semibold">{item.voteCount} votos</span>
+                        <span className="text-slate-600">•</span>
+                        <span>Mesa en vivo</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => setConfirmVetoId(item.id)}
+                      className="py-1.5 px-3 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-500/30 font-mono text-xs font-semibold flex items-center gap-1 active:scale-95 transition-all"
+                      title="Vetar de la cola"
+                    >
+                      <span className="material-symbols-outlined text-sm">block</span>
+                      <span>Vetar</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Confirm Dialogs */}
+      {/* Confirmation Dialogs */}
       <ConfirmDialog
         open={confirmOpen}
-        title="¿Abrir la sesión de la noche?"
-        description="Se habilitará la votación para los clientes y el canje de códigos de consumición."
-        confirmLabel="Abrir noche"
+        title="¿Abrir la noche?"
+        description="Los clientes podrán empezar a proponer canciones y votar desde sus mesas."
+        confirmLabel="Sí, abrir noche"
         onConfirm={() => void handleOpenNight()}
         onCancel={() => setConfirmOpen(false)}
       />
@@ -351,30 +495,30 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       <ConfirmDialog
         open={confirmClose}
         title="¿Cerrar la sesión de la noche?"
-        description="Esta acción finalizará la sesión actual. Todos los códigos activos no canjeados y créditos restantes van a vencer inmediatamente."
-        confirmLabel="Cerrar noche"
+        description="Se detendrán los votos activos y la sesión actual finalizará para el balance de caja."
+        confirmLabel="Sí, cerrar noche"
         onConfirm={() => void handleCloseNight()}
         onCancel={() => setConfirmClose(false)}
       />
 
       <ConfirmDialog
-        open={confirmVetoId !== null}
-        title="¿Vetar este tema de la cola?"
-        description="El tema se quitará de la cola inmediatamente sin devolución de créditos al cliente."
-        confirmLabel="Vetar tema"
+        open={Boolean(confirmVetoId)}
+        title="¿Vetar esta canción?"
+        description="La canción será removida inmediatamente de la cola y no se reproducirá."
+        confirmLabel="Sí, vetar"
         onConfirm={() => {
           if (confirmVetoId) void handleVeto(confirmVetoId);
         }}
         onCancel={() => setConfirmVetoId(null)}
       />
 
+      {/* Pair Player Dialog */}
       <PairPlayerDialog
         open={pairDialogOpen}
-        venueId={state?.venue.id ?? ""}
+        venueId={state?.venue.id || ""}
         slug={slug}
         onClose={() => setPairDialogOpen(false)}
       />
     </div>
   );
 }
-

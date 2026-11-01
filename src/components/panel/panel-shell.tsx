@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { type PanelRole, panelNavFor } from "@/lib/domain/permissions";
 import { LogoutButton } from "./logout-button";
 
@@ -8,49 +11,194 @@ interface PanelShellProps {
   children: React.ReactNode;
 }
 
+const iconMap: Record<string, string> = {
+  Noche: "sports_bar",
+  Catálogo: "queue_music",
+  Códigos: "receipt_long",
+  Personal: "badge",
+  Ajustes: "tune",
+};
+
 export function PanelShell({ slug, role, children }: PanelShellProps) {
+  const pathname = usePathname();
   const nav = panelNavFor(role, slug);
+
   return (
-    <div className="min-h-screen bg-[#041611] text-cream flex">
-      <aside className="w-64 border-r border-amber/10 bg-[#07211b] p-4 flex flex-col gap-2">
-        <div className="mb-4">
-          <h2 className="font-display text-xl text-amber">PonelePlay</h2>
-          <span className="text-xs text-cream/50 uppercase tracking-widest font-mono">
-            {slug} · {role}
+    <div className="min-h-screen bg-[#0f131c] text-[#dfe2ef] flex flex-col">
+      {/* ==================== TOP NAVIGATION BAR ==================== */}
+      <header className="bg-[#0f131c] border-b border-[#1E2333] flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 shadow-md">
+        {/* Brand Info */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <span className="size-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
+              <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
+                sports_bar
+              </span>
+            </span>
+            <span className="font-bold text-white text-base tracking-tight capitalize">
+              {slug.replace("-", " ")}
+              <span className="text-slate-400 font-normal text-xs ml-1.5 font-mono">
+                Billar & Bar
+              </span>
+            </span>
+          </div>
+
+          <span className="hidden md:inline-block px-2.5 py-0.5 rounded text-xs font-mono bg-[#181b25] text-indigo-300 border border-[#2a3045]">
+            Terminal Central #01
           </span>
         </div>
-        <nav className="flex flex-col gap-1">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="px-3 py-2 rounded-lg hover:bg-amber/10 transition-colors text-cream/90 hover:text-cream text-sm font-medium"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
 
-        <div className="mt-6 pt-4 border-t border-amber/10 flex flex-col gap-1 text-xs">
+        {/* Central Telemetry */}
+        <div className="hidden lg:flex items-center gap-6 font-mono text-xs">
+          <div className="flex items-center gap-2 text-indigo-300 font-medium">
+            <span className="size-2 rounded-full bg-emerald-400 pulse-dot" />
+            <span className="text-white">
+              Noche Activa <span className="text-emerald-400 font-bold">(Abierta)</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <span className="material-symbols-outlined text-sm text-cyan-400">wifi</span>
+            <span>Host Conectado (18ms)</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+              token
+            </span>
+            <span>
+              Rol: <strong className="text-white uppercase">{role}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Trailing Actions */}
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/panel/${slug}/codigos`}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold active:scale-95 transition-all shadow-md shadow-indigo-600/30"
+          >
+            <span className="material-symbols-outlined text-base">confirmation_number</span>
+            <span>Nuevo Ticket</span>
+          </Link>
+
           <Link
             href={`/player/${slug}`}
             target="_blank"
-            className="px-3 py-2 rounded-lg text-cream/60 hover:text-cream hover:bg-amber/5 transition-colors"
+            className="hidden sm:flex items-center gap-1.5 bg-[#181b25] text-slate-300 hover:bg-[#202534] hover:text-white px-3 py-1.5 rounded-lg font-mono text-xs border border-[#1E2333] transition-colors"
+            title="Abrir en pantalla gigante"
           >
-            📺 Abrir Pantalla TV ↗
+            <span className="material-symbols-outlined text-sm text-cyan-400">tv</span>
+            <span>Pantalla TV ↗</span>
           </Link>
+
           <Link
             href={`/p/${slug}`}
             target="_blank"
-            className="px-3 py-2 rounded-lg text-cream/60 hover:text-cream hover:bg-amber/5 transition-colors"
+            className="hidden sm:flex items-center gap-1.5 bg-[#181b25] text-slate-300 hover:bg-[#202534] hover:text-white px-3 py-1.5 rounded-lg font-mono text-xs border border-[#1E2333] transition-colors"
+            title="Vista de cliente QR"
           >
-            📱 Vista Cliente (QR) ↗
+            <span className="material-symbols-outlined text-sm text-indigo-400">qr_code</span>
+            <span>Cliente QR ↗</span>
           </Link>
         </div>
+      </header>
 
-        <LogoutButton />
-      </aside>
-      <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+      {/* Main Container with Sidebar */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ==================== SIDE NAVIGATION BAR ==================== */}
+        <aside className="w-64 bg-[#0a0e17] border-r border-[#1E2333] flex flex-col justify-between p-4 z-40 shadow-xl shrink-0">
+          <div className="flex flex-col gap-4">
+            {/* Side Header Branding */}
+            <div className="px-2 py-1 flex items-center justify-between border-b border-[#1E2333] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-cyan-400 p-[1.5px] shadow-sm shrink-0">
+                  <div className="w-full h-full bg-[#0F172A] rounded-[10px] flex items-center justify-center">
+                    <span className="material-symbols-outlined text-indigo-400 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      play_arrow
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-bold text-white text-sm tracking-tight leading-none">
+                    Ponele<span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">Play</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mt-0.5">
+                    Control Central
+                  </span>
+                </div>
+              </div>
+              <span className="material-symbols-outlined text-slate-500 text-sm">tune</span>
+            </div>
+
+            {/* Navigation Links */}
+            <nav className="flex flex-col gap-1.5 mt-1">
+              {nav.map((item) => {
+                const isActive = pathname === item.href;
+                const icon = iconMap[item.label] || "circle";
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 font-medium transition-all text-xs font-mono ${
+                      isActive
+                        ? "bg-indigo-600/15 text-indigo-300 font-semibold border-l-4 border-indigo-500 shadow-sm"
+                        : "text-slate-400 hover:bg-[#181b25] hover:text-white"
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-base ${
+                        isActive ? "text-indigo-400" : "text-slate-500"
+                      }`}
+                      style={isActive ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                    >
+                      {icon}
+                    </span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            {/* TV Kiosk Mode Action */}
+            <div className="mt-2">
+              <Link
+                href={`/player/${slug}`}
+                target="_blank"
+                className="w-full flex items-center justify-center gap-2 bg-[#131722] hover:bg-[#1a2030] text-indigo-300 hover:text-white px-3 py-2.5 rounded-lg font-mono text-xs transition-colors border border-indigo-500/25 shadow-sm"
+              >
+                <span className="material-symbols-outlined text-base">tv</span>
+                <span>Modo Kiosco TV</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Bottom Staff / Logout */}
+          <div className="pt-4 border-t border-[#1E2333] flex flex-col gap-2">
+            <div className="flex items-center gap-2.5 px-2 py-1">
+              <div className="size-8 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold font-mono text-xs">
+                {role === "owner" ? "OP" : "ST"}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-bold text-white truncate">
+                  {role === "owner" ? "Administrador" : "Personal de Barra"}
+                </span>
+                <span className="text-[10px] font-mono text-slate-500 uppercase">
+                  {slug}
+                </span>
+              </div>
+            </div>
+
+            <LogoutButton />
+          </div>
+        </aside>
+
+        {/* Main View Area */}
+        <main className="flex-1 p-6 lg:p-8 overflow-y-auto bg-[#0a0e17]/60">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

@@ -5,26 +5,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import {
-  Maximize2,
-  Minimize2,
-  Music2,
-  Radio,
-  X,
-} from "lucide-react";
+import { Maximize2, Minimize2, Music2, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
-import { BrandMark } from "@/components/brand";
-import { SourceBadge } from "@/components/source-badge";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import { createYoutubeEngine } from "@/components/player/youtube-engine";
 import type { PlaybackEngine } from "@/components/player/engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
-import { demoNowPlaying, demoQueue, formatVotes } from "@/lib/demo-data";
-
-const equalizer = [14, 26, 38, 20, 44, 30, 18, 34, 48, 22, 36, 16, 28, 42];
+import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 
 interface PlayerScreenProps {
   slug: string;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "--:--";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 export function PlayerScreen({ slug }: PlayerScreenProps) {
@@ -34,10 +31,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [isDemo, setIsDemo] = useState(false);
   const [playerState, setPlayerState] = useState<PlayerStateResponse | null>(null);
 
-  const [clock, setClock] = useState("--:--");
+  const [clock, setClock] = useState("23:48");
   const [qr, setQr] = useState<string | null>(null);
-  const [qrFocus, setQrFocus] = useState(false);
+  const [qrModal, setQrModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [elapsed, setElapsed] = useState(165);
 
   // Check token from search params or localStorage
   useEffect(() => {
@@ -66,8 +64,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       );
 
     update();
-    const interval = window.setInterval(update, 15000);
+    const interval = window.setInterval(update, 10000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  // Elapsed runner simulation
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsed((prev) => (prev + 1) % 320);
+    }, 1000);
+    return () => clearInterval(timer);
   }, []);
 
   // QR Code generator
@@ -82,7 +88,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       margin: 1,
       width: 520,
       errorCorrectionLevel: "M",
-      color: { dark: "#041611", light: "#f5e9d6" },
+      color: { dark: "#0a0e17", light: "#ffffff" },
     })
       .then((url) => {
         if (active) setQr(url);
@@ -121,10 +127,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         toggleFullscreen();
       }
       if (key === "q") {
-        setQrFocus((val) => !val);
+        setQrModal((val) => !val);
       }
       if (key === "escape") {
-        setQrFocus(false);
+        setQrModal(false);
       }
     }
 
@@ -140,56 +146,58 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   // Now playing and queue derived from live state or demo
   const nowPlaying: PlayerTrack | null = useMemo(() => {
     if (playerState?.nowPlaying) return playerState.nowPlaying;
-    if (isDemo) {
+    if (isDemo || !token) {
       return {
         itemId: demoNowPlaying.id,
         trackId: demoNowPlaying.id,
         title: demoNowPlaying.title,
         artist: demoNowPlaying.artist,
         source: demoNowPlaying.source,
-        durationSeconds: 207,
+        durationSeconds: 332,
         thumbnailUrl: null,
         voteCount: demoNowPlaying.votes,
       };
     }
     return null;
-  }, [playerState, isDemo]);
+  }, [playerState, isDemo, token]);
 
   const queue: PlayerTrack[] = useMemo(() => {
-    if (playerState?.queue) return playerState.queue;
-    if (isDemo) {
-      return demoQueue.map((item) => ({
-        itemId: item.id,
-        trackId: item.id,
-        title: item.title,
-        artist: item.artist,
-        source: item.source,
-        durationSeconds: 252,
-        thumbnailUrl: null,
-        voteCount: item.votes,
-      }));
-    }
-    return [];
-  }, [playerState, isDemo]);
+    if (playerState?.queue && playerState.queue.length > 0) return playerState.queue;
+    return demoQueue.map((item) => ({
+      itemId: item.id,
+      trackId: item.id,
+      title: item.title,
+      artist: item.artist,
+      source: item.source,
+      durationSeconds: 252,
+      thumbnailUrl: null,
+      voteCount: item.votes,
+    }));
+  }, [playerState]);
+
+  const venueName = playerState?.venue.name || "Lounge Central · Bar & Music";
+  const duration = nowPlaying?.durationSeconds ?? 332;
+  const progressPercent = Math.min(100, Math.max(3, (elapsed / duration) * 100));
 
   // Pairing gate
   if (!token && !isDemo) {
     return (
-      <div className="grain relative flex min-h-dvh flex-col items-center justify-center bg-felt-950 p-6 text-cream">
-        <div className="w-full max-w-md rounded-3xl border border-cream/15 bg-felt-900/80 p-8 shadow-2xl backdrop-blur-md">
+      <div className="tech-bg relative flex min-h-dvh flex-col items-center justify-center p-6 text-[#dfe2ef]">
+        <div className="w-full max-w-md rounded-2xl border border-[#232b42] bg-[#181b25]/95 p-8 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <BrandMark className="size-10" />
+            <div className="size-10 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg">
+              <span className="material-symbols-outlined text-[24px]">tv</span>
+            </div>
             <div>
-              <h1 className="font-display text-xl font-bold">
-                Pantalla del Salón
+              <h1 className="text-xl font-bold text-white tracking-tight">
+                Reproductor TV del Salón
               </h1>
-              <p className="text-xs text-cream/50">PonelePlay TV</p>
+              <p className="font-mono text-xs text-slate-400">PonelePlay Host Precision</p>
             </div>
           </div>
 
-          <p className="mt-6 text-sm text-cream/70 leading-relaxed">
-            Esta pantalla requiere vincularse con un dispositivo autorizado
-            desde el panel de control del bar.
+          <p className="mt-5 text-xs text-slate-300 leading-relaxed">
+            Esta pantalla requiere vincularse con un token autorizado emitido desde el panel de control del bar.
           </p>
 
           <form
@@ -197,10 +205,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               e.preventDefault();
               if (tokenInput.trim()) {
                 setToken(tokenInput.trim());
-                localStorage.setItem(
-                  `poneleplay.player.${slug}`,
-                  tokenInput.trim(),
-                );
+                localStorage.setItem(`poneleplay.player.${slug}`, tokenInput.trim());
               }
             }}
             className="mt-6 space-y-4"
@@ -208,7 +213,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <div>
               <label
                 htmlFor="player-token-input"
-                className="block font-mono text-[11px] uppercase tracking-wider text-cream/50"
+                className="block font-mono text-[11px] uppercase tracking-wider text-slate-400"
               >
                 Pegá el token de la pantalla
               </label>
@@ -218,32 +223,32 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 value={tokenInput}
                 onChange={(e) => setTokenInput(e.target.value)}
                 placeholder="Token de 64 caracteres..."
-                className="mt-2 w-full rounded-2xl border border-cream/15 bg-white/5 px-4 py-3 font-mono text-xs text-cream placeholder:text-cream/25 focus:border-amber focus:outline-none"
+                className="mt-2 w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-4 py-3 font-mono text-xs text-white placeholder:text-slate-600 focus:border-indigo-400 focus:outline-none"
               />
             </div>
 
             <button
               type="submit"
               disabled={!tokenInput.trim()}
-              className="w-full rounded-2xl bg-amber py-3 font-display text-sm font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
+              className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 py-3 font-mono text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50"
             >
-              Conectar pantalla
+              Conectar Pantalla TV
             </button>
           </form>
 
-          <div className="mt-6 flex items-center justify-between border-t border-cream/10 pt-5 text-xs">
+          <div className="mt-6 flex items-center justify-between border-t border-[#232b42] pt-5 text-xs">
             <Link
               href={`/panel/${slug}`}
-              className="text-cream/50 hover:text-cream underline"
+              className="text-slate-400 hover:text-white underline font-mono text-[11px]"
             >
               Abrir panel de control
             </Link>
             <button
               type="button"
               onClick={() => setIsDemo(true)}
-              className="text-amber hover:underline font-semibold"
+              className="text-cyan-400 hover:underline font-mono text-[11px] font-semibold"
             >
-              Probar en modo demo
+              Probar en modo pantalla demo
             </button>
           </div>
         </div>
@@ -252,8 +257,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }
 
   return (
-    <div className="grain relative flex min-h-dvh flex-col overflow-hidden bg-felt-950 text-cream lg:h-dvh">
-      {/* Hidden YouTube container for actual playback */}
+    <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
+      {/* Hidden YouTube container for audio playback */}
       <div id="yt-player-target" className="hidden" aria-hidden="true" />
 
       {/* Runtime coordinator if connected with token */}
@@ -266,202 +271,380 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         />
       ) : null}
 
-      {/* Background ambient glows */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-32 top-1/4 size-[28rem] rounded-full bg-amber/[0.07] blur-[120px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-40 -top-32 size-[34rem] rounded-full bg-mint/[0.05] blur-[130px]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-felt-950 to-transparent"
-      />
-
-      {/* Header */}
-      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 px-5 py-4 sm:px-8 lg:px-12 lg:py-6">
-        <div className="flex items-center gap-3">
-          <Link href="/" aria-label="Volver">
-            <BrandMark className="size-10" />
-          </Link>
-          <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-cream/35">
-              PonelePlay en
-            </p>
-            <p className="font-display text-lg font-bold leading-tight">
-              {playerState?.venue.name || "Billar Aurora"}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={toggleFullscreen}
-            className="grid size-9 place-items-center rounded-full border border-cream/10 bg-cream/5 text-cream/60 hover:text-cream"
-            aria-label="Pantalla completa"
-          >
-            {isFullscreen ? (
-              <Minimize2 className="size-4" />
-            ) : (
-              <Maximize2 className="size-4" />
-            )}
-          </button>
-
-          <span className="flex items-center gap-1.5 rounded-full border border-mint/20 bg-mint/[0.06] px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider text-mint">
-            <span className="size-1.5 animate-pulse rounded-full bg-mint" />
-            {isDemo ? "Modo Demo" : "Noche abierta"}
-          </span>
-
-          <span className="rounded-full border border-cream/10 bg-cream/5 px-3 py-1.5 font-mono text-xs tabular-nums text-cream/50">
-            {clock}
-          </span>
-        </div>
-      </header>
-
-      {/* Main layout: Now playing (left) + Up next (right) */}
-      <main className="relative z-10 grid flex-1 items-center gap-6 px-5 pb-6 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(300px,27%)] lg:gap-10 lg:px-12 lg:pb-4">
-        <section className="min-w-0">
-          <p className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.3em] text-amber">
-            <Radio className="size-3.5" aria-hidden="true" />
-            Ahora suena
-          </p>
-
-          {nowPlaying ? (
-            <>
-              <h1 className="mt-3 max-w-5xl font-display text-[clamp(2.5rem,7vw,6.4rem)] font-black leading-[0.88] tracking-[-0.045em] text-cream">
-                {nowPlaying.title}
-              </h1>
-
-              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-base text-cream/75 sm:text-xl lg:text-2xl">
-                <span className="font-semibold text-cream">
-                  {nowPlaying.artist}
-                </span>
-                <span className="text-cream/25">·</span>
-                <SourceBadge source={nowPlaying.source} />
-                <span className="text-cream/25">·</span>
-                <span className="font-mono text-sm text-amber font-bold">
-                  {formatVotes(nowPlaying.voteCount)}
-                </span>
-              </div>
-            </>
-          ) : (
-            <div className="mt-8 rounded-3xl border border-dashed border-cream/15 p-12 text-center">
-              <Music2 className="mx-auto size-12 text-cream/25" />
-              <h2 className="mt-4 font-display text-2xl font-bold">
-                Esperando la próxima canción...
-              </h2>
-              <p className="mt-2 text-sm text-cream/50">
-                Escaneá el código QR para sumar tu tema a la cola.
-              </p>
+      {/* ================= TOP BAR (NOCTURNE PRECISION HEADER) ================= */}
+      <header className="w-full px-8 py-3.5 flex justify-between items-center z-50 bg-[#0A0E17]/90 backdrop-blur-xl border-b border-[#232b42] shadow-xl">
+        {/* Brand / Logo & Venue Anchor */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="size-9 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-500/25">
+              <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                graphic_eq
+              </span>
             </div>
-          )}
-
-          {/* Equalizer animation */}
-          <div
-            aria-hidden="true"
-            className="mt-8 flex h-12 items-end gap-1.5 sm:gap-2"
-          >
-            {equalizer.map((height, index) => (
-              <span
-                key={index}
-                className="w-1.5 rounded-full bg-gradient-to-t from-amber to-mint sm:w-2"
-                style={{
-                  height: `${height}px`,
-                  animation: `pulse 1.4s ease-in-out ${index * 0.1}s infinite alternate`,
-                }}
-              />
-            ))}
+            <div className="flex flex-col">
+              <span className="font-bold text-white text-base tracking-tight leading-none">
+                Ponele<span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">Play</span>
+              </span>
+              <span className="font-mono text-[9px] uppercase tracking-widest text-slate-400 mt-0.5">
+                Jukebox & TV Precision
+              </span>
+            </div>
           </div>
-        </section>
 
-        {/* Up Next column */}
-        <section className="flex flex-col rounded-3xl border border-cream/10 bg-white/[0.02] p-5 backdrop-blur-md">
-          <div className="flex items-center justify-between border-b border-cream/10 pb-4">
-            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/45">
-              A continuación ({queue.length})
-            </p>
-            <span className="font-mono text-[10px] text-cream/35">
-              Por votos
+          <div className="h-5 w-px bg-[#232b42]" />
+
+          {/* Venue Badge */}
+          <div className="flex items-center gap-1.5 bg-[#181b25] px-3 py-1 rounded-lg border border-[#232b42]">
+            <span className="material-symbols-outlined text-cyan-400 text-[16px]">location_on</span>
+            <span className="font-mono text-xs uppercase tracking-wider text-slate-300 font-semibold">
+              {venueName}
             </span>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {queue.slice(0, 4).map((item, index) => (
-              <div
-                key={item.itemId}
-                className="flex items-center gap-3 rounded-2xl border border-cream/5 bg-white/[0.015] p-3"
-              >
-                <BallChip n={index + 1} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-cream">
-                    {item.title}
-                  </p>
-                  <p className="truncate text-xs text-cream/45">
-                    {item.artist}
-                  </p>
+          {/* Live Session Status */}
+          <div className="flex items-center gap-2 bg-indigo-500/15 px-3 py-1 rounded-full border border-indigo-500/30 shadow-[0_0_14px_rgba(99,102,241,0.25)]">
+            <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
+            <span className="text-[#c0c1ff] font-mono text-xs font-semibold tracking-wide">
+              {isDemo ? "SESIÓN DEMO · EN VIVO" : "SESIÓN ACTIVA · EN VIVO"}
+            </span>
+          </div>
+        </div>
+
+        {/* Connection Status & Precision Clock */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-[#181b25] px-3 py-1.5 rounded-lg border border-[#232b42]">
+            <span className="material-symbols-outlined text-cyan-400 text-[18px]">cloud_done</span>
+            <span className="font-mono text-xs text-slate-300">
+              Sincronizado (Chrome Host)
+            </span>
+            <span className="size-1.5 rounded-full bg-cyan-400" />
+          </div>
+
+          <div className="flex items-center gap-2 bg-[#1c1f29] px-3.5 py-1.5 rounded-lg border border-[#283250] shadow-inner font-mono">
+            <span className="material-symbols-outlined text-indigo-400 text-[18px]">schedule</span>
+            <span className="text-white font-bold text-sm tracking-widest">
+              {clock}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            className="size-9 rounded-lg bg-[#181b25] border border-[#232b42] flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+            title="Pantalla completa (F)"
+          >
+            {isFullscreen ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+          </button>
+        </div>
+      </header>
+
+      {/* ================= MAIN VIEWPORT (SPLIT SCREEN 62/38) ================= */}
+      <main className="w-full flex-1 px-8 py-5 grid grid-cols-12 gap-6 items-stretch max-h-[calc(100vh-120px)]">
+        {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~62%) ---------------- */}
+        <section className="col-span-7 flex flex-col justify-between rounded-2xl bg-[#181b25]/90 border border-[#232b42] p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+          {/* Ambient tech glows */}
+          <div className="absolute -top-28 -left-28 w-96 h-96 bg-[#6366F1]/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Header tag within card */}
+          <div className="flex items-center justify-between z-10">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/40 px-3 py-1 rounded-md font-mono text-xs tracking-wider flex items-center gap-1.5 shadow-[0_0_14px_rgba(99,102,241,0.3)]">
+                <span className="size-2 rounded-full bg-indigo-400 animate-ping inline-block" />
+                SONANDO AHORA
+              </div>
+              <span className="font-mono text-xs text-slate-400 tracking-wider">
+                CANAL AUDIO #01 · PRINCIPAL
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-[#0a0e17]/80 px-3 py-1 rounded-md border border-[#232b42]">
+              <span className="material-symbols-outlined text-cyan-400 text-[18px]">smart_display</span>
+              <span className="font-mono text-xs text-slate-300">Stream HD 1080p · Lossless</span>
+            </div>
+          </div>
+
+          {/* Middle: Vinyl + Typography Display */}
+          <div className="flex items-center gap-8 my-auto z-10 py-4">
+            {/* Vinyl Record + Album Cover */}
+            <div className="relative w-64 h-64 shrink-0 flex items-center justify-center">
+              {/* Vinyl Record Grooves */}
+              <div className="absolute -right-8 size-56 rounded-full bg-[#080B12] border-4 border-[#1E2433] shadow-[0_0_32px_rgba(0,0,0,0.85)] animate-spin-vinyl flex items-center justify-center z-0">
+                <div className="size-44 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                  <div className="size-32 rounded-full border border-neutral-700/30 flex items-center justify-center">
+                    <div className="size-20 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] border-2 border-[#0a0e17] flex flex-col items-center justify-center p-1 text-center shadow-lg">
+                      <span className="text-white font-mono text-[9px] uppercase tracking-wider font-extrabold">PONELE</span>
+                      <span className="text-white/80 font-mono text-[7px] leading-tight">PLAY</span>
+                      <div className="size-3 rounded-full bg-[#0a0e17] border border-white/40 mt-0.5" />
+                    </div>
+                  </div>
                 </div>
-                <span className="shrink-0 font-mono text-xs font-bold text-amber">
-                  {formatVotes(item.voteCount)}
+              </div>
+
+              {/* Album Cover Front */}
+              <div className="relative size-56 rounded-2xl overflow-hidden border border-[#283250] shadow-2xl z-10 bg-[#0a0e17] flex items-center justify-center">
+                {nowPlaying?.thumbnailUrl ? (
+                  <Image
+                    src={nowPlaying.thumbnailUrl}
+                    alt={nowPlaying.title}
+                    width={224}
+                    height={224}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-[#0a0e17] flex flex-col items-center justify-center text-indigo-300 p-4">
+                    <Music2 className="size-16 text-indigo-400 mb-2" />
+                    <span className="font-mono text-xs uppercase tracking-widest text-slate-400">PonelePlay Master</span>
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
+                <div className="absolute bottom-3 left-3 text-white font-mono text-[11px] uppercase tracking-wider bg-[#0A0E17]/80 backdrop-blur-md px-2.5 py-0.5 rounded border border-[#283250]">
+                  JUKEBOX LIVE
+                </div>
+              </div>
+            </div>
+
+            {/* High-tech Typography Display */}
+            <div className="flex-1 min-w-0 pr-4">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-xs mb-3">
+                <span className="size-1.5 rounded-full bg-cyan-400" />
+                VOTADA POR EL SALÓN
+              </div>
+              <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-[1.05] drop-shadow-sm truncate">
+                {nowPlaying?.title || "Esperando tema..."}
+              </h1>
+              <h2 className="text-xl font-medium text-slate-300 mt-2 truncate">
+                {nowPlaying?.artist || "Playlist de fondo activa"}
+              </h2>
+              <div className="flex items-center gap-4 mt-4 font-mono text-xs text-slate-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-cyan-400 text-[18px]">album</span>
+                  Audio HD Directo
+                </span>
+                <span>•</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-indigo-400 text-[18px]">graphic_eq</span>
+                  Stereo Master
                 </span>
               </div>
-            ))}
+            </div>
+          </div>
 
-            {queue.length === 0 ? (
-              <p className="py-6 text-center text-xs text-cream/40">
-                No hay temas en cola de espera.
+          {/* Bottom: Progress Bar & Attribution Pill */}
+          <div className="z-10 mt-auto bg-[#1c1f29]/90 p-4 rounded-xl border border-[#232b42] shadow-inner">
+            {/* Timeline Counters */}
+            <div className="w-full flex items-center justify-between font-mono text-xs text-slate-300 mb-2">
+              <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
+              <span className="text-slate-500 text-[11px] tracking-widest uppercase">EN REPRODUCCIÓN</span>
+              <span className="text-slate-400 font-semibold tracking-wider">{formatDuration(duration)}</span>
+            </div>
+
+            {/* Modern Indigo-Violet to Cyan Progress Bar */}
+            <div className="w-full h-2.5 bg-[#0a0e17] rounded-full overflow-hidden p-0 relative shadow-inner border border-[#232b42]">
+              <div
+                className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_16px_rgba(99,102,241,0.6)]"
+                style={{ width: `${progressPercent}%` }}
+              >
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 size-3.5 bg-white rounded-full shadow-[0_0_8px_#ffffff] border-2 border-[#6366F1]" />
+              </div>
+            </div>
+
+            {/* User Attribution Pill */}
+            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#283250]">
+              <div className="flex items-center gap-3">
+                <div className="size-8 rounded-lg bg-[#262a34] border border-[#283250] flex items-center justify-center">
+                  <span className="material-symbols-outlined text-cyan-400 text-[18px]">table_bar</span>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-200">
+                    Pedida por: <span className="text-white font-bold">Mesa #8</span> <span className="text-slate-400">(Gonza)</span>
+                  </p>
+                  <p className="font-mono text-[10px] text-slate-400">
+                    Ingresó a la cola por votación popular
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-3 py-1 rounded-full border border-indigo-500/30 font-mono text-xs font-bold">
+                  <span className="material-symbols-outlined text-[16px]">thumb_up</span>
+                  <span>{nowPlaying?.voteCount ?? 14} VOTOS TOTALES</span>
+                </div>
+                <div className="bg-[#262a34] text-cyan-300 font-mono text-xs px-3 py-1 rounded-full border border-[#283250]">
+                  🔥 Racha de Mesa (+6)
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~38%) ---------------- */}
+        <section className="col-span-5 flex flex-col justify-between gap-5">
+          {/* TOP SECTION: CRISP MODERN QR ENGAGEMENT CARD */}
+          <div className="rounded-2xl bg-[#181b25]/95 border border-[#232b42] p-5 shadow-2xl flex items-center gap-5 relative overflow-hidden backdrop-blur-xl">
+            <div className="absolute -right-12 -top-12 size-44 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
+
+            {/* QR display */}
+            <div
+              onClick={() => setQrModal(true)}
+              className="relative size-32 rounded-xl bg-white p-2 shrink-0 border-2 border-indigo-400/50 shadow-lg cursor-pointer hover:scale-105 transition-transform"
+              title="Click para agrandar QR"
+            >
+              {qr ? (
+                <Image
+                  src={qr}
+                  alt="QR para votar"
+                  width={120}
+                  height={120}
+                  className="w-full h-full object-contain"
+                  unoptimized
+                />
+              ) : (
+                <div className="w-full h-full bg-slate-200 animate-pulse rounded" />
+              )}
+            </div>
+
+            {/* Engagement callout */}
+            <div className="flex-1 min-w-0">
+              <span className="font-mono text-[10px] text-cyan-400 uppercase tracking-widest font-bold block mb-1">
+                ELEGÍ LA MÚSICA DESDE TU MESA
+              </span>
+              <h3 className="text-base font-bold text-white tracking-tight leading-snug">
+                Escaneá el código QR y votá la próxima canción
+              </h3>
+              <p className="font-mono text-[11px] text-slate-400 mt-1.5 leading-tight">
+                Pedí tu ticket al mozo para sumar créditos de votos instantáneos.
               </p>
-            ) : null}
+              <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#0a0e17] border border-[#232b42] font-mono text-[10px] text-slate-300">
+                <span className="material-symbols-outlined text-xs text-indigo-400">link</span>
+                <span>poneleplay.app/p/{slug}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* BOTTOM SECTION: UPCOMING QUEUE WITH BILLIARD / RANK TOKENS */}
+          <div className="flex-1 rounded-2xl bg-[#181b25]/95 border border-[#232b42] p-5 shadow-2xl flex flex-col justify-between overflow-hidden backdrop-blur-xl">
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-[#232b42]">
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                    <span className="material-symbols-outlined text-indigo-400 text-lg">queue_music</span>
+                    A CONTINUACIÓN EN VIVO
+                  </h3>
+                  <p className="font-mono text-[11px] text-slate-400">
+                    Orden de reproducción en sala
+                  </p>
+                </div>
+                <span className="font-mono text-xs text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 px-2.5 py-0.5 rounded-full">
+                  {queue.length} en cola
+                </span>
+              </div>
+
+              {/* Queue Items List */}
+              <div className="mt-3.5 space-y-2.5">
+                {queue.slice(0, 4).map((item, index) => (
+                  <div
+                    key={item.itemId}
+                    className="p-3 rounded-xl bg-[#131722] border border-[#1e2333] flex items-center justify-between gap-3 shadow-sm hover:border-[#2a344e] transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <BallChip n={index + 1} size="md" />
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-white truncate">
+                          {item.title}
+                        </h4>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          {item.artist}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg">
+                        {item.voteCount} {item.voteCount === 1 ? "voto" : "votos"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+
+                {queue.length === 0 && (
+                  <div className="py-8 text-center text-xs text-slate-500 font-mono">
+                    No hay canciones en cola de espera.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-[#232b42] flex items-center justify-between font-mono text-[11px] text-slate-400">
+              <span>Modo: Prioridad por votos ponderados</span>
+              <span className="text-cyan-400 font-semibold">● En línea</span>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Floating QR Pill */}
-      <aside
-        className={
-          qrFocus
-            ? "fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-6"
-            : "fixed bottom-5 right-5 z-20 flex items-center gap-4 rounded-3xl border border-cream/15 bg-felt-900/90 p-4 shadow-2xl backdrop-blur-md sm:bottom-8 sm:right-8"
-        }
-      >
-        {qr ? (
-          <div
-            onClick={() => setQrFocus(!qrFocus)}
-            className="cursor-pointer transition-transform hover:scale-105"
-          >
-            <Image
-              src={qr}
-              alt="QR para votar"
-              width={qrFocus ? 320 : 84}
-              height={qrFocus ? 320 : 84}
-              className="rounded-2xl"
-              unoptimized
-            />
-          </div>
-        ) : null}
+      {/* ================= BOTTOM MARQUEE BAR ================= */}
+      <footer className="w-full bg-[#0a0e17] border-t border-[#232b42] py-2 px-6 overflow-hidden z-40">
+        <div className="animate-marquee items-center gap-12 font-mono text-xs text-slate-400">
+          <span className="flex items-center gap-2">
+            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
+            <span>·</span>
+            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
+            <span>·</span>
+            <span>Cada consumición suma créditos de votos</span>
+            <span>·</span>
+            <span>Cooldown inteligente: prohibido repetir temas en menos de 45 minutos</span>
+            <span>·</span>
+            <span>Jukebox impulsado por PonelePlay</span>
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
+            <span>·</span>
+            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
+            <span>·</span>
+            <span>Cada consumición suma créditos de votos</span>
+            <span>·</span>
+            <span>Cooldown inteligente: prohibido repetir temas en menos de 45 minutos</span>
+            <span>·</span>
+            <span>Jukebox impulsado por PonelePlay</span>
+          </span>
+        </div>
+      </footer>
 
-        {!qrFocus ? (
-          <div className="hidden sm:block">
-            <p className="font-display text-sm font-bold text-cream">
-              ¡Pedí tu tema!
-            </p>
-            <p className="font-mono text-[10px] text-cream/50">
-              Escaneá el QR con tu celular
-            </p>
-          </div>
-        ) : (
+      {/* QR Large Overlay Modal */}
+      {qrModal && (
+        <div
+          onClick={() => setQrModal(false)}
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 cursor-pointer"
+        >
           <button
             type="button"
-            onClick={() => setQrFocus(false)}
-            className="absolute top-6 right-6 text-cream/60 hover:text-cream"
+            onClick={() => setQrModal(false)}
+            className="absolute top-6 right-6 text-slate-400 hover:text-white"
           >
             <X className="size-8" />
           </button>
-        )}
-      </aside>
+          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center">
+            {qr && (
+              <Image
+                src={qr}
+                alt="QR Gigante para votar"
+                width={360}
+                height={360}
+                className="w-full h-auto mx-auto"
+                unoptimized
+              />
+            )}
+            <h3 className="text-slate-900 font-bold text-lg mt-4">
+              Escaneá con tu celular
+            </h3>
+            <p className="font-mono text-xs text-slate-600 mt-1">
+              poneleplay.app/p/{slug}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Archive, Music, Plus, RefreshCw, Search } from "lucide-react";
 import { SourceBadge } from "@/components/source-badge";
 import { TrackForm } from "./track-form";
 import { UploadTrack } from "./upload-track";
@@ -17,6 +16,13 @@ import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 interface CatalogManagerProps {
   slug: string;
   venueId?: string;
+}
+
+function formatDuration(seconds: number | null): string {
+  if (!seconds || seconds <= 0) return "--:--";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerProps) {
@@ -96,188 +102,250 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
     );
   });
 
+  const totalMinutes = tracks.reduce((acc, t) => acc + (t.durationSeconds ?? 0), 0) / 60;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-cream/10 pb-5">
+      {/* SECTION HEADER & METRIC TILES */}
+      <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-4 border-b border-[#1E2333]">
         <div>
-          <h1 className="text-2xl font-display font-bold text-cream">
-            Catálogo y Respaldo
+          <div className="flex items-center gap-2 font-mono text-xs text-cyan-400 mb-1">
+            <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20">
+              SALÓN PRINCIPAL · AMBIENTACIÓN
+            </span>
+            <span className="text-slate-500">/panel/{slug}/catalogo</span>
+          </div>
+          <h1 className="text-xl font-bold text-white tracking-tight">
+            Gestión de Catálogo & Playlist de Fondo
           </h1>
-          <p className="mt-1 text-xs text-cream/50">
-            Administrá las canciones disponibles para el local y la lista de respaldo
+          <p className="text-xs text-slate-400 mt-0.5">
+            Configuración del loop acústico continuo cuando no existan solicitudes pagas activas en la cola.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setTab("catalog")}
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-              tab === "catalog"
-                ? "bg-amber text-[#041611]"
-                : "border border-cream/10 text-cream/70 hover:bg-cream/5"
-            }`}
-          >
-            Canciones ({tracks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("fallback")}
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-              tab === "fallback"
-                ? "bg-amber text-[#041611]"
-                : "border border-cream/10 text-cream/70 hover:bg-cream/5"
-            }`}
-          >
-            Lista de Respaldo ({fallbackTracks.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab("add")}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-              tab === "add"
-                ? "bg-amber text-[#041611]"
-                : "border border-cream/10 text-cream/70 hover:bg-cream/5"
-            }`}
-          >
-            <Plus className="size-3.5" />
-            Sumar canción
-          </button>
+        {/* Cabecera Metrics Deck */}
+        <div className="grid grid-cols-3 gap-3 min-w-[420px] font-mono text-xs">
+          <div className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
+              <span>TOTAL CATÁLOGO</span>
+              <span className="material-symbols-outlined text-sm text-indigo-400">library_music</span>
+            </div>
+            <div className="mt-2">
+              <span className="text-xl font-bold text-white">{tracks.length}</span>
+              <span className="text-indigo-300 ml-1 font-bold">Tracks</span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
+              <span>TIEMPO TOTAL</span>
+              <span className="material-symbols-outlined text-sm text-cyan-400">timelapse</span>
+            </div>
+            <div className="mt-2">
+              <span className="text-xl font-bold text-white">{Math.round(totalMinutes)}m</span>
+              <span className="text-slate-400 block text-[10px]">Playlist de Fondo</span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
+              <span>FALLBACK LOOP</span>
+              <span className="material-symbols-outlined text-sm text-emerald-400">repeat</span>
+            </div>
+            <div className="mt-2">
+              <span className="text-xl font-bold text-emerald-400">{fallbackTracks.length}</span>
+              <span className="text-slate-400 ml-1 text-[10px]">Activas</span>
+            </div>
+          </div>
         </div>
+      </section>
+
+      {error && (
+        <div className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
+          <span className="material-symbols-outlined text-base text-red-400">error</span>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Tabs navigation bar */}
+      <div className="flex items-center gap-2 border-b border-[#1E2333] pb-3">
+        <button
+          type="button"
+          onClick={() => setTab("catalog")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+            tab === "catalog"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+              : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">library_music</span>
+          <span>Catálogo de Canciones ({tracks.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab("fallback")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+            tab === "fallback"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+              : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">queue_music</span>
+          <span>Playlist de Fondo ({fallbackTracks.length})</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab("add")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+            tab === "add"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+              : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">add_circle</span>
+          <span>+ Agregar Canción</span>
+        </button>
       </div>
 
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs text-coral"
-        >
-          {error}
-        </div>
-      ) : null}
-
-      {!venueId ? (
-        <div className="py-12 text-center font-mono text-xs text-cream/40">
-          Cargando datos del local...
-        </div>
-      ) : null}
-
-      {/* Tab: Catalog List */}
-      {venueId && tab === "catalog" ? (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-2.5 size-4 text-cream/30" />
+      {/* Tab 1: Catalog view */}
+      {tab === "catalog" && (
+        <div className="card-panel rounded-2xl p-6 shadow-2xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#1E2333]">
+            <div className="relative flex-1 max-w-md">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-base">
+                search
+              </span>
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por título o artista..."
-                className="w-full rounded-xl border border-cream/10 bg-white/5 pl-9 pr-3 py-2 text-xs text-cream placeholder:text-cream/30 focus:border-amber focus:outline-none"
+                placeholder="Filtrar por título, artista..."
+                className="w-full h-10 pl-9 pr-3 rounded-xl bg-[#0a0e17] border border-[#232b42] text-xs text-white placeholder:text-slate-500 font-mono focus:outline-none focus:border-indigo-400"
               />
             </div>
 
             <button
               type="button"
               onClick={() => void loadData()}
-              className="grid size-8 place-items-center rounded-lg border border-cream/10 text-cream/60 hover:text-cream"
-              aria-label="Actualizar catálogo"
+              className="size-10 rounded-xl border border-[#232b42] text-slate-400 hover:text-white hover:bg-[#181b25] flex items-center justify-center transition-colors"
             >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+              <span className="material-symbols-outlined text-base">refresh</span>
             </button>
           </div>
 
-          {filteredTracks.length > 0 ? (
-            <div className="overflow-hidden rounded-2xl border border-cream/10 bg-white/[0.015]">
-              <table className="w-full text-left border-collapse text-xs">
+          {loading && tracks.length === 0 ? (
+            <p className="text-center py-12 text-xs font-mono text-slate-500">
+              Cargando catálogo...
+            </p>
+          ) : filteredTracks.length === 0 ? (
+            <div className="py-12 text-center text-xs text-slate-500 font-mono space-y-2">
+              <span className="material-symbols-outlined text-slate-600 text-3xl">music_off</span>
+              <p>No se encontraron canciones en el catálogo.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono">
                 <thead>
-                  <tr className="border-b border-cream/10 font-mono text-[10px] uppercase text-cream/40">
-                    <th className="p-3 pl-4">Canción</th>
-                    <th className="p-3">Origen</th>
-                    <th className="p-3">Estado</th>
-                    <th className="p-3 pr-4 text-right">Acciones</th>
+                  <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
+                    <th className="py-2.5 px-3">Canción</th>
+                    <th className="py-2.5 px-3">Artista</th>
+                    <th className="py-2.5 px-3">Fuente</th>
+                    <th className="py-2.5 px-3">Duración</th>
+                    <th className="py-2.5 px-3">Estado</th>
+                    <th className="py-2.5 px-3 text-right">Acción</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-cream/5">
-                  {filteredTracks.map((track) => (
-                    <tr key={track.id} className="hover:bg-white/[0.02]">
-                      <td className="p-3 pl-4">
-                        <p className="font-semibold text-cream">
-                          {track.title}
-                        </p>
-                        <p className="text-[11px] text-cream/50">
-                          {track.artist}
-                        </p>
+                <tbody className="divide-y divide-[#1E2333]/50">
+                  {filteredTracks.map((t) => (
+                    <tr key={t.id} className="hover:bg-[#181b25]/50 transition-colors">
+                      <td className="py-3 px-3 font-bold text-white">
+                        {t.title}
                       </td>
-                      <td className="p-3">
-                        <SourceBadge source={track.source} />
+                      <td className="py-3 px-3 text-slate-400">
+                        {t.artist}
                       </td>
-                      <td className="p-3">
+                      <td className="py-3 px-3">
+                        <SourceBadge source={t.source} />
+                      </td>
+                      <td className="py-3 px-3 text-slate-400">
+                        {formatDuration(t.durationSeconds)}
+                      </td>
+                      <td className="py-3 px-3">
                         <span
-                          className={`rounded-md px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                            track.status === "active"
-                              ? "bg-mint/15 text-mint"
-                              : "bg-cream/10 text-cream/40"
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            t.status === "active"
+                              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                              : "bg-slate-800 text-slate-500 border border-slate-700"
                           }`}
                         >
-                          {track.status === "active" ? "Activa" : "Archivada"}
+                          {t.status === "active" ? "Activo" : "Archivado"}
                         </span>
                       </td>
-                      <td className="p-3 pr-4 text-right">
-                        {track.status === "active" ? (
+                      <td className="py-3 px-3 text-right">
+                        {t.status === "active" && (
                           <button
                             type="button"
-                            onClick={() => void handleArchive(track.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-coral/20 px-2 py-1 text-[11px] font-medium text-coral hover:bg-coral/10"
-                            aria-label={`Archivar ${track.title}`}
+                            onClick={() => void handleArchive(t.id)}
+                            className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-400 hover:text-red-400 text-[11px] transition-colors"
                           >
-                            <Archive className="size-3" />
                             Archivar
                           </button>
-                        ) : null}
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-cream/10 p-12 text-center text-xs text-cream/40">
-              <Music className="mx-auto size-8 text-cream/20 mb-2" />
-              No se encontraron canciones en el catálogo.
-            </div>
           )}
         </div>
-      ) : null}
+      )}
 
-      {/* Tab: Fallback Playlist */}
-      {venueId && tab === "fallback" ? (
-        <FallbackList
-          venueId={venueId}
-          tracks={fallbackTracks}
-          onOrderSaved={() => void loadData()}
-        />
-      ) : null}
-
-      {/* Tab: Add Tracks */}
-      {venueId && tab === "add" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <TrackForm
+      {/* Tab 2: Fallback List */}
+      {tab === "fallback" && venueId && (
+        <div className="card-panel rounded-2xl p-6 shadow-2xl">
+          <FallbackList
             venueId={venueId}
-            onAdded={(newTrack) => {
-              setTracks((prev) => [newTrack, ...prev]);
-              setTab("catalog");
-            }}
-          />
-          <UploadTrack
-            venueId={venueId}
-            onUploaded={(newTrack) => {
-              setTracks((prev) => [newTrack, ...prev]);
-              setTab("catalog");
-            }}
+            tracks={fallbackTracks}
+            onOrderSaved={() => void loadData()}
           />
         </div>
-      ) : null}
+      )}
+
+      {/* Tab 3: Add Track */}
+      {tab === "add" && venueId && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="card-panel rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-400">smart_display</span>
+              Agregar desde YouTube
+            </h3>
+            <TrackForm
+              venueId={venueId}
+              onAdded={() => {
+                setTab("catalog");
+                void loadData();
+              }}
+            />
+          </div>
+
+          <div className="card-panel rounded-2xl p-6 shadow-2xl">
+            <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-cyan-400">upload_file</span>
+              Subir Archivo de Audio (MP3)
+            </h3>
+            <UploadTrack
+              venueId={venueId}
+              onUploaded={() => {
+                setTab("catalog");
+                void loadData();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

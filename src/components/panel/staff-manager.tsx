@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { KeyRound, Lock, Plus, RefreshCw, ShieldAlert, User, UserCheck, UserX } from "lucide-react";
 import {
   createStaff,
   listStaff,
@@ -56,9 +55,7 @@ export function StaffManager({ slug }: StaffManagerProps) {
       const data = await listStaff(venueId);
       setStaffList(data);
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Error al cargar personal",
-      );
+      setError(err instanceof Error ? err.message : "Error al cargar personal");
     } finally {
       setLoading(false);
     }
@@ -81,9 +78,7 @@ export function StaffManager({ slug }: StaffManagerProps) {
       setNewPin("");
       await loadStaff();
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Error al crear personal",
-      );
+      setError(err instanceof Error ? err.message : "Error al crear personal");
     } finally {
       setCreating(false);
     }
@@ -101,264 +96,331 @@ export function StaffManager({ slug }: StaffManagerProps) {
       setResetPinValue("");
       await loadStaff();
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Error al restablecer el PIN",
-      );
+      setError(err instanceof Error ? err.message : "Error al resetear PIN");
     } finally {
       setResetting(false);
     }
   }
 
-  async function handleToggle(staffId: string, currentActive: boolean) {
+  async function handleToggle(id: string, current: boolean) {
     try {
-      await toggleStaffActive(staffId, !currentActive);
+      await toggleStaffActive(id, !current);
       await loadStaff();
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Error al modificar estado",
-      );
+      setError(err instanceof Error ? err.message : "Error al cambiar estado");
     }
   }
 
+  const activeCount = staffList.filter((s) => s.active).length;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-cream/10 pb-5">
+      {/* Top Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#1E2333]">
         <div>
-          <h1 className="text-2xl font-display font-bold text-cream">
-            Personal y Mozos
+          <div className="flex items-center gap-2 font-mono text-xs text-indigo-400 mb-1">
+            <span className="material-symbols-outlined text-sm">badge</span>
+            <span>SEGURIDAD & TERMINALES STAFF</span>
+          </div>
+          <h1 className="text-xl font-bold text-white tracking-tight">
+            Gestión de Personal & Códigos PIN
           </h1>
-          <p className="mt-1 text-xs text-cream/50">
-            Administrá los accesos con PIN de 6 dígitos para emisión de tickets
+          <p className="text-xs text-slate-400 mt-0.5">
+            Administrá credenciales de mozos, roles de terminal táctil y control de seguridad en turnos nocturnos.
           </p>
         </div>
 
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-amber px-4 py-2 font-display text-xs font-bold text-[#041611] hover:bg-amber/90 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold transition-all active:scale-95 shadow-md shadow-indigo-600/30"
         >
-          <Plus className="size-3.5" />
-          Nuevo mozo / personal
+          <span className="material-symbols-outlined text-base">person_add</span>
+          <span>+ Registrar Mozo / Staff</span>
         </button>
       </div>
 
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs text-coral"
-        >
-          {error}
-        </div>
-      ) : null}
-
-      {loading && staffList.length === 0 ? (
-        <div className="py-12 text-center font-mono text-xs text-cream/40">
-          Cargando personal...
-        </div>
-      ) : staffList.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {staffList.map((staff) => (
-            <div
-              key={staff.id}
-              className="rounded-2xl border border-cream/10 bg-white/[0.02] p-4 flex flex-col justify-between gap-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`grid size-10 place-items-center rounded-xl ${
-                      staff.active ? "bg-amber/15 text-amber" : "bg-cream/5 text-cream/30"
-                    }`}
-                  >
-                    <User className="size-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-bold text-sm text-cream">
-                      {staff.name}
-                    </h3>
-                    <p className="font-mono text-[10px] text-cream/40">
-                      ID: {staff.id.slice(0, 8)}...
-                    </p>
-                  </div>
-                </div>
-
-                <span
-                  className={`rounded-full px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                    staff.active
-                      ? "bg-mint/15 text-mint border border-mint/25"
-                      : "bg-coral/15 text-coral border border-coral/25"
-                  }`}
-                >
-                  {staff.active ? "Activo" : "Inactivo"}
-                </span>
-              </div>
-
-              {staff.lockedUntil ? (
-                <div className="flex items-center gap-1.5 rounded-lg border border-coral/20 bg-coral/10 p-2 text-[11px] text-coral">
-                  <ShieldAlert className="size-3.5 shrink-0" />
-                  <span>Bloqueado por intentos fallidos</span>
-                </div>
-              ) : null}
-
-              <div className="flex items-center justify-between border-t border-cream/5 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setResetId(staff.id)}
-                  className="flex items-center gap-1 text-xs text-cream/60 hover:text-amber transition-colors"
-                >
-                  <KeyRound className="size-3" />
-                  Cambiar PIN
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void handleToggle(staff.id, staff.active)}
-                  className={`flex items-center gap-1 text-xs font-semibold ${
-                    staff.active ? "text-coral hover:underline" : "text-mint hover:underline"
-                  }`}
-                >
-                  {staff.active ? (
-                    <>
-                      <UserX className="size-3" /> Desactivar
-                    </>
-                  ) : (
-                    <>
-                      <UserCheck className="size-3" /> Activar
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-cream/10 p-12 text-center text-xs text-cream/40">
-          No hay miembros del personal creados todavía.
+      {error && (
+        <div className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2">
+          <span className="material-symbols-outlined text-base text-red-400">error</span>
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Create Modal */}
-      {createOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
-            onClick={() => setCreateOpen(false)}
-          />
-          <div className="relative w-full max-w-sm rounded-2xl border border-cream/15 bg-felt-900 p-6 shadow-2xl">
-            <h2 className="font-display text-lg font-bold text-cream">
-              Crear Nuevo Mozo / Personal
+      {/* Metric Stats Bar (Bento Pattern) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-[#181b25] border border-[#232b42] rounded-xl p-4 flex items-center justify-between shadow-sm">
+          <div className="flex flex-col">
+            <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+              Dotación en Turno
+            </span>
+            <span className="text-xl font-bold font-mono text-[#c0c1ff] mt-1">
+              {activeCount} {activeCount === 1 ? "Mozo Activo" : "Mozos Activos"}
+            </span>
+            <span className="font-mono text-[11px] text-cyan-400 mt-0.5">
+              Terminales autorizadas
+            </span>
+          </div>
+          <div className="size-11 rounded-xl bg-[#121624] border border-[#232b42] flex items-center justify-center text-indigo-400">
+            <span className="material-symbols-outlined text-2xl">group</span>
+          </div>
+        </div>
+
+        <div className="bg-[#181b25] border border-[#232b42] rounded-xl p-4 flex items-center justify-between shadow-sm">
+          <div className="flex flex-col">
+            <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+              Seguridad de Terminal
+            </span>
+            <span className="text-xl font-bold font-mono text-emerald-400 mt-1">
+              Sin Bloqueos
+            </span>
+            <span className="font-mono text-[11px] text-slate-500 mt-0.5">
+              PIN 4 dígitos cifrado
+            </span>
+          </div>
+          <div className="size-11 rounded-xl bg-[#121624] border border-[#232b42] flex items-center justify-center text-emerald-400">
+            <span className="material-symbols-outlined text-2xl">verified_user</span>
+          </div>
+        </div>
+
+        <div className="bg-[#181b25] border border-[#232b42] rounded-xl p-4 flex items-center justify-between shadow-sm">
+          <div className="flex flex-col">
+            <span className="font-mono text-[10px] text-slate-400 uppercase tracking-wider">
+              Cierre de Sesión
+            </span>
+            <span className="text-xl font-bold font-mono text-white mt-1">
+              Auto-Lock 5 min
+            </span>
+            <span className="font-mono text-[11px] text-indigo-300 mt-0.5">
+              Protección mostrador
+            </span>
+          </div>
+          <div className="size-11 rounded-xl bg-[#121624] border border-[#232b42] flex items-center justify-center text-indigo-400">
+            <span className="material-symbols-outlined text-2xl">lock_clock</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Staff Table */}
+      <div className="card-panel rounded-2xl p-6 shadow-2xl">
+        <div className="flex items-center justify-between pb-3 border-b border-[#1E2333]">
+          <div>
+            <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-400 text-lg">badge</span>
+              Personal con Acceso a la Terminal
             </h2>
-            <p className="mt-1 text-xs text-cream/50">
-              El PIN debe tener 6 dígitos y se utilizará para iniciar sesión en la barra.
+            <p className="font-mono text-xs text-slate-400">
+              Listado de mozos y administradores con PIN registrado para emitir tickets y moderar.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void loadStaff()}
+            className="size-9 rounded-lg border border-[#232b42] text-slate-400 hover:text-white hover:bg-[#181b25] flex items-center justify-center transition-colors"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+          </button>
+        </div>
+
+        {loading && staffList.length === 0 ? (
+          <p className="text-center py-10 text-xs font-mono text-slate-500">
+            Cargando nómina de personal...
+          </p>
+        ) : staffList.length === 0 ? (
+          <div className="text-center py-10 text-slate-500 font-mono space-y-2 text-xs">
+            <span className="material-symbols-outlined text-slate-600 text-3xl">group_off</span>
+            <p>No hay personal registrado todavía.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto mt-2">
+            <table className="w-full text-left text-xs font-mono">
+              <thead>
+                <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
+                  <th className="py-2.5 px-3">Miembro</th>
+                  <th className="py-2.5 px-3">PIN</th>
+                  <th className="py-2.5 px-3">Estado</th>
+                  <th className="py-2.5 px-3">Registrado</th>
+                  <th className="py-2.5 px-3 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#1E2333]/50">
+                {staffList.map((member) => (
+                  <tr key={member.id} className="hover:bg-[#181b25]/50 transition-colors">
+                    <td className="py-3 px-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="size-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold">
+                          {member.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-bold text-white text-xs">{member.name}</p>
+                          <p className="text-[10px] text-slate-500">Mozo de barra / salón</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 text-slate-400">
+                      <span className="tracking-widest">••••</span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          member.active
+                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                            : "bg-slate-800 text-slate-500 border border-slate-700"
+                        }`}
+                      >
+                        <span
+                          className={`size-1.5 rounded-full ${
+                            member.active ? "bg-emerald-400" : "bg-slate-600"
+                          }`}
+                        />
+                        {member.active ? "Habilitado" : "Deshabilitado"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-500">
+                      {new Date(member.createdAt).toLocaleDateString("es-AR")}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setResetId(member.id)}
+                          className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-xs">key</span>
+                          <span>Reset PIN</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleToggle(member.id, member.active)}
+                          className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-colors ${
+                            member.active
+                              ? "bg-red-950/40 text-red-300 border-red-500/30 hover:bg-red-950/70"
+                              : "bg-emerald-950/40 text-emerald-300 border-emerald-500/30 hover:bg-emerald-950/70"
+                          }`}
+                        >
+                          {member.active ? "Desactivar" : "Activar"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Modal: Crear Staff */}
+      {createOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#181b25] border border-[#232b42] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-400">person_add</span>
+              Registrar Nuevo Personal
+            </h3>
+            <p className="text-xs text-slate-400">
+              Ingresá el nombre del mozo y asignale un PIN numérico de 4 dígitos.
             </p>
 
-            <form onSubmit={handleCreate} className="mt-5 space-y-4">
+            <form onSubmit={handleCreate} className="space-y-3 pt-2">
               <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
+                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
                   Nombre
                 </label>
                 <input
                   type="text"
+                  required
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="ej: Martín P."
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 text-xs text-cream placeholder:text-cream/25 focus:border-amber focus:outline-none"
-                  required
+                  placeholder="Ej: Facundo (Barra)"
+                  className="w-full h-10 px-3 rounded-lg bg-[#0a0e17] border border-[#232b42] text-white text-xs font-mono focus:outline-none focus:border-indigo-400"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  PIN numérico (6 dígitos)
+                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
+                  PIN numérico (4 dígitos)
                 </label>
                 <input
                   type="password"
-                  maxLength={6}
-                  pattern="\d{6}"
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  placeholder="••••••"
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 font-mono text-center tracking-[0.5em] text-xs text-cream placeholder:text-cream/25 focus:border-amber focus:outline-none"
                   required
+                  maxLength={4}
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••"
+                  className="w-full h-10 px-3 rounded-lg bg-[#0a0e17] border border-[#232b42] text-white text-lg font-mono tracking-widest text-center focus:outline-none focus:border-indigo-400"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-3">
                 <button
                   type="button"
                   onClick={() => setCreateOpen(false)}
-                  className="rounded-xl border border-cream/15 px-3 py-1.5 text-xs text-cream/70 hover:bg-cream/5"
+                  className="px-4 py-2 rounded-lg border border-[#232b42] text-slate-400 hover:text-white font-mono text-xs"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={creating || !newName.trim() || newPin.length !== 6}
-                  className="flex items-center gap-1.5 rounded-xl bg-amber px-4 py-1.5 text-xs font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
+                  disabled={creating || newPin.length !== 4 || !newName.trim()}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold transition-all disabled:opacity-50"
                 >
-                  {creating ? <RefreshCw className="size-3 animate-spin" /> : null}
-                  Crear mozo
+                  {creating ? "Registrando..." : "Guardar Personal"}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      ) : null}
+      )}
 
-      {/* Reset PIN Modal */}
-      {resetId ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
-            onClick={() => setResetId(null)}
-          />
-          <div className="relative w-full max-w-sm rounded-2xl border border-cream/15 bg-felt-900 p-6 shadow-2xl">
-            <h2 className="font-display text-lg font-bold text-cream flex items-center gap-2">
-              <Lock className="size-4 text-amber" />
-              Restablecer PIN
-            </h2>
-            <p className="mt-1 text-xs text-cream/50">
-              Ingresá un nuevo PIN numérico de 6 dígitos. Si el mozo estaba bloqueado, se desbloqueará de inmediato.
+      {/* Modal: Reset PIN */}
+      {resetId && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#181b25] border border-[#232b42] rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-400">key</span>
+              Resetear PIN
+            </h3>
+            <p className="text-xs text-slate-400">
+              Asigná un nuevo PIN de 4 dígitos para este miembro del personal.
             </p>
 
-            <form onSubmit={handleResetPin} className="mt-5 space-y-4">
+            <form onSubmit={handleResetPin} className="space-y-3 pt-2">
               <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Nuevo PIN (6 dígitos)
+                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
+                  Nuevo PIN (4 dígitos)
                 </label>
                 <input
                   type="password"
-                  maxLength={6}
-                  pattern="\d{6}"
-                  value={resetPinValue}
-                  onChange={(e) => setResetPinValue(e.target.value)}
-                  placeholder="••••••"
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 font-mono text-center tracking-[0.5em] text-xs text-cream placeholder:text-cream/25 focus:border-amber focus:outline-none"
                   required
+                  maxLength={4}
+                  value={resetPinValue}
+                  onChange={(e) => setResetPinValue(e.target.value.replace(/\D/g, ""))}
+                  placeholder="••••"
+                  className="w-full h-10 px-3 rounded-lg bg-[#0a0e17] border border-[#232b42] text-white text-lg font-mono tracking-widest text-center focus:outline-none focus:border-indigo-400"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex items-center justify-end gap-2 pt-3">
                 <button
                   type="button"
                   onClick={() => setResetId(null)}
-                  className="rounded-xl border border-cream/15 px-3 py-1.5 text-xs text-cream/70 hover:bg-cream/5"
+                  className="px-4 py-2 rounded-lg border border-[#232b42] text-slate-400 hover:text-white font-mono text-xs"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={resetting || resetPinValue.length !== 6}
-                  className="flex items-center gap-1.5 rounded-xl bg-amber px-4 py-1.5 text-xs font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
+                  disabled={resetting || resetPinValue.length !== 4}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold transition-all disabled:opacity-50"
                 >
-                  {resetting ? <RefreshCw className="size-3 animate-spin" /> : null}
-                  Guardar PIN
+                  {resetting ? "Guardando..." : "Actualizar PIN"}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
-

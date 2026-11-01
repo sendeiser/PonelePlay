@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Info, Music2, Plus, Search, X } from "lucide-react";
+import Image from "next/image";
+import { Music2, Search, X } from "lucide-react";
 import { demoSearchSuggestions } from "@/lib/demo-data";
 import { messageForApiError } from "@/lib/api/error-messages";
 import {
@@ -10,7 +11,6 @@ import {
   type SearchResult,
 } from "@/lib/api/proposals";
 import type { QueueItemView } from "@/lib/api/contracts";
-import { cn } from "@/lib/cn";
 
 interface ProposalSearchProps {
   queue: QueueItemView[];
@@ -19,7 +19,16 @@ interface ProposalSearchProps {
   maxProposals: number;
   onProposed: () => void;
   onNotify: (message: string, tone?: "ok" | "error" | "info") => void;
+  onVoteExisting?: (queueItemId: string) => void;
 }
+
+const filterChips = [
+  "Top Búsquedas",
+  "Rock Nacional",
+  "Cachengue",
+  "Indie / Pop",
+  "Trap / Urbano",
+];
 
 export function ProposalSearch({
   queue,
@@ -28,12 +37,14 @@ export function ProposalSearch({
   maxProposals,
   onProposed,
   onNotify,
+  onVoteExisting,
 }: ProposalSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [activeChip, setActiveChip] = useState("Top Búsquedas");
 
   // 30s Cooldown timer
   useEffect(() => {
@@ -81,10 +92,7 @@ export function ProposalSearch({
     }
 
     if (proposalsUsed >= maxProposals) {
-      onNotify(
-        messageForApiError("proposal_limit"),
-        "error",
-      );
+      onNotify(messageForApiError("proposal_limit"), "error");
       return;
     }
 
@@ -100,176 +108,297 @@ export function ProposalSearch({
 
       onNotify(`«${item.title}» entró a la cola.`, "ok");
       setCooldownSeconds(30);
-      setQuery("");
       onProposed();
     } catch (err: unknown) {
-      const code = err instanceof Error ? err.message : "unknown";
+      const code = err instanceof Error ? err.message : "internal_error";
       onNotify(messageForApiError(code), "error");
     } finally {
       setSubmittingId(null);
     }
   }
 
-  if (!proposalsEnabled) {
-    return (
-      <div className="mt-8 flex flex-col items-center rounded-3xl border border-dashed border-cream/15 px-6 py-12 text-center">
-        <Info className="size-10 text-amber/60" aria-hidden="true" />
-        <h2 className="mt-4 font-display text-lg font-bold text-cream">
-          Propuestas pausadas
-        </h2>
-        <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-cream/50">
-          El bar pausó temporalmente las propuestas de canciones. Podés seguir votando los temas de la cola.
-        </p>
-      </div>
+  function formatDuration(seconds: number | null): string {
+    if (!seconds) return "--:--";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }
+
+  // Check if a search result is already in the queue
+  function findInQueue(item: SearchResult): QueueItemView | undefined {
+    return queue.find(
+      (q) =>
+        q.title.toLowerCase() === item.title.toLowerCase() ||
+        (q.artist.toLowerCase() === item.artist.toLowerCase() &&
+          q.title.toLowerCase().includes(item.title.toLowerCase().slice(0, 10))),
     );
   }
 
   return (
-    <div>
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
-            Sumá tu tema
-          </p>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight text-cream">
-            Poné tu canción
-          </h1>
+    <div className="space-y-4 pb-6">
+      {/* Header */}
+      <div className="pt-1">
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-mono text-[11px] text-indigo-400 uppercase tracking-wider font-semibold">
+            Catálogo Conectado
+          </span>
+          <span className="font-mono text-[11px] text-slate-400">
+            Cupo: {proposalsUsed}/{maxProposals}
+          </span>
         </div>
-        <span className="rounded-full border border-mint/25 bg-mint/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-mint">
-          {maxProposals - proposalsUsed} disponibles
-        </span>
+        <h1 className="text-xl font-bold text-white tracking-tight">Buscar y Proponer</h1>
+        <p className="text-xs text-slate-400 mt-1">
+          Buscá canciones en YouTube para sumar a la lista y votarla en el salón.
+        </p>
       </div>
 
-      {cooldownSeconds > 0 ? (
-        <div
-          role="status"
-          className="mt-4 rounded-xl border border-amber/30 bg-amber/10 px-3.5 py-2 font-mono text-xs text-amber"
-        >
-          Próxima propuesta en {cooldownSeconds}s
+      {!proposalsEnabled && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 space-y-1">
+          <p className="font-bold">Propuestas pausadas</p>
+          <p className="text-amber-200/80">La administración del bar pausó temporalmente los nuevos pedidos.</p>
         </div>
-      ) : null}
+      )}
 
-      {/* Search Bar */}
-      <label className="mt-5 flex items-center gap-2 rounded-2xl border border-cream/10 bg-white/[0.03] px-4 py-3 focus-within:border-amber/50">
-        <Search className="size-4 shrink-0 text-cream/35" aria-hidden="true" />
-        <span className="sr-only">Buscar canción o pegar link</span>
+      {cooldownSeconds > 0 && (
+        <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-200 flex items-center justify-between font-mono">
+          <span>Tiempo de espera entre propuestas:</span>
+          <span className="font-bold text-cyan-400">{cooldownSeconds}s</span>
+        </div>
+      )}
+
+      {/* Search Input Box */}
+      <div className="relative">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+          <Search className="size-4" />
+        </span>
         <input
+          type="text"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Artista, canción o link de YouTube..."
-          className="w-full bg-transparent text-sm text-cream outline-none placeholder:text-cream/30"
-          autoComplete="off"
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar por artista, canción o link de YouTube..."
+          className="w-full h-12 pl-10 pr-10 rounded-xl bg-[#181b25] border border-[#232b42] text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all shadow-inner"
         />
-        {query ? (
+        {query && (
           <button
             type="button"
             onClick={() => setQuery("")}
-            className="grid size-6 place-items-center rounded-full bg-cream/10 text-cream/50 hover:text-cream"
-            aria-label="Borrar búsqueda"
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
           >
-            <X className="size-3.5" aria-hidden="true" />
+            <X className="size-4" />
           </button>
-        ) : null}
-      </label>
+        )}
+      </div>
 
-      {/* Search Suggestions */}
-      {!query ? (
-        <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {demoSearchSuggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              type="button"
-              onClick={() => setQuery(suggestion)}
-              className="shrink-0 rounded-full border border-cream/10 bg-cream/5 px-3 py-1.5 text-[11px] text-cream/60 transition-colors hover:border-amber/40 hover:text-cream"
-            >
-              {suggestion}
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {/* Filter / Genre Pills */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {filterChips.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => {
+              setActiveChip(chip);
+              if (chip !== "Top Búsquedas") {
+                setQuery(chip);
+              }
+            }}
+            className={`whitespace-nowrap px-3 py-1.5 rounded-full font-mono text-[11px] font-medium transition-all ${
+              activeChip === chip
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-400/40"
+                : "bg-[#181b25] text-slate-400 border border-[#232b42] hover:text-white hover:border-slate-600"
+            }`}
+          >
+            {chip}
+          </button>
+        ))}
+      </div>
 
-      {/* Results Header */}
-      {query ? (
-        <div className="mt-6 flex items-center justify-between">
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream/40">
-            {searching ? "Buscando..." : `Resultados (${results.length})`}
-          </p>
+      {/* Searching spinner */}
+      {searching && (
+        <div className="flex items-center justify-center py-8 text-xs text-slate-400 font-mono gap-2">
+          <span className="inline-block size-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+          <span>Buscando temas en YouTube...</span>
         </div>
-      ) : null}
+      )}
 
       {/* Results List */}
-      {results.length > 0 ? (
-        <ul className="mt-3 space-y-2">
+      {!searching && query.trim() && results.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1 font-mono text-[11px] text-slate-400">
+            <span>RESULTADOS ({results.length})</span>
+            <span className="flex items-center gap-1 text-cyan-400">
+              <span className="material-symbols-outlined text-xs">sync</span>
+              Sincronizado
+            </span>
+          </div>
+
           {results.map((item) => {
-            const alreadyInQueue = queue.some(
-              (qi) =>
-                qi.title.toLowerCase() === item.title.toLowerCase() ||
-                (qi.trackId && item.videoId.includes(qi.trackId)),
-            );
-            const isSubmitting = submittingId === item.videoId;
+            const existingQueueItem = findInQueue(item);
+
+            if (existingQueueItem) {
+              return (
+                <article
+                  key={item.videoId}
+                  className="bg-[#181b25] rounded-xl p-3.5 border border-cyan-500/40 flex flex-col gap-3 shadow-md"
+                >
+                  <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-2.5 flex items-start gap-2">
+                    <span className="material-symbols-outlined text-cyan-400 text-base mt-0.5">
+                      notification_important
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-cyan-300">
+                        ¡Ya está en la cola activa!
+                      </p>
+                      <p className="text-[11px] text-slate-400 leading-snug">
+                        Esta canción ya fue propuesta. Sumale tu voto en lugar de duplicarla.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-900 border border-[#232b42]">
+                      {item.thumbnailUrl ? (
+                        <Image
+                          src={item.thumbnailUrl}
+                          alt={item.title}
+                          width={56}
+                          height={56}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-600">
+                          <Music2 className="size-5" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold text-white truncate">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {item.artist} · {formatDuration(item.durationSeconds)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {onVoteExisting ? (
+                    <button
+                      type="button"
+                      onClick={() => onVoteExisting(existingQueueItem.id)}
+                      className="w-full py-2.5 px-3 rounded-lg bg-[#232b42] hover:bg-[#2e3957] text-cyan-300 border border-cyan-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                    >
+                      <span className="material-symbols-outlined text-sm">thumb_up</span>
+                      <span>En la cola · Sumar voto ({existingQueueItem.voteCount})</span>
+                    </button>
+                  ) : (
+                    <div className="text-center py-2 px-3 rounded-lg bg-[#232b42]/60 text-cyan-300 font-mono text-xs font-bold">
+                      En la cola
+                    </div>
+                  )}
+                </article>
+              );
+            }
 
             return (
-              <li
+              <article
                 key={item.videoId}
-                className="flex items-center gap-3 rounded-2xl border border-cream/10 bg-white/[0.025] p-2.5"
+                className="bg-[#181b25] rounded-xl p-3.5 border border-[#232b42] hover:border-indigo-500/40 flex flex-col gap-3 shadow-md transition-all"
               >
-                <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-felt-700 to-felt-900 text-cream/40">
-                  <Music2 className="size-5" aria-hidden="true" />
-                </div>
+                <div className="flex items-start gap-3">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-slate-900 border border-[#232b42]">
+                    {item.thumbnailUrl ? (
+                      <Image
+                        src={item.thumbnailUrl}
+                        alt={item.title}
+                        width={64}
+                        height={64}
+                        className="w-full h-full object-cover"
+                        unoptimized
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-600">
+                        <Music2 className="size-6" />
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono font-bold text-white px-1 rounded">
+                      {formatDuration(item.durationSeconds)}
+                    </span>
+                  </div>
 
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-cream">
-                    {item.title}
-                  </p>
-                  <p className="truncate text-[11px] text-cream/45">
-                    {item.artist} · {item.duration}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-bold text-white truncate">
+                      {item.title}
+                    </h3>
+                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                      {item.artist}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 font-mono text-[10px] text-slate-400">
+                      <span className="px-1.5 py-0.5 rounded bg-[#232b42] text-cyan-300">
+                        HD 1080p
+                      </span>
+                      <span>YouTube Music</span>
+                    </div>
+                  </div>
                 </div>
 
                 <button
                   type="button"
-                  disabled={alreadyInQueue || isSubmitting || cooldownSeconds > 0}
-                  onClick={() => void handlePropose(item)}
-                  className={cn(
-                    "flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-[11px] font-bold transition-all",
-                    alreadyInQueue
-                      ? "cursor-default bg-cream/5 text-cream/35 border border-cream/10"
-                      : "bg-amber text-[#041611] hover:bg-amber/90 active:scale-95 disabled:opacity-50",
-                  )}
+                  disabled={submittingId === item.videoId || !proposalsEnabled || cooldownSeconds > 0}
+                  onClick={() => handlePropose(item)}
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(99,102,241,0.35)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {alreadyInQueue ? (
-                    <>
-                      <Check className="size-3.5 text-mint" aria-hidden="true" />
-                      En la cola
-                    </>
+                  {submittingId === item.videoId ? (
+                    <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <>
-                      <Plus className="size-3.5" aria-hidden="true" />
-                      {isSubmitting ? "Sumando..." : "Proponer"}
-                    </>
+                    <span className="material-symbols-outlined text-sm">add_to_queue</span>
                   )}
+                  <span>
+                    {submittingId === item.videoId
+                      ? "Proponiendo..."
+                      : "Proponer"}
+                  </span>
                 </button>
-              </li>
+              </article>
             );
           })}
-        </ul>
-      ) : query && !searching ? (
-        <div className="mt-10 flex flex-col items-center text-center">
-          <Music2 className="size-8 text-cream/25" aria-hidden="true" />
-          <p className="mt-3 font-display text-lg font-bold text-cream">
-            No encontramos ese tema
-          </p>
-          <p className="mt-1 max-w-xs text-xs text-cream/40">
-            Probá con el nombre del artista o pegá el link directo del video.
-          </p>
         </div>
-      ) : null}
+      )}
 
-      <p className="mt-6 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-cream/35">
-        <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-        Las propuestas son gratuitas y entran directo a la cola. Máximo {maxProposals} por noche y 1 cada 30 segundos.
-      </p>
+      {/* Default suggestions if no query */}
+      {!searching && !query.trim() && (
+        <div className="space-y-3 pt-2">
+          <p className="font-mono text-[11px] text-slate-400 uppercase tracking-wider">
+            Sugerencias populares en este bar
+          </p>
+          <div className="space-y-2">
+            {demoSearchSuggestions.slice(0, 5).map((term) => (
+              <div
+                key={term}
+                className="flex items-center justify-between p-3 rounded-xl bg-[#181b25] border border-[#232b42] hover:border-slate-600 transition-colors cursor-pointer"
+                onClick={() => setQuery(term)}
+              >
+                <div className="flex items-center gap-3 min-w-0 pr-2">
+                  <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-slate-800 text-indigo-400">
+                    <Music2 className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">
+                      {term}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      Artista / Banda recomendada
+                    </p>
+                  </div>
+                </div>
+                <span className="font-mono text-[11px] text-indigo-300 shrink-0 flex items-center gap-1">
+                  Buscar
+                  <Search className="size-3" />
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

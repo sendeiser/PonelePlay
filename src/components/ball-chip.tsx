@@ -1,49 +1,40 @@
 import { cn } from "@/lib/cn";
 
-const palette = ["#FFB703", "#FF5D5D", "#78E0B4", "#7DD3FC", "#F5E9D6"];
-const sizes = {
-  sm: {
-    outer: "size-8",
-    inner: "size-5",
-    text: "text-[10px]",
-  },
-  md: {
-    outer: "size-10",
-    inner: "size-6",
-    text: "text-xs",
-  },
-};
-
 export function BallChip({
   n,
   size = "md",
   className,
 }: {
   n: number;
-  size?: keyof typeof sizes;
+  size?: "sm" | "md" | "lg";
   className?: string;
 }) {
-  const color = palette[(n - 1) % palette.length];
-  const s = sizes[size];
+  const isFirst = n === 1;
+  const isSecond = n === 2;
+  const isThird = n === 3;
+
+  const sizeClasses = {
+    sm: "size-7 text-[11px] rounded-lg",
+    md: "size-9 text-xs rounded-xl",
+    lg: "size-11 text-sm rounded-xl font-bold",
+  }[size];
 
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center rounded-full shadow-[inset_0_-3px_0_rgba(0,0,0,0.18)]",
-        s.outer,
+        "relative inline-flex shrink-0 items-center justify-center font-mono font-bold select-none",
+        sizeClasses,
+        isFirst
+          ? "bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 text-white shadow-md shadow-indigo-600/35 border border-indigo-400/40"
+          : isSecond
+            ? "bg-[#1e2438] border border-[#3b476b] text-[#4cd7f6] shadow-sm"
+            : isThird
+              ? "bg-[#181f33] border border-[#2c3755] text-[#c0c1ff]"
+              : "bg-[#131722] border border-[#1e2333] text-slate-400",
         className,
       )}
-      style={{ backgroundColor: color }}
     >
-      <span
-        className={cn(
-          "flex items-center justify-center rounded-full bg-cream font-display font-black leading-none text-ink",
-          s.inner,
-          s.text,
-        )}
-      >
-        {n > 99 ? "99" : n}
-      </span>
+      #{n > 99 ? "99" : n}
     </span>
   );
 }

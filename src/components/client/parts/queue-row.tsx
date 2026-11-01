@@ -1,3 +1,5 @@
+"use client";
+
 import { Check, Plus } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { cn } from "@/lib/cn";
@@ -23,31 +25,43 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-2xl border p-3 transition-colors",
+        "relative rounded-xl p-3 border shadow-sm flex items-center justify-between gap-2.5 transition-all",
         isNext
-          ? "border-amber/35 bg-amber/[0.07]"
-          : "border-cream/10 bg-white/[0.02]",
+          ? "bg-[#161c2e] border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.15)]"
+          : "bg-[#131826] border-[#1E2538] hover:border-[#2a344e]",
       )}
     >
-      <BallChip n={rank} />
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <p className="truncate text-sm font-semibold text-cream">{item.title}</p>
-          {isNext ? (
-            <span className="shrink-0 rounded-full bg-amber px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-ink">
-              próxima
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        {/* Rank Badge */}
+        <BallChip n={rank} size="md" />
+
+        {/* Song Details */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <h4 className="text-sm text-white font-bold truncate">
+              {item.title}
+            </h4>
+            {isNext && (
+              <span className="shrink-0 px-1.5 py-0.5 rounded bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
+                Próxima
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-400 truncate mt-0.5">
+            {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
+          </p>
+          <div className="flex items-center gap-2 mt-1 font-mono text-[11px] text-slate-400">
+            <span className="text-indigo-400 font-semibold">
+              {item.voteCount} {item.voteCount === 1 ? "voto" : "votos"}
             </span>
-          ) : null}
+            <span className="text-slate-600">•</span>
+            <span>Mesa en vivo</span>
+          </div>
         </div>
-        <p className="truncate text-[11px] text-cream/45">
-          {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
-        </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2.5">
-        <span className="font-mono text-[11px] text-cream/50" aria-label={`${item.voteCount} votos`}>
-          {item.voteCount}
-        </span>
+      {/* Vote Button */}
+      <div className="flex shrink-0 items-center">
         <button
           type="button"
           onClick={onVote}
@@ -58,22 +72,27 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
               : `Votar por ${item.title}`
           }
           className={cn(
-            "grid size-10 place-items-center rounded-full border transition-all active:scale-90",
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all active:scale-95",
             item.myVote
-              ? "border-mint/30 bg-mint/10 text-mint cursor-default"
+              ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 cursor-default"
               : disabled
-                ? "border-cream/10 bg-cream/5 text-cream/30 cursor-not-allowed"
-                : "border-amber/20 bg-amber text-ink hover:bg-amber/90",
+                ? "bg-[#181b25] border border-[#232b42] text-slate-500 cursor-not-allowed"
+                : "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/30",
           )}
         >
           {item.myVote ? (
-            <Check className="size-4" aria-hidden="true" />
+            <>
+              <Check className="size-3.5" aria-hidden="true" />
+              <span>Votado</span>
+            </>
           ) : (
-            <Plus className="size-5" aria-hidden="true" />
+            <>
+              <Plus className="size-3.5" aria-hidden="true" />
+              <span>+1 Voto</span>
+            </>
           )}
         </button>
       </div>
     </div>
   );
 }
-

@@ -60,27 +60,34 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#041611] px-4 py-12">
-      <div className="bg-[#07211b] border border-amber/20 rounded-2xl p-8 max-w-md w-full shadow-2xl">
-        <div className="mb-6">
-          <Link href="/" className="inline-block text-xs font-mono tracking-widest text-amber/80 hover:text-amber mb-2 uppercase">
-            ← Volver a PonelePlay
+    <main className="min-h-screen flex items-center justify-center bg-[#090D16] p-4 sm:p-8">
+      <div className="bg-[#181b25] border border-[#232b42] rounded-2xl p-8 max-w-md w-full shadow-2xl relative overflow-hidden">
+        <div className="absolute -top-16 -right-16 size-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="mb-6 relative z-10">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white uppercase mb-4 transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
+            <span>Volver a PonelePlay</span>
           </Link>
-          <h1 className="text-3xl font-display text-cream">Crear cuenta</h1>
-          <p className="text-sm text-cream/60 mt-1">
-            Registrá tu bar o local y empezá la rockola colaborativa.
+          <h1 className="text-2xl font-bold text-white tracking-tight">Registrá tu Bar</h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Creá tu local y habilitá la rockola colaborativa con pantalla y QR.
           </p>
         </div>
 
         {error && (
-          <div className="mb-5 rounded-lg bg-red-950/50 border border-red-500/40 p-3 text-sm text-red-200">
-            {error}
+          <div className="mb-5 rounded-xl bg-red-950/60 border border-red-500/40 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
+            <span className="material-symbols-outlined text-base text-red-400">error</span>
+            <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-cream/80 mb-1.5">
+            <label htmlFor="email" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase">
               Email
             </label>
             <input
@@ -89,7 +96,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
-              className="w-full rounded-lg bg-[#041611] border border-amber/20 px-4 py-3 text-cream placeholder-cream/30 focus:outline-none focus:border-amber transition-colors disabled:opacity-50"
+              className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
               placeholder="dueño@tubar.com"
               autoComplete="email"
               required
@@ -97,8 +104,8 @@ export default function SignupPage() {
           </div>
 
           <div>
-            <label htmlFor="venue" className="block text-sm font-medium text-cream/80 mb-1.5">
-              Nombre del bar / local
+            <label htmlFor="venue" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase">
+              Nombre del Bar o Local
             </label>
             <input
               id="venue"
@@ -106,14 +113,14 @@ export default function SignupPage() {
               value={venueName}
               onChange={(e) => setVenueName(e.target.value)}
               disabled={loading}
-              className="w-full rounded-lg bg-[#041611] border border-amber/20 px-4 py-3 text-cream placeholder-cream/30 focus:outline-none focus:border-amber transition-colors disabled:opacity-50"
-              placeholder="Ej: Cervecería Palermo"
+              className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+              placeholder="Ej: El Taco Dorado"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-cream/80 mb-1.5">
+            <label htmlFor="password" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase">
               Contraseña
             </label>
             <input
@@ -122,8 +129,8 @@ export default function SignupPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
-              className="w-full rounded-lg bg-[#041611] border border-amber/20 px-4 py-3 text-cream placeholder-cream/30 focus:outline-none focus:border-amber transition-colors disabled:opacity-50"
-              placeholder="Al menos 6 caracteres"
+              className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+              placeholder="••••••••••••"
               autoComplete="new-password"
               required
             />
@@ -132,26 +139,24 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 bg-amber text-[#041611] font-semibold rounded-lg py-3 hover:bg-amber/90 active:scale-[0.99] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
+            className="w-full mt-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono font-bold text-xs rounded-xl py-3.5 shadow-lg shadow-indigo-600/30 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
-                <span className="inline-block h-4 w-4 border-2 border-[#041611] border-t-transparent rounded-full animate-spin" />
-                Registrando...
+                <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Registrando bar...</span>
               </>
             ) : (
-              "Crear cuenta y empezar"
+              <span>Crear Bar y Abrir Panel</span>
             )}
           </button>
         </form>
 
-        <div className="mt-6 pt-5 border-t border-amber/10 text-center">
-          <p className="text-xs text-cream/50">
-            ¿Ya tenés cuenta?{" "}
-            <Link href="/login" className="text-amber hover:underline font-medium">
-              Iniciá sesión acá
-            </Link>
-          </p>
+        <div className="mt-6 pt-5 border-t border-[#232b42] text-center text-xs text-slate-500 font-mono relative z-10">
+          ¿Ya tenés cuenta?{" "}
+          <Link href="/login" className="text-indigo-400 hover:underline font-semibold">
+            Iniciar sesión
+          </Link>
         </div>
       </div>
     </main>

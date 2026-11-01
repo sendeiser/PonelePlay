@@ -6,9 +6,6 @@ import {
   BadgeCheck,
   Disc3,
   Info,
-  ListMusic,
-  Search,
-  Ticket,
 } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/brand";
 import { ensureAnonymousParticipant } from "@/lib/api/anon";
@@ -19,26 +16,26 @@ import { useNightState } from "@/hooks/use-night-state";
 import { OfflineBanner } from "./parts/offline-banner";
 import { ClosedState } from "./parts/closed-state";
 import { NowPlayingCard } from "./parts/now-playing-card";
-import { BalanceCard } from "./parts/balance-card";
 import { QueueRow } from "./parts/queue-row";
-import { RedeemSheet } from "./parts/redeem-sheet";
 import { ProposalSearch } from "./parts/proposal-search";
+import { RedeemTab } from "./parts/redeem-tab";
+import { ActivityTab } from "./parts/activity-tab";
 import { cn } from "@/lib/cn";
 
-type TabId = "cola" | "buscar" | "votos";
+type TabId = "vivo" | "proponer" | "canjear" | "actividad";
 
-const tabs = [
-  { id: "cola" as const, label: "La cola", icon: ListMusic },
-  { id: "buscar" as const, label: "Proponer", icon: Search },
-  { id: "votos" as const, label: "Mis votos", icon: Ticket },
+const navigationTabs = [
+  { id: "vivo" as const, label: "En Vivo", icon: "graphic_eq" },
+  { id: "proponer" as const, label: "Proponer", icon: "queue_music" },
+  { id: "canjear" as const, label: "Canjear", icon: "confirmation_number" },
+  { id: "actividad" as const, label: "Mi Mesa", icon: "person" },
 ];
 
 export function ClientNight({ slug }: { slug: string }) {
   const source = useMemo(() => createNightStateSource(slug), [slug]);
   const { state, loading, offline, refresh } = useNightState(source);
 
-  const [tab, setTab] = useState<TabId>("cola");
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [tab, setTab] = useState<TabId>("vivo");
   const [pendingVotes, setPendingVotes] = useState<Set<string>>(() => new Set());
   const [toast, setToast] = useState<{
     message: string;
@@ -53,7 +50,7 @@ export function ClientNight({ slug }: { slug: string }) {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3200);
+    const timer = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(timer);
   }, [toast]);
 
@@ -66,8 +63,8 @@ export function ClientNight({ slug }: { slug: string }) {
 
   async function handleVote(queueItemId: string) {
     if (credits <= 0) {
-      notify("Te quedaste sin votos. Canjeá un código.", "error");
-      setSheetOpen(true);
+      notify("Te quedaste sin créditos. Canjeá un código para sumar votos.", "error");
+      setTab("canjear");
       return;
     }
 
@@ -75,16 +72,16 @@ export function ClientNight({ slug }: { slug: string }) {
     try {
       const res = await castVote(queueItemId);
       if (res.ok) {
-        notify("¡Voto computado! La cola se actualizó.", "ok");
+        notify("¡Voto computado con éxito! La cola se actualizó.", "ok");
         await refresh();
       } else {
         notify(voteErrorMessage(res.error), "error");
         if (res.error === "no_credits") {
-          setSheetOpen(true);
+          setTab("canjear");
         }
       }
     } catch {
-      notify("Error de red al votar. Reintentá en unos segundos.", "error");
+      notify("Error de conexión al votar. Reintentá en unos segundos.", "error");
     } finally {
       setPendingVotes((prev) => {
         const next = new Set(prev);
@@ -96,9 +93,9 @@ export function ClientNight({ slug }: { slug: string }) {
 
   if (loading && !state) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center bg-felt-950 px-4 text-cream">
-        <BrandMark className="size-12 animate-pulse text-amber" />
-        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-cream/40">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-[#090D16] px-4 text-[#dfe2ef]">
+        <BrandMark className="size-12 animate-pulse" />
+        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-slate-400">
           Cargando PonelePlay...
         </p>
       </div>
@@ -109,7 +106,7 @@ export function ClientNight({ slug }: { slug: string }) {
 
   if (!state || phase === "closed") {
     return (
-      <div className="relative min-h-dvh bg-felt-950 px-4 text-cream">
+      <div className="relative min-h-dvh bg-[#090D16] px-4 text-[#dfe2ef]">
         {offline ? <OfflineBanner /> : null}
         <ClosedState
           venueName={state?.venue.name ?? slug}
@@ -120,276 +117,273 @@ export function ClientNight({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="relative min-h-dvh overflow-x-hidden bg-felt-950 text-cream">
+    <div className="min-h-screen bg-[#090D16] relative flex flex-col shadow-2xl text-[#dfe2ef]">
       {offline ? <OfflineBanner /> : null}
 
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-y-0 left-0 z-0 hidden w-[calc((100vw-32rem)/2)] items-center justify-center xl:flex"
-      >
-        <span className="rotate-180 font-mono text-[10px] uppercase tracking-[0.5em] text-cream/15 [writing-mode:vertical-rl]">
-          La música la pone la gente
-        </span>
-      </div>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-y-0 right-0 z-0 hidden w-[calc((100vw-32rem)/2)] items-center justify-center xl:flex"
-      >
-        <span className="font-mono text-[10px] uppercase tracking-[0.5em] text-cream/15 [writing-mode:vertical-rl]">
-          PonelePlay · {state.venue.slug}
-        </span>
-      </div>
-
-      <div className="relative z-10 mx-auto min-h-dvh w-full max-w-lg px-4 pb-28 pt-4">
-        {/* Sticky Header */}
-        <header className="sticky top-0 z-30 -mx-4 mb-5 border-b border-cream/10 bg-felt-950/85 px-4 py-3 backdrop-blur-xl">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <BrandMark className="size-9" />
-              <div className="min-w-0">
-                <Wordmark className="text-lg" />
-                <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-cream/40">
+      {/* Container Mobile Shell Frame */}
+      <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-[#1E2538]/50 relative pb-28">
+        {/* TOP APP BAR (Stitch Shared Component) */}
+        <header className="bg-[#0D1220]/90 backdrop-blur-xl border-b border-[#1E2538] sticky top-0 z-40">
+          <div className="flex justify-between items-center w-full px-4 py-2.5 max-w-md mx-auto">
+            {/* Brand & Venue Identity */}
+            <div className="flex items-center gap-2">
+              <BrandMark className="size-8" />
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <Wordmark className="text-base" />
+                  <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/15 text-[#c0c1ff] border border-indigo-500/25">
+                    Live
+                  </span>
+                </div>
+                <p className="truncate font-mono text-[10px] text-slate-400">
                   {state.venue.name}
                 </p>
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="hidden items-center gap-1.5 rounded-full border border-mint/25 bg-mint/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-mint sm:flex">
-                <span className="size-1.5 animate-pulse rounded-full bg-mint" />
-                Noche abierta
-              </span>
+            {/* Live Badges: Sala Activa & Credits Balance */}
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1 bg-[#181b25] px-2 py-0.5 rounded-full border border-[#232b42]">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="font-mono text-[10px] text-cyan-300">Sala Activa</span>
+              </div>
+
+              {/* Credits counter pill (navigates to Canjear) */}
               <button
                 type="button"
-                onClick={() => setSheetOpen(true)}
-                className="flex items-center gap-1.5 rounded-full bg-amber px-3 py-2 font-mono text-[11px] font-bold text-ink transition-transform active:scale-95"
-                aria-label={`Tus votos: ${credits}. Canjear código`}
+                onClick={() => setTab("canjear")}
+                className="flex items-center gap-1.5 bg-[#181F33] hover:bg-[#202944] text-[#c0c1ff] px-3 py-1.5 rounded-full border border-indigo-500/30 shadow-sm active:scale-95 transition-all"
+                title="Canjear o cargar créditos"
               >
-                <Ticket className="size-3.5" aria-hidden="true" />
-                {credits}
+                <span className="material-symbols-outlined text-[16px] text-amber-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  confirmation_number
+                </span>
+                <span className="font-mono text-xs font-bold text-white">
+                  {credits}
+                </span>
+                <span className="font-mono text-[10px] text-slate-400 uppercase hidden xs:inline">
+                  {credits === 1 ? "voto" : "votos"}
+                </span>
               </button>
             </div>
           </div>
         </header>
 
-        {/* Tab 1: La cola */}
-        {tab === "cola" ? (
-          <motion.div
-            key="cola"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-          >
-            <NowPlayingCard item={state.nowPlaying} />
+        {/* MAIN SCROLLABLE CONTENT CANVAS */}
+        <main className="flex-1 px-4 pt-3 space-y-4">
+          {/* TAB 1: EN VIVO */}
+          {tab === "vivo" && (
+            <motion.div
+              key="vivo"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              {/* NOW PLAYING HERO CARD */}
+              <NowPlayingCard item={state.nowPlaying} />
 
-            <div className="mt-4">
-              <BalanceCard
-                credits={credits}
-                onOpenRedeem={() => setSheetOpen(true)}
-              />
-            </div>
-
-            <div className="mt-7 flex items-end justify-between gap-3">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
-                  La cola
-                </p>
-                <h2 className="font-display text-2xl font-bold tracking-tight">
-                  Votá la próxima
-                </h2>
-              </div>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-cream/35">
-                {queue.length} {queue.length === 1 ? "tema" : "temas"}
-              </span>
-            </div>
-
-            {queue.length === 0 ? (
-              <div className="mt-6 flex flex-col items-center rounded-3xl border border-dashed border-cream/15 px-6 py-10 text-center">
-                <Disc3 className="size-10 text-cream/25" aria-hidden="true" />
-                <p className="mt-3 font-display text-xl font-bold">
-                  La cola está vacía
-                </p>
-                <p className="mt-1 max-w-xs text-xs leading-relaxed text-cream/40">
-                  Sé el primero en proponer una canción para que empiece a sonar.
-                </p>
+              {/* PROPOSE SONG CTA BANNER */}
+              <section className="relative bg-[#131826] rounded-xl p-1.5 border border-[#1E2538] shadow-md hover:border-indigo-500/40 transition-colors">
                 <button
                   type="button"
-                  onClick={() => setTab("buscar")}
-                  className="mt-4 rounded-full bg-amber px-4 py-2 font-display text-xs font-bold text-ink"
+                  onClick={() => setTab("proponer")}
+                  className="w-full flex items-center justify-between gap-3 bg-[#181F33] hover:bg-[#1C253D] px-4 py-3 rounded-lg border border-[#232B42] active:scale-[0.98] transition-all text-left"
                 >
-                  Proponer canción
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-600/30 shrink-0">
+                      <span className="material-symbols-outlined text-[20px]">queue_music</span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-white font-bold leading-tight">
+                        ¿Querés poner tu tema?
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Buscá en YouTube y sumalo con 1 crédito
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center size-7 rounded-full bg-[#131826] text-indigo-400 border border-[#232B42] shrink-0">
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </div>
                 </button>
-              </div>
-            ) : (
-              <motion.ol layout className="mt-3 space-y-2">
-                <AnimatePresence initial={false}>
-                  {queue.map((item, index) => (
-                    <motion.li
-                      layout
-                      key={item.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: -24 }}
-                      transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              </section>
+
+              {/* UPCOMING QUEUE SECTION */}
+              <section className="space-y-2.5">
+                <div className="flex items-center justify-between px-0.5">
+                  <div>
+                    <h3 className="text-sm text-white font-bold tracking-tight">
+                      A continuación en la cola
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Ordenado por votos y antigüedad
+                    </p>
+                  </div>
+                  <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-indigo-300 border border-[#1E2538] flex items-center gap-1.5">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
+                    {queue.length} {queue.length === 1 ? "en espera" : "en espera"}
+                  </span>
+                </div>
+
+                {queue.length === 0 ? (
+                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-10 text-center bg-[#131826]/40">
+                    <Disc3 className="size-10 text-slate-600 animate-spin-vinyl" aria-hidden="true" />
+                    <p className="mt-3 text-base font-bold text-white">
+                      La cola está vacía
+                    </p>
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
+                      Sé el primero en proponer una canción desde la mesa.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setTab("proponer")}
+                      className="mt-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 font-mono text-xs font-bold text-white shadow-md shadow-indigo-600/30"
                     >
+                      Proponer canción
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {queue.map((item, index) => (
                       <QueueRow
+                        key={item.id}
                         item={item}
                         rank={index + 1}
                         disabled={pendingVotes.has(item.id)}
                         onVote={() => void handleVote(item.id)}
                       />
-                    </motion.li>
-                  ))}
-                </AnimatePresence>
-              </motion.ol>
-            )}
+                    ))}
+                  </div>
+                )}
+              </section>
+            </motion.div>
+          )}
 
-            <p className="mt-5 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-cream/35">
-              <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-              La cola se ordena por votos. Si hay empate, pasa primero la propuesta más antigua.
-            </p>
-          </motion.div>
-        ) : null}
+          {/* TAB 2: PROPONER */}
+          {tab === "proponer" && (
+            <motion.div
+              key="proponer"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ProposalSearch
+                queue={queue}
+                proposalsEnabled={state.settings.proposalsEnabled}
+                proposalsUsed={state.me?.proposalsUsed ?? 0}
+                maxProposals={state.settings.maxProposalsPerParticipant}
+                onProposed={async () => {
+                  await refresh();
+                  setTab("vivo");
+                }}
+                onNotify={notify}
+                onVoteExisting={(queueItemId) => void handleVote(queueItemId)}
+              />
+            </motion.div>
+          )}
 
-        {/* Tab 2: Proponer */}
-        {tab === "buscar" ? (
-          <motion.div
-            key="buscar"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-          >
-            <ProposalSearch
-              queue={queue}
-              proposalsEnabled={state.settings.proposalsEnabled}
-              proposalsUsed={state.me?.proposalsUsed ?? 0}
-              maxProposals={state.settings.maxProposalsPerParticipant}
-              onProposed={async () => {
-                await refresh();
-                setTab("cola");
-              }}
-              onNotify={notify}
-            />
-          </motion.div>
-        ) : null}
+          {/* TAB 3: CANJEAR */}
+          {tab === "canjear" && (
+            <motion.div
+              key="canjear"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <RedeemTab
+                venueName={state.venue.name}
+                credits={credits}
+                onSuccess={async () => {
+                  await refresh();
+                }}
+                onNotify={notify}
+              />
+            </motion.div>
+          )}
 
-        {/* Tab 3: Mis votos */}
-        {tab === "votos" ? (
-          <motion.div
-            key="votos"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-          >
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
-                  Tu noche
-                </p>
-                <h1 className="font-display text-3xl font-extrabold tracking-tight">
-                  Mis votos
-                </h1>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSheetOpen(true)}
-                className="flex items-center gap-1.5 rounded-full bg-amber px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-ink"
-              >
-                <Ticket className="size-3.5" aria-hidden="true" />
-                Canjear
-              </button>
-            </div>
+          {/* TAB 4: MI MESA / ACTIVIDAD */}
+          {tab === "actividad" && (
+            <motion.div
+              key="actividad"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <ActivityTab
+                venueName={state.venue.name}
+                credits={credits}
+                proposalsUsed={state.me?.proposalsUsed ?? 0}
+                maxProposals={state.settings.maxProposalsPerParticipant}
+                queue={queue}
+                nowPlaying={state.nowPlaying}
+                onGoToRedeem={() => setTab("canjear")}
+                onGoToPropose={() => setTab("proponer")}
+              />
+            </motion.div>
+          )}
+        </main>
 
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-cream/10 bg-white/[0.025] p-4">
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cream/40">
-                  Votos disponibles
-                </p>
-                <p className="mt-2 font-display text-4xl font-extrabold text-amber">
-                  {credits}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-cream/10 bg-white/[0.025] p-4">
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cream/40">
-                  Propuestas usadas
-                </p>
-                <p className="mt-2 font-display text-4xl font-extrabold">
-                  {state.me?.proposalsUsed ?? 0}
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-6 text-center text-xs text-cream/40">
-              Cada voto suma 1 crédito para ordenar las canciones de la noche.
-            </p>
-          </motion.div>
-        ) : null}
-
-        {/* Bottom Navigation */}
-        <nav className="fixed inset-x-0 bottom-0 z-40">
-          <div className="mx-auto w-full max-w-lg border-t border-cream/10 bg-felt-950/90 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
-            <div className="grid grid-cols-3 gap-1">
-              {tabs.map(({ id, label, icon: Icon }) => (
+        {/* BOTTOM NAVIGATION BAR (Glassmorphism Dock) */}
+        <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220]/95 backdrop-blur-xl border-t border-[#1E2538]">
+          <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1.5">
+            {navigationTabs.map(({ id, label, icon }) => {
+              const active = tab === id;
+              return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => setTab(id)}
-                  aria-current={tab === id ? "page" : undefined}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex flex-col items-center gap-1 rounded-xl py-2 font-mono text-[9px] uppercase tracking-wider transition-colors",
-                    tab === id
-                      ? "bg-amber text-ink"
-                      : "text-cream/45 hover:text-cream/80",
+                    "flex flex-col items-center justify-center py-1.5 transition-all duration-150 active:scale-95",
+                    active
+                      ? "text-[#c0c1ff] font-semibold"
+                      : "text-slate-400 hover:text-white",
                   )}
                 >
-                  <Icon className="size-4" aria-hidden="true" />
-                  {label}
+                  <span
+                    className="material-symbols-outlined text-[22px]"
+                    style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                  >
+                    {icon}
+                  </span>
+                  <span className="font-mono text-[10px] uppercase tracking-tight mt-0.5">
+                    {label}
+                  </span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </nav>
       </div>
 
-      {/* Redeem Bottom Sheet */}
-      <AnimatePresence>
-        {sheetOpen ? (
-          <RedeemSheet
-            venueName={state.venue.name}
-            onClose={() => setSheetOpen(false)}
-            onSuccess={async () => {
-              await refresh();
-            }}
-          />
-        ) : null}
-      </AnimatePresence>
-
-      {/* Toast Feedback */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[60] flex justify-center px-4">
+      {/* Toast Notification */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex justify-center px-4">
         <AnimatePresence>
-          {toast ? (
+          {toast && (
             <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              initial={{ opacity: 0, y: 10, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              exit={{ opacity: 0, y: 8, scale: 0.96 }}
               className={cn(
-                "flex max-w-sm items-center gap-2 rounded-full border px-4 py-2.5 text-center text-xs shadow-2xl",
+                "flex max-w-sm items-center gap-2 rounded-xl border px-4 py-2.5 text-center text-xs shadow-2xl font-mono",
                 toast.tone === "ok"
-                  ? "border-mint/30 bg-felt-800 text-cream"
+                  ? "border-emerald-500/40 bg-[#131b26] text-emerald-200"
                   : toast.tone === "error"
-                    ? "border-coral/40 bg-felt-800 text-cream"
-                    : "border-amber/30 bg-felt-800 text-cream",
+                    ? "border-rose-500/40 bg-[#1f131a] text-rose-200"
+                    : "border-indigo-500/40 bg-[#181b29] text-[#c0c1ff]",
               )}
               role="status"
             >
               {toast.tone === "ok" ? (
-                <BadgeCheck className="size-4 shrink-0 text-mint" aria-hidden="true" />
+                <BadgeCheck className="size-4 shrink-0 text-emerald-400" aria-hidden="true" />
               ) : (
-                <Info className="size-4 shrink-0 text-coral" aria-hidden="true" />
+                <Info className="size-4 shrink-0 text-rose-400" aria-hidden="true" />
               )}
-              {toast.message}
+              <span>{toast.message}</span>
             </motion.div>
-          ) : null}
+          )}
         </AnimatePresence>
       </div>
     </div>

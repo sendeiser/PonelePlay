@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import QRCode from "qrcode";
-import { Check, Copy, QrCode, RefreshCw, Save, Sliders, Sparkles } from "lucide-react";
 import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 import { fetchNightSummary, venueQrUrl, type NightSummary } from "@/lib/api/owner-ops";
 
@@ -14,11 +13,11 @@ interface SettingsManagerProps {
 export function SettingsManager({ slug }: SettingsManagerProps) {
   const [venueId, setVenueId] = useState<string | null>(null);
   const [venueName, setVenueName] = useState("");
-  const [accentColor, setAccentColor] = useState("#f5c542");
+  const [accentColor, setAccentColor] = useState("#8083ff");
   const [joinMessage, setJoinMessage] = useState("");
 
   const [explicitFilter, setExplicitFilter] = useState(true);
-  const [keywords, setKeywords] = useState("gemidos, insultos");
+  const [keywords, setKeywords] = useState("gemidos, insultos, contenido inapropiado");
   const [maxDuration, setMaxDuration] = useState(480);
   const [maxProposals, setMaxProposals] = useState(3);
   const [maxQueue, setMaxQueue] = useState(30);
@@ -40,7 +39,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
     QRCode.toDataURL(clientUrl, {
       margin: 1,
       width: 400,
-      color: { dark: "#041611", light: "#f5e9d6" },
+      color: { dark: "#0a0e17", light: "#ffffff" },
     }).then(setQrUrl).catch(() => {});
   }, [clientUrl]);
 
@@ -57,7 +56,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
       const v = vData as { id: string; name: string; accent_color: string; join_message: string | null };
       setVenueId(v.id);
       setVenueName(v.name);
-      setAccentColor(v.accent_color || "#f5c542");
+      setAccentColor(v.accent_color || "#8083ff");
       setJoinMessage(v.join_message || "");
 
       const { data: sData } = await supabase
@@ -101,13 +100,13 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
       await supabase
         .from("venues")
         .update({
-          name: venueName.trim(),
+          name: venueName,
           accent_color: accentColor,
-          join_message: joinMessage.trim() || null,
-        } as never)
+          join_message: joinMessage || null,
+        })
         .eq("id", venueId);
 
-      const parsedKeywords = keywords
+      const splitKeywords = keywords
         .split(",")
         .map((k) => k.trim())
         .filter(Boolean);
@@ -116,320 +115,297 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
         .from("venue_settings")
         .update({
           explicit_filter_enabled: explicitFilter,
-          explicit_keywords: parsedKeywords,
+          explicit_keywords: splitKeywords,
           max_song_duration_seconds: maxDuration,
           max_proposals_per_participant: maxProposals,
           max_queue_size: maxQueue,
-          updated_at: new Date().toISOString(),
-        } as never)
+        })
         .eq("venue_id", venueId);
 
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Error al guardar ajustes",
-      );
+      setError(err instanceof Error ? err.message : "Error al guardar configuración");
     } finally {
       setSaving(false);
     }
   }
 
-  function handleCopyUrl() {
-    navigator.clipboard.writeText(clientUrl);
+  function handleCopy() {
+    void navigator.clipboard.writeText(clientUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-cream/10 pb-5">
+    <form onSubmit={handleSave} className="space-y-6">
+      {/* Top Header & Save Actions */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-[#1E2333] gap-4">
         <div>
-          <h1 className="text-2xl font-display font-bold text-cream">
-            Ajustes del Local
+          <div className="flex items-center gap-2 font-mono text-xs text-indigo-400 mb-1">
+            <span>/panel/{slug}/ajustes</span>
+            <span className="text-slate-600">/</span>
+            <span className="px-2 py-0.5 rounded-full bg-[#181b25] text-cyan-300 text-[11px] border border-[#232b42]">
+              Sincronizado
+            </span>
+          </div>
+          <h1 className="text-xl font-bold text-white tracking-tight">
+            Ajustes y Configuración del Bar
           </h1>
-          <p className="mt-1 text-xs text-cream/50">
-            Identidad del bar, reglas de propuestas y código QR del salón
+          <p className="text-xs text-slate-400 mt-0.5">
+            Reglas de jukebox, políticas de filtrado acústico y pairing en tiempo real.
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled={saving || !venueId}
-          onClick={handleSave}
-          className="flex items-center gap-1.5 rounded-xl bg-amber px-4 py-2 font-display text-xs font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
-        >
-          {saving ? (
-            <RefreshCw className="size-3.5 animate-spin" />
-          ) : saved ? (
-            <Check className="size-3.5" />
-          ) : (
-            <Save className="size-3.5" />
+        <div className="flex items-center gap-3">
+          {saved && (
+            <span className="font-mono text-xs text-emerald-400 flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              ¡Guardado!
+            </span>
           )}
-          {saved ? "Guardado" : "Guardar cambios"}
-        </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-base">save</span>
+            <span>{saving ? "Guardando..." : "Guardar Configuración"}</span>
+          </button>
+        </div>
       </div>
 
-      {error ? (
-        <div
-          role="alert"
-          className="rounded-xl border border-coral/30 bg-coral/10 p-3 text-xs text-coral"
-        >
-          {error}
+      {error && (
+        <div className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
+          <span className="material-symbols-outlined text-base text-red-400">error</span>
+          <span>{error}</span>
         </div>
-      ) : null}
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Settings Form */}
-        <form onSubmit={handleSave} className="lg:col-span-2 space-y-6">
-          <div className="rounded-2xl border border-cream/10 bg-white/[0.02] p-5 space-y-4">
-            <h3 className="font-display text-sm font-bold text-cream border-b border-cream/10 pb-3">
-              Identidad del Local
-            </h3>
-
-            <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                Nombre del bar
-              </label>
-              <input
-                type="text"
-                value={venueName}
-                onChange={(e) => setVenueName(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3.5 py-2.5 text-xs text-cream focus:border-amber focus:outline-none"
-                required
-              />
+      {/* Grid: Bento Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* SECTION 1: DATOS DEL LOCAL (7 Cols) */}
+        <section className="lg:col-span-7 bg-[#181b25] rounded-2xl border border-[#232b42] p-6 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between border-b border-[#232b42] pb-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="size-9 rounded-xl bg-[#121624] border border-[#232b42] text-indigo-400 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-lg">storefront</span>
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-white">1. Datos del Local</h3>
+                  <p className="text-xs text-slate-400">Identidad visible para los clientes que escanean la terminal QR.</p>
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4 font-mono text-xs">
               <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Slug (URL pública)
-                </label>
+                <label className="block text-slate-300 font-semibold mb-1">Nombre Comercial</label>
                 <input
                   type="text"
-                  value={slug}
-                  disabled
-                  className="mt-1 w-full rounded-xl border border-cream/10 bg-white/[0.02] px-3.5 py-2.5 font-mono text-xs text-cream/50 cursor-not-allowed"
+                  value={venueName}
+                  onChange={(e) => setVenueName(e.target.value)}
+                  className="w-full bg-[#0a0e17] border border-[#232b42] rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-indigo-400"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Color de acento
-                </label>
-                <div className="mt-1 flex items-center gap-2">
+                <label className="block text-slate-300 font-semibold mb-1">Mensaje de Bienvenida al Salón</label>
+                <input
+                  type="text"
+                  value={joinMessage}
+                  onChange={(e) => setJoinMessage(e.target.value)}
+                  placeholder="Ej: ¡Bienvenidos! Pedí tu tema favorito desde la mesa."
+                  className="w-full bg-[#0a0e17] border border-[#232b42] rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Color de Acento / Iluminación</label>
+                <div className="flex items-center gap-3">
                   <input
                     type="color"
                     value={accentColor}
                     onChange={(e) => setAccentColor(e.target.value)}
-                    className="size-9 rounded-lg border border-cream/15 bg-transparent cursor-pointer"
+                    className="size-10 rounded-lg bg-transparent border border-[#232b42] cursor-pointer"
                   />
                   <input
                     type="text"
                     value={accentColor}
                     onChange={(e) => setAccentColor(e.target.value)}
-                    className="w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 font-mono text-xs text-cream uppercase focus:border-amber focus:outline-none"
+                    className="w-32 bg-[#0a0e17] border border-[#232b42] rounded-lg px-3 py-2 text-white font-mono uppercase"
                   />
                 </div>
               </div>
             </div>
+          </div>
+        </section>
 
+        {/* SECTION 2: QR & ACCESO MESAS (5 Cols) */}
+        <section className="lg:col-span-5 bg-[#181b25] rounded-2xl border border-[#232b42] p-6 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center gap-2.5 border-b border-[#232b42] pb-3 mb-4">
+              <span className="size-9 rounded-xl bg-[#121624] border border-[#232b42] text-cyan-400 flex items-center justify-center">
+                <span className="material-symbols-outlined text-lg">qr_code_scanner</span>
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-white">2. Código QR para Mesas</h3>
+                <p className="text-xs text-slate-400">Enlace directo para imprimir y colocar en mesas o barra.</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center p-4 bg-[#0a0e17] rounded-xl border border-[#232b42]">
+              {qrUrl ? (
+                <Image
+                  src={qrUrl}
+                  alt="QR Mesas"
+                  width={160}
+                  height={160}
+                  className="size-36 rounded-lg p-1 bg-white object-contain"
+                  unoptimized
+                />
+              ) : null}
+
+              <p className="font-mono text-xs text-slate-400 mt-3 truncate max-w-xs text-center">
+                {clientUrl}
+              </p>
+
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="mt-3 px-3 py-1.5 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono text-indigo-300 hover:text-white transition-colors"
+              >
+                {copied ? "¡URL Copiada!" : "Copiar Enlace"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 3: REGLAS DEL JUKEBOX (7 Cols) */}
+        <section className="lg:col-span-7 bg-[#181b25] rounded-2xl border border-[#232b42] p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-[#232b42] pb-3">
+            <span className="size-9 rounded-xl bg-[#121624] border border-[#232b42] text-indigo-400 flex items-center justify-center">
+              <span className="material-symbols-outlined text-lg">queue_music</span>
+            </span>
             <div>
-              <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                Mensaje de bienvenida al escanear
-              </label>
-              <input
-                type="text"
-                value={joinMessage}
-                onChange={(e) => setJoinMessage(e.target.value)}
-                placeholder="ej: ¡Bienvenidos a Billar Aurora! Votá y pedí tus temas."
-                className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3.5 py-2.5 text-xs text-cream focus:border-amber focus:outline-none"
-              />
+              <h3 className="text-sm font-bold text-white">3. Reglas de Reproducción & Límites</h3>
+              <p className="text-xs text-slate-400">Control de longitud de temas y límites de pedidos por mesa.</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-cream/10 bg-white/[0.02] p-5 space-y-4">
-            <h3 className="font-display text-sm font-bold text-cream border-b border-cream/10 pb-3 flex items-center gap-2">
-              <Sliders className="size-4 text-amber" />
-              Reglas de Propuestas y Votación
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Máx. propuestas por persona
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={maxProposals}
-                  onChange={(e) => setMaxProposals(Number(e.target.value))}
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 font-mono text-xs text-cream focus:border-amber focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Duración máx. (segundos)
-                </label>
-                <input
-                  type="number"
-                  min={60}
-                  max={1200}
-                  value={maxDuration}
-                  onChange={(e) => setMaxDuration(Number(e.target.value))}
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 font-mono text-xs text-cream focus:border-amber focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Límite de temas en cola
-                </label>
-                <input
-                  type="number"
-                  min={5}
-                  max={100}
-                  value={maxQueue}
-                  onChange={(e) => setMaxQueue(Number(e.target.value))}
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 font-mono text-xs text-cream focus:border-amber focus:outline-none"
-                />
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs pt-1">
+            <div className="bg-[#121624] p-3 rounded-xl border border-[#232b42]">
+              <label className="text-slate-400 block mb-1">Duración Máx. (Seg)</label>
+              <input
+                type="number"
+                min={60}
+                max={900}
+                value={maxDuration}
+                onChange={(e) => setMaxDuration(Number(e.target.value))}
+                className="w-full bg-[#0a0e17] border border-[#232b42] rounded-lg px-2.5 py-2 text-white font-bold"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">{(maxDuration / 60).toFixed(1)} minutos</span>
             </div>
 
-            <label className="flex items-center gap-2 cursor-pointer pt-2">
+            <div className="bg-[#121624] p-3 rounded-xl border border-[#232b42]">
+              <label className="text-slate-400 block mb-1">Máx. Propuestas / Cliente</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={maxProposals}
+                onChange={(e) => setMaxProposals(Number(e.target.value))}
+                className="w-full bg-[#0a0e17] border border-[#232b42] rounded-lg px-2.5 py-2 text-white font-bold"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">Por sesión de noche</span>
+            </div>
+
+            <div className="bg-[#121624] p-3 rounded-xl border border-[#232b42]">
+              <label className="text-slate-400 block mb-1">Tamaño Máx. Cola</label>
+              <input
+                type="number"
+                min={5}
+                max={100}
+                value={maxQueue}
+                onChange={(e) => setMaxQueue(Number(e.target.value))}
+                className="w-full bg-[#0a0e17] border border-[#232b42] rounded-lg px-2.5 py-2 text-white font-bold"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block">Temas simultáneos</span>
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 4: FILTRO ACÚSTICO & CONTENIDO (5 Cols) */}
+        <section className="lg:col-span-5 bg-[#181b25] rounded-2xl border border-[#232b42] p-6 shadow-sm space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-[#232b42] pb-3">
+            <span className="size-9 rounded-xl bg-[#121624] border border-[#232b42] text-cyan-400 flex items-center justify-center">
+              <span className="material-symbols-outlined text-lg">shield</span>
+            </span>
+            <div>
+              <h3 className="text-sm font-bold text-white">4. Filtro Acústico & Seguridad</h3>
+              <p className="text-xs text-slate-400">Bloqueo automático de tracks explícitos o palabras prohibidas.</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 font-mono text-xs">
+            <label className="flex items-center justify-between p-3 rounded-xl bg-[#121624] border border-[#232b42] cursor-pointer">
+              <div>
+                <span className="text-white font-bold block">Filtro Explícito Activo</span>
+                <span className="text-[10px] text-slate-400">Bloquea videos +18 de YouTube</span>
+              </div>
               <input
                 type="checkbox"
                 checked={explicitFilter}
                 onChange={(e) => setExplicitFilter(e.target.checked)}
-                className="size-4 rounded border-cream/20 bg-white/5 text-amber focus:ring-0"
+                className="size-5 rounded bg-[#0a0e17] border-[#232b42] text-indigo-600 focus:ring-0"
               />
-              <span className="text-xs text-cream/80 font-medium">
-                Activar filtro de contenido explícito y palabras prohibidas
-              </span>
             </label>
 
-            {explicitFilter ? (
-              <div>
-                <label className="block font-mono text-[10px] uppercase tracking-wider text-cream/50">
-                  Palabras prohibidas (separadas por coma)
-                </label>
-                <input
-                  type="text"
-                  value={keywords}
-                  onChange={(e) => setKeywords(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3.5 py-2 text-xs text-cream focus:border-amber focus:outline-none"
-                />
-              </div>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border border-dashed border-cream/15 bg-white/[0.01] p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="font-display text-sm font-bold text-cream/50">
-                  Spotify Connect (Fase 2)
-                </h4>
-                <p className="text-xs text-cream/40">
-                  La integración con catálogo de Spotify está prevista para la siguiente versión.
-                </p>
-              </div>
-              <span className="rounded-full border border-cream/10 bg-cream/5 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-cream/40">
-                Próximamente
-              </span>
+            <div>
+              <label className="block text-slate-400 mb-1">Palabras clave bloqueadas</label>
+              <textarea
+                rows={2}
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder="gemidos, insultos..."
+                className="w-full bg-[#0a0e17] border border-[#232b42] rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-indigo-400"
+              />
             </div>
           </div>
-        </form>
-
-        {/* QR Code & Night Summary Sidecards */}
-        <div className="space-y-6">
-          {/* QR Code Card */}
-          <div className="rounded-2xl border border-cream/10 bg-white/[0.02] p-5 text-center">
-            <h3 className="font-display text-sm font-bold text-cream flex items-center justify-center gap-2">
-              <QrCode className="size-4 text-mint" />
-              QR de las Mesas
-            </h3>
-            <p className="mt-1 text-xs text-cream/50">
-              Imprimí o mostrá este QR en las mesas del bar
-            </p>
-
-            {qrUrl ? (
-              <div className="mt-4 flex justify-center">
-                <Image
-                  src={qrUrl}
-                  alt="QR del Bar"
-                  width={180}
-                  height={180}
-                  className="rounded-xl border border-cream/10"
-                  unoptimized
-                />
-              </div>
-            ) : null}
-
-            <p className="mt-3 truncate font-mono text-[10px] text-cream/40">
-              {clientUrl}
-            </p>
-
-            <button
-              type="button"
-              onClick={handleCopyUrl}
-              className="mt-4 flex items-center justify-center gap-1.5 w-full rounded-xl border border-cream/15 bg-cream/5 py-2 text-xs font-semibold text-cream/80 hover:bg-cream/10"
-            >
-              {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-              {copied ? "Copiado" : "Copiar enlace del bar"}
-            </button>
-          </div>
-
-          {/* Night Summary Card */}
-          {summary ? (
-            <div className="rounded-2xl border border-cream/10 bg-white/[0.02] p-5 space-y-3">
-              <h3 className="font-display text-sm font-bold text-cream flex items-center gap-2">
-                <Sparkles className="size-4 text-amber" />
-                Resumen de la Noche
-              </h3>
-
-              <div className="grid grid-cols-2 gap-2 text-center pt-1">
-                <div className="rounded-xl border border-cream/5 bg-black/20 p-2.5">
-                  <p className="font-display text-lg font-bold text-amber">
-                    {summary.votesCount}
-                  </p>
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-cream/40">
-                    Votos
-                  </p>
-                </div>
-                <div className="rounded-xl border border-cream/5 bg-black/20 p-2.5">
-                  <p className="font-display text-lg font-bold text-mint">
-                    {summary.codesRedeemed} / {summary.codesGenerated}
-                  </p>
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-cream/40">
-                    Canjes
-                  </p>
-                </div>
-              </div>
-
-              {summary.topTracks.length > 0 ? (
-                <div className="border-t border-cream/5 pt-2">
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-cream/40 mb-1.5">
-                    Más votados
-                  </p>
-                  <ul className="space-y-1 text-xs">
-                    {summary.topTracks.slice(0, 3).map((track, i) => (
-                      <li key={i} className="flex justify-between text-cream/70">
-                        <span className="truncate">{track.title}</span>
-                        <span className="font-mono text-amber font-bold shrink-0 ml-2">
-                          {track.votes}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
+        </section>
       </div>
-    </div>
+
+      {/* Summary Row */}
+      {summary && (
+        <section className="card-panel rounded-2xl p-6 shadow-md font-mono text-xs text-slate-400">
+          <div className="flex items-center justify-between pb-3 border-b border-[#1E2333]">
+            <span className="text-white font-bold flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-400 text-base">insights</span>
+              Telemetría Histórica de la Noche
+            </span>
+            <span className="text-cyan-400">Audit logs OK</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+            <div>
+              <span className="text-slate-500 block">Total Votos:</span>
+              <span className="text-lg font-bold text-white">{summary.votesCount}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block">Créditos Emitidos:</span>
+              <span className="text-lg font-bold text-white">{summary.creditsIssued}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block">Códigos Canjeados:</span>
+              <span className="text-lg font-bold text-white">{summary.codesRedeemed}</span>
+            </div>
+            <div>
+              <span className="text-slate-500 block">Créditos Gastados:</span>
+              <span className="text-lg font-bold text-white">{summary.creditsSpent}</span>
+            </div>
+          </div>
+        </section>
+      )}
+    </form>
   );
 }
-

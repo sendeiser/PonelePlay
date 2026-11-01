@@ -1,5 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Image from "next/image";
 import { Music2 } from "lucide-react";
-import { SourceBadge } from "@/components/source-badge";
 import type { QueueItemView } from "@/lib/api/contracts";
 
 interface NowPlayingCardProps {
@@ -14,25 +17,54 @@ function formatDuration(seconds: number | null): string {
 }
 
 export function NowPlayingCard({ item }: NowPlayingCardProps) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!item?.durationSeconds) {
+      setElapsed(0);
+      return;
+    }
+
+    // Realistic elapsed calculation based on creation / play timestamp
+    const startTime = new Date(item.createdAt).getTime();
+    const updateElapsed = () => {
+      const now = Date.now();
+      const diffSecs = Math.max(0, Math.floor((now - startTime) / 1000));
+      const dur = item.durationSeconds ?? 180;
+      setElapsed(diffSecs % dur);
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [item]);
+
   if (!item) {
     return (
-      <section className="relative overflow-hidden rounded-[2rem] border border-cream/10 bg-felt-900 p-5">
-        <div className="relative flex items-center justify-between">
-          <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
-            <span className="size-1.5 rounded-full bg-cream/30" />
-            Música de fondo
-          </span>
+      <section className="relative bg-gradient-to-b from-[#161C2E] to-[#121626] rounded-2xl border border-[#232B42] p-4 sm:p-5 shadow-2xl overflow-hidden glow-indigo">
+        <div className="absolute -top-16 -right-16 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex items-center justify-between mb-3 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded-full bg-[#181b25] text-slate-400 border border-[#232b42] font-mono text-[10px] font-bold tracking-widest flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+              FONDO
+            </span>
+            <span className="font-mono text-[11px] text-slate-400 uppercase tracking-wide">
+              Playlist del Bar
+            </span>
+          </div>
         </div>
-        <div className="relative mt-4 flex items-center gap-4">
-          <div className="grid size-16 shrink-0 place-items-center rounded-2xl bg-white/[0.04] text-cream/30">
+
+        <div className="flex items-center gap-4 my-2 relative z-10">
+          <div className="grid size-16 shrink-0 place-items-center rounded-xl bg-slate-800/60 border border-slate-700/40 text-slate-400 shadow-inner">
             <Music2 className="size-7" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <h2 className="font-display text-xl font-bold tracking-tight text-cream">
-              Playlist del bar
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              Playlist del local en curso
             </h2>
-            <p className="mt-1 text-xs text-cream/50">
-              Votá una canción para que empiece a sonar.
+            <p className="mt-1 text-xs text-slate-400 leading-relaxed">
+              Votá una canción de la cola o proponé una nueva para que empiece a sonar.
             </p>
           </div>
         </div>
@@ -40,74 +72,107 @@ export function NowPlayingCard({ item }: NowPlayingCardProps) {
     );
   }
 
+  const duration = item.durationSeconds ?? 210;
+  const progressPercent = Math.min(100, Math.max(5, (elapsed / duration) * 100));
+
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-cream/10 bg-felt-900 p-5">
-      <div
-        aria-hidden="true"
-        className="absolute -right-12 -top-16 size-48 rounded-full border border-amber/20 bg-amber/[0.04]"
-      />
-      <div
-        aria-hidden="true"
-        className="absolute -right-2 -top-6 size-24 rounded-full border border-amber/10"
-      />
+    <section className="relative bg-gradient-to-b from-[#161C2E] to-[#121626] rounded-2xl border border-[#232B42] p-4 sm:p-5 shadow-2xl overflow-hidden glow-indigo">
+      {/* Ambient backdrop glow */}
+      <div className="absolute -top-16 -right-16 w-48 h-48 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="relative flex items-center justify-between">
-        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-amber">
-          <span className="flex size-4 items-center justify-center rounded-full bg-coral/15">
-            <span className="size-1.5 animate-pulse rounded-full bg-coral" />
+      {/* Header Row */}
+      <div className="flex items-center justify-between mb-3 relative z-10">
+        <div className="flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono text-[10px] font-bold tracking-widest flex items-center gap-1.5 glow-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+            ON AIR
           </span>
-          Suena ahora
-        </span>
-        <SourceBadge source={item.source} />
-      </div>
-
-      <div className="relative mt-4 flex items-center gap-4">
-        <div className="relative size-20 shrink-0">
-          <div
-            className="spin-slow absolute inset-0 rounded-full ring-1 ring-cream/10"
-            style={{
-              background:
-                "repeating-radial-gradient(circle at center, #0b0b0b 0 2px, #1b1b1b 2px 4px)",
-            }}
-          >
-            <span className="absolute left-1/2 top-1/2 flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber font-display text-[9px] font-black text-ink">
-              PP
-            </span>
-          </div>
-          <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-felt-950" />
+          <span className="font-mono text-[11px] text-slate-400 uppercase tracking-wide">
+            Sonando Ahora
+          </span>
         </div>
 
-        <div className="min-w-0">
-          <h2 className="font-display text-2xl font-extrabold leading-[0.95] tracking-[-0.02em] text-cream">
+        {/* Total Votes Pill Badge */}
+        <div className="flex items-center gap-1 bg-[#0D1220]/90 px-2.5 py-0.5 rounded-full border border-[#1E2538] shadow-sm">
+          <span className="material-symbols-outlined text-amber-400 text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+            local_fire_department
+          </span>
+          <span className="font-mono text-xs text-indigo-200 font-bold">
+            {item.voteCount} {item.voteCount === 1 ? "voto" : "votos"}
+          </span>
+        </div>
+      </div>
+
+      {/* Song Metadata and Sleeve Presentation */}
+      <div className="flex items-center gap-3.5 my-3 relative z-10">
+        {/* Vinyl & Cover Setup */}
+        <div className="relative w-20 h-20 flex-shrink-0">
+          {/* Vinyl Record Grooves */}
+          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-[#0a0a0f] border border-slate-700/50 flex items-center justify-center rotate-vinyl shadow-md">
+            <div className="w-16 h-16 rounded-full border border-slate-800/90 flex items-center justify-center">
+              <div className="w-11 h-11 rounded-full border border-slate-800/60 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-[#090D16]" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Album Cover Front */}
+          <div className="absolute inset-y-0 left-0 w-16 h-20 rounded-xl overflow-hidden border border-white/10 shadow-xl bg-slate-900 z-10 flex items-center justify-center">
+            {item.thumbnailUrl ? (
+              <Image
+                src={item.thumbnailUrl}
+                alt={item.title}
+                width={64}
+                height={80}
+                className="w-full h-full object-cover"
+                unoptimized
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-slate-900 flex items-center justify-center text-indigo-300">
+                <Music2 className="size-6" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Track Details */}
+        <div className="flex-1 min-w-0 pr-1">
+          <h2 className="text-lg font-bold text-white truncate tracking-tight">
             {item.title}
           </h2>
-          <p className="mt-1.5 truncate text-sm text-cream/60">{item.artist}</p>
-          <div className="mt-3 flex items-center gap-2">
-            <Equalizer />
-            <span className="text-[11px] text-cream/40">
-              {formatDuration(item.durationSeconds)}
+          <p className="text-sm text-slate-300 truncate font-medium mt-0.5">
+            {item.artist}
+          </p>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="material-symbols-outlined text-indigo-400 text-[14px]">
+              table_restaurant
+            </span>
+            <span className="font-mono text-[11px] text-slate-400 font-medium">
+              Pedido por <strong className="text-white font-semibold">Salón Principal</strong>
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Progress Bar & Elapsed Time */}
+      <div className="space-y-1.5 mt-3 pt-2.5 border-t border-[#1E2538]/80 relative z-10">
+        <div className="w-full bg-[#0A0E1A] h-2 rounded-full overflow-hidden p-0.5 border border-[#1E2538]">
+          <div
+            className="bg-gradient-to-r from-indigo-500 via-indigo-400 to-violet-400 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(99,102,241,0.6)]"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center font-mono text-xs text-slate-400">
+          <span>{formatDuration(elapsed)}</span>
+          <span className="flex items-center gap-1 text-indigo-400 font-semibold text-[11px]">
+            <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
+            Sincronizado
+          </span>
+          <span>{formatDuration(duration)}</span>
         </div>
       </div>
     </section>
   );
 }
-
-function Equalizer() {
-  return (
-    <span className="flex h-3.5 items-end gap-[3px]" aria-hidden="true">
-      {[0.55, 1, 0.4, 0.8, 0.6].map((scale, index) => (
-        <span
-          key={index}
-          className="eq-bar w-[2.5px] rounded-full bg-amber/80"
-          style={{
-            height: `${Math.round(scale * 14)}px`,
-            animationDelay: `${index * 120}ms`,
-          }}
-        />
-      ))}
-    </span>
-  );
-}
-
