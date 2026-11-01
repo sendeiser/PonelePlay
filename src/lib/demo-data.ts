@@ -10,6 +10,7 @@ export type DemoTrack = {
   duration: string;
   votes: number;
   proposedAt: number;
+  youtubeVideoId?: string;
   explicit?: boolean;
 };
 
@@ -35,6 +36,7 @@ export const demoNowPlaying: DemoNowPlaying = {
   duration: "3:27",
   votes: 14,
   proposedAt: 0,
+  youtubeVideoId: "T_FkEw27XJ0",
   elapsed: "1:14",
   elapsedPct: 36,
 };
@@ -48,6 +50,7 @@ export const demoQueue: DemoTrack[] = [
     duration: "4:12",
     votes: 12,
     proposedAt: 1,
+    youtubeVideoId: "_1M1bXvQk3M",
   },
   {
     id: "q-2",
@@ -57,6 +60,7 @@ export const demoQueue: DemoTrack[] = [
     duration: "5:04",
     votes: 9,
     proposedAt: 2,
+    youtubeVideoId: "3Xm45t8G09U",
   },
   {
     id: "q-3",
@@ -66,6 +70,7 @@ export const demoQueue: DemoTrack[] = [
     duration: "3:38",
     votes: 8,
     proposedAt: 3,
+    youtubeVideoId: "4vj3lE0Qv3Q",
   },
   {
     id: "q-4",
@@ -75,6 +80,7 @@ export const demoQueue: DemoTrack[] = [
     duration: "3:08",
     votes: 5,
     proposedAt: 4,
+    youtubeVideoId: "4K4V-0b_iUo",
   },
   {
     id: "q-5",
@@ -84,6 +90,7 @@ export const demoQueue: DemoTrack[] = [
     duration: "3:12",
     votes: 3,
     proposedAt: 5,
+    youtubeVideoId: "qU84cI7Y-Fk",
   },
   {
     id: "q-6",
@@ -93,6 +100,7 @@ export const demoQueue: DemoTrack[] = [
     duration: "3:43",
     votes: 2,
     proposedAt: 6,
+    youtubeVideoId: "oO1M_87FzU4",
   },
 ];
 

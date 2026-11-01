@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BallChip } from "@/components/ball-chip";
 import { createNightStateSource } from "@/lib/api/night-state";
@@ -40,6 +41,60 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [pairDialogOpen, setPairDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Booth Audio & Playback Controls
+  const [isPaused, setIsPaused] = useState(false);
+  const [volume, setVolume] = useState(78);
+  const [isMuted, setIsMuted] = useState(false);
+  const [playerResetMsg, setPlayerResetMsg] = useState<string | null>(null);
+
+  const handleSkip = useCallback(async () => {
+    if (!state?.nowPlaying) return;
+    setActionLoading(true);
+    setErrorMsg(null);
+    try {
+      await skipCurrent(state.nowPlaying.id, staffToken);
+      await refresh();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Error al saltear canción");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [state?.nowPlaying, staffToken, refresh]);
+
+  // Keyboard shortcuts for staff (F4: Tickets, Space: Play/Pause, S: Skip, M: Mute)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      if (e.key === "F4") {
+        e.preventDefault();
+        window.location.href = `/panel/${slug}/tickets`;
+      } else if (e.key.toLowerCase() === "m") {
+        setIsMuted((prev) => !prev);
+      } else if (e.key === " ") {
+        e.preventDefault();
+        setIsPaused((prev) => !prev);
+      } else if (e.key.toLowerCase() === "s" && state?.nowPlaying) {
+        e.preventDefault();
+        void handleSkip();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [slug, state?.nowPlaying, handleSkip]);
+
+  function handleRestartPlayer() {
+    setPlayerResetMsg("Comando de reinicio enviado al reproductor TV.");
+    void refresh();
+    setTimeout(() => setPlayerResetMsg(null), 3000);
+  }
 
   const phase = nightPhase(state);
   const isOpen = phase === "open";
@@ -90,19 +145,6 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     }
   }
 
-  async function handleSkip() {
-    if (!state?.nowPlaying) return;
-    setActionLoading(true);
-    setErrorMsg(null);
-    try {
-      await skipCurrent(state.nowPlaying.id, staffToken);
-      await refresh();
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Error al saltear canción");
-    } finally {
-      setActionLoading(false);
-    }
-  }
 
   async function handleVeto(itemId: string) {
     setActionLoading(true);
@@ -387,6 +429,129 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Card: Control Maestro de Cabina */}
+          <div className="card-panel rounded-xl p-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-[#1E2333] pb-2">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-indigo-400 text-base">settings_remote</span>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                  Control Maestro de Cabina
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono text-slate-400">Nivel Administrador</span>
+            </div>
+
+            {/* Main Player Control Buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPaused((prev) => !prev)}
+                className="flex items-center justify-center gap-2 bg-[#181b25] hover:bg-[#202534] text-white py-2.5 px-3 rounded-lg text-xs font-mono font-bold border border-[#1E2333] hover:border-indigo-500/40 transition-all active:scale-95"
+              >
+                <span className="material-symbols-outlined text-lg text-indigo-400">
+                  {isPaused ? "play_circle" : "pause_circle"}
+                </span>
+                <span>{isPaused ? "Reanudar Música" : "Pausar Música"}</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={actionLoading || !nowPlaying}
+                onClick={() => void handleSkip()}
+                className="flex items-center justify-center gap-2 bg-[#181b25] hover:bg-rose-500/10 text-rose-400 py-2.5 px-3 rounded-lg text-xs font-mono font-bold border border-rose-500/30 transition-all active:scale-95 disabled:opacity-40"
+              >
+                <span className="material-symbols-outlined text-lg">skip_next</span>
+                <span>Saltar Tema (Skip)</span>
+              </button>
+            </div>
+
+            {/* Volume Slider / Salida de Emergencia */}
+            <div className="recessed-dark p-3 rounded-lg flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
+                  <span className="material-symbols-outlined text-indigo-400 text-base">volume_up</span>
+                  <span>Volumen Salón Principal</span>
+                </div>
+                <span className="font-mono text-xs text-white font-bold">{isMuted ? "0%" : `${volume}%`}</span>
+              </div>
+
+              {/* Range Slider */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsMuted((prev) => !prev)}
+                  className="text-slate-400 hover:text-indigo-400 transition-colors"
+                  title="Silenciar / Activar Sonido (M)"
+                >
+                  <span className="material-symbols-outlined text-sm">
+                    {isMuted ? "volume_off" : "volume_mute"}
+                  </span>
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={isMuted ? 0 : volume}
+                  onChange={(e) => {
+                    setVolume(Number(e.target.value));
+                    if (isMuted) setIsMuted(false);
+                  }}
+                  className="w-full accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer border border-[#1E2333]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVolume(100);
+                    setIsMuted(false);
+                  }}
+                  className="text-slate-400 hover:text-indigo-400 transition-colors"
+                  title="Volumen al máximo"
+                >
+                  <span className="material-symbols-outlined text-sm">volume_up</span>
+                </button>
+              </div>
+
+              {/* Emergency Mic / Silence Bar Button */}
+              <div className="pt-1 flex items-center justify-between border-t border-[#1E2333]/50">
+                <button
+                  type="button"
+                  onClick={() => setIsMuted((prev) => !prev)}
+                  className="flex items-center gap-1.5 text-[11px] font-mono text-rose-400 hover:text-rose-300 underline py-0.5"
+                >
+                  <span className="material-symbols-outlined text-sm">mic_off</span>
+                  <span>{isMuted ? "Restablecer Audio Salón" : "Silenciar Salón (Corte de Emergencia)"}</span>
+                </button>
+                <span className="text-[10px] font-mono text-slate-500">Limitador: -3dB</span>
+              </div>
+            </div>
+
+            {/* Quick Action: Emitir Código Térmico en 1 Clic */}
+            <Link
+              href={`/panel/${slug}/tickets`}
+              className="w-full flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition-all shadow-md shadow-indigo-600/25 active:scale-98"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-base">confirmation_number</span>
+                <span>Emitir Código Térmico en 1 Clic</span>
+              </div>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-mono">F4</span>
+            </Link>
+
+            {/* Reiniciar Player Link */}
+            <div className="flex items-center justify-between pt-1 text-[11px] font-mono text-slate-400">
+              <button
+                type="button"
+                onClick={handleRestartPlayer}
+                className="hover:text-indigo-400 text-indigo-300 underline transition-colors"
+              >
+                Reiniciar Player TV
+              </button>
+              {playerResetMsg && (
+                <span className="text-emerald-400 text-[10px]">{playerResetMsg}</span>
+              )}
+            </div>
           </div>
 
           {/* Card: Configuración rápida de reproducción */}

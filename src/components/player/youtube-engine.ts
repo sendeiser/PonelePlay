@@ -1,6 +1,7 @@
 import type { PlaybackEngine } from "./engine";
 import type { PlayerTrack } from "@/lib/api/player";
 import type { YTPlayerInstance } from "@/types/youtube";
+import { parseYoutubeVideoId } from "@/lib/domain/youtube";
 
 export function loadYoutubeIframeApi(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
@@ -42,33 +43,54 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
 
   return {
     async load(track: PlayerTrack): Promise<void> {
-      if (!track.youtubeVideoId) {
-        triggerError("No youtubeVideoId provided");
-        return;
+      let videoId = track.youtubeVideoId?.trim() || "";
+      if (!videoId || videoId.startsWith("demo-")) {
+        // Fallback classic video for demo
+        videoId = "T_FkEw27XJ0";
+      } else {
+        const parsed = parseYoutubeVideoId(videoId);
+        if (parsed) {
+          videoId = parsed;
+        }
       }
 
       await loadYoutubeIframeApi();
 
       return new Promise<void>((resolve) => {
         if (player) {
-          player.loadVideoById(track.youtubeVideoId!);
+          try {
+            player.loadVideoById(videoId);
+            resolve();
+          } catch (e) {
+            triggerError(`Error loading video: ${e instanceof Error ? e.message : String(e)}`);
+            resolve();
+          }
+          return;
+        }
+
+        const el = document.getElementById(containerId);
+        if (!el) {
+          triggerError(`Container element #${containerId} not found`);
           resolve();
           return;
         }
 
         player = new window.YT.Player(containerId, {
-          videoId: track.youtubeVideoId ?? undefined,
+          videoId,
           playerVars: {
             autoplay: 1,
-            controls: 0,
-            disablekb: 1,
-            fs: 0,
+            controls: 1,
+            disablekb: 0,
+            fs: 1,
             modestbranding: 1,
             rel: 0,
             origin: typeof window !== "undefined" ? window.location.origin : undefined,
           },
           events: {
-            onReady: () => {
+            onReady: (ev) => {
+              try {
+                ev.target.playVideo();
+              } catch {}
               resolve();
             },
             onStateChange: (event) => {
@@ -90,10 +112,46 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
       }
     },
 
+    pause(): void {
+      if (player) {
+        player.pauseVideo();
+      }
+    },
+
     stop(): void {
       if (player) {
         player.stopVideo();
       }
+    },
+
+    setVolume(volume: number): void {
+      if (player) {
+        player.setVolume(Math.max(0, Math.min(100, volume)));
+      }
+    },
+
+    unMute(): void {
+      if (player) {
+        player.unMute();
+      }
+    },
+
+    mute(): void {
+      if (player) {
+        player.mute();
+      }
+    },
+
+    isMuted(): boolean {
+      return player ? player.isMuted() : false;
+    },
+
+    getCurrentTime(): number {
+      return player ? player.getCurrentTime() : 0;
+    },
+
+    getDuration(): number {
+      return player ? player.getDuration() : 0;
     },
 
     onEnded(cb: () => void): () => void {
@@ -111,4 +169,3 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
     },
   };
 }
-

@@ -46,5 +46,10 @@ export interface YTPlayerInstance {
   getCurrentTime(): number;
   getDuration(): number;
   loadVideoById(videoId: string): void;
+  mute(): void;
+  unMute(): void;
+  isMuted(): boolean;
+  setVolume(volume: number): void;
+  getVolume(): number;
 }
 

@@ -23,7 +23,20 @@ export async function searchYouTube(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
-  // 1. Direct YouTube link check
+  // 1. First, call our local Next.js YouTube search API route
+  try {
+    const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(trimmed)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.results) && data.results.length > 0) {
+        return data.results;
+      }
+    }
+  } catch {
+    // If running in environment where /api is unreachable or mock, continue to fallbacks
+  }
+
+  // 2. Direct YouTube link check
   const directId = parseYoutubeVideoId(trimmed);
   if (directId) {
     return [
@@ -38,7 +51,7 @@ export async function searchYouTube(
     ];
   }
 
-  // 2. Query YouTube proxy function if available, otherwise search local catalog
+  // 3. Query YouTube proxy function if available, otherwise search local catalog
   try {
     const supabase = createBrowserSupabase();
     const { data, error } = await supabase.functions.invoke("youtube-search", {
@@ -65,7 +78,7 @@ export async function searchYouTube(
     // Fall back to local catalog search
   }
 
-  // 3. Fallback matching against demo / venue catalog
+  // 4. Fallback matching against demo / venue catalog
   const term = trimmed.toLowerCase();
   const matched = demoSearchCatalog.filter((item) =>
     `${item.title} ${item.artist}`.toLowerCase().includes(term),

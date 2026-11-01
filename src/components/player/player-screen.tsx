@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Maximize2, Minimize2, Music2, X } from "lucide-react";
+import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import { createYoutubeEngine } from "@/components/player/youtube-engine";
@@ -36,6 +36,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [qrModal, setQrModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(165);
+
+  // Video Mode: true = view YouTube video in 16:9 stage; false = view spinning vinyl & album cover
+  const [videoMode, setVideoMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("poneleplay.player.videoMode");
+      return saved !== null ? saved === "true" : true;
+    }
+    return true;
+  });
+
+  const [volume, setVolume] = useState(80);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
 
   // Check token from search params or localStorage
   useEffect(() => {
@@ -119,12 +133,47 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }
 
+  function toggleVideoMode() {
+    setVideoMode((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("poneleplay.player.videoMode", String(next));
+      }
+      return next;
+    });
+  }
+
+  // Playback engine
+  const engine: PlaybackEngine = useMemo(() => {
+    return createYoutubeEngine("yt-player-target");
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const key = event.key.toLowerCase();
       if (key === "f") {
         toggleFullscreen();
+      }
+      if (key === "v") {
+        toggleVideoMode();
+      }
+      if (key === "m") {
+        setIsMuted((prev) => {
+          const next = !prev;
+          if (next) engine.mute?.();
+          else engine.unMute?.();
+          return next;
+        });
+      }
+      if (key === " ") {
+        event.preventDefault();
+        setIsPlaying((prev) => {
+          const next = !prev;
+          if (next) void engine.play?.();
+          else engine.pause?.();
+          return next;
+        });
       }
       if (key === "q") {
         setQrModal((val) => !val);
@@ -136,12 +185,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  // Playback engine
-  const engine: PlaybackEngine = useMemo(() => {
-    return createYoutubeEngine("yt-player-target");
-  }, []);
+  }, [engine]);
 
   // Now playing and queue derived from live state or demo
   const nowPlaying: PlayerTrack | null = useMemo(() => {
@@ -154,12 +198,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         artist: demoNowPlaying.artist,
         source: demoNowPlaying.source,
         durationSeconds: 332,
+        youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
         thumbnailUrl: null,
         voteCount: demoNowPlaying.votes,
       };
     }
     return null;
   }, [playerState, isDemo, token]);
+
+  // In demo mode, load demo track into engine
+  useEffect(() => {
+    if (isDemo && nowPlaying && engine) {
+      void engine.load(nowPlaying).then(() => {
+        void engine.play?.();
+      });
+    }
+  }, [isDemo, nowPlaying, engine]);
 
   const queue: PlayerTrack[] = useMemo(() => {
     if (playerState?.queue && playerState.queue.length > 0) return playerState.queue;
@@ -170,6 +224,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       artist: item.artist,
       source: item.source,
       durationSeconds: 252,
+      youtubeVideoId: item.youtubeVideoId,
       thumbnailUrl: null,
       voteCount: item.votes,
     }));
@@ -178,6 +233,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const venueName = playerState?.venue.name || "Lounge Central · Bar & Music";
   const duration = nowPlaying?.durationSeconds ?? 332;
   const progressPercent = Math.min(100, Math.max(3, (elapsed / duration) * 100));
+
+  function handleVolumeChange(newVol: number) {
+    setVolume(newVol);
+    engine.setVolume?.(newVol);
+    if (newVol > 0 && isMuted) {
+      setIsMuted(false);
+      engine.unMute?.();
+    }
+  }
+
+  function handleUnlockAudio() {
+    engine.unMute?.();
+    void engine.play?.();
+    setAudioUnlocked(true);
+  }
 
   // Pairing gate
   if (!token && !isDemo) {
@@ -197,7 +267,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           </div>
 
           <p className="mt-5 text-xs text-slate-300 leading-relaxed">
-            Esta pantalla requiere vincularse con un token autorizado emitido desde el panel de control del bar.
+            Esta pantalla se sincroniza automáticamente con la cabina del bar y reproduce la música y videos de YouTube en vivo.
           </p>
 
           <form
@@ -258,9 +328,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   return (
     <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
-      {/* Hidden YouTube container for audio playback */}
-      <div id="yt-player-target" className="hidden" aria-hidden="true" />
-
       {/* Runtime coordinator if connected with token */}
       {token ? (
         <PlayerRuntime
@@ -308,18 +375,101 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               {isDemo ? "SESIÓN DEMO · EN VIVO" : "SESIÓN ACTIVA · EN VIVO"}
             </span>
           </div>
+
+          {/* Video / Vinyl Mode Toggle Pill in Header */}
+          <button
+            type="button"
+            onClick={toggleVideoMode}
+            className={`flex items-center gap-2 px-3 py-1 rounded-lg border font-mono text-xs font-semibold transition-all ${
+              videoMode
+                ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.25)]"
+                : "bg-[#181b25] text-slate-300 border-[#232b42] hover:text-white"
+            }`}
+            title="Alternar Modo Video / Modo Vinilo (Tecla V)"
+          >
+            <span className="material-symbols-outlined text-[17px]">
+              {videoMode ? "smart_display" : "album"}
+            </span>
+            <span>{videoMode ? "Modo Video (ON)" : "Modo Vinilo"}</span>
+          </button>
         </div>
 
-        {/* Connection Status & Precision Clock */}
+        {/* Volume, Audio Unlock & Precision Clock */}
         <div className="flex items-center gap-4">
+          {/* Unlock Autoplay Sound Button if needed */}
+          {!audioUnlocked && (
+            <button
+              type="button"
+              onClick={handleUnlockAudio}
+              className="animate-pulse bg-gradient-to-r from-cyan-500 to-indigo-500 text-black px-3 py-1.5 rounded-lg font-mono text-xs font-bold shadow-lg flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+            >
+              <Volume2 className="size-3.5" />
+              <span>Activar Sonido TV</span>
+            </button>
+          )}
+
+          {/* Volume Control Bar */}
+          <div className="flex items-center gap-2 bg-[#181b25] px-3 py-1.5 rounded-lg border border-[#232b42]">
+            <button
+              type="button"
+              onClick={() => {
+                setIsPlaying((prev) => {
+                  const next = !prev;
+                  if (next) void engine.play?.();
+                  else engine.pause?.();
+                  return next;
+                });
+              }}
+              className="text-slate-400 hover:text-white transition-colors mr-1"
+              title={isPlaying ? "Pausar (Espacio)" : "Reanudar (Espacio)"}
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                {isPlaying ? "pause" : "play_arrow"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsMuted((prev) => {
+                  const next = !prev;
+                  if (next) engine.mute?.();
+                  else engine.unMute?.();
+                  return next;
+                });
+              }}
+              className="text-slate-400 hover:text-white transition-colors"
+              title="Silenciar / Activar Sonido (M)"
+            >
+              {isMuted || volume === 0 ? (
+                <VolumeX className="size-4 text-rose-400" />
+              ) : (
+                <Volume2 className="size-4 text-cyan-400" />
+              )}
+            </button>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={isMuted ? 0 : volume}
+              onChange={(e) => handleVolumeChange(Number(e.target.value))}
+              className="w-16 accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer"
+              title={`Volumen: ${volume}%`}
+            />
+            <span className="font-mono text-[11px] text-slate-300 w-7 text-right">
+              {isMuted ? "0%" : `${volume}%`}
+            </span>
+          </div>
+
+          {/* Connection Pill */}
           <div className="flex items-center gap-2 bg-[#181b25] px-3 py-1.5 rounded-lg border border-[#232b42]">
             <span className="material-symbols-outlined text-cyan-400 text-[18px]">cloud_done</span>
             <span className="font-mono text-xs text-slate-300">
-              Sincronizado (Chrome Host)
+              Host Sincronizado
             </span>
             <span className="size-1.5 rounded-full bg-cyan-400" />
           </div>
 
+          {/* Clock */}
           <div className="flex items-center gap-2 bg-[#1c1f29] px-3.5 py-1.5 rounded-lg border border-[#283250] shadow-inner font-mono">
             <span className="material-symbols-outlined text-indigo-400 text-[18px]">schedule</span>
             <span className="text-white font-bold text-sm tracking-widest">
@@ -327,6 +477,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </span>
           </div>
 
+          {/* Fullscreen Button */}
           <button
             type="button"
             onClick={toggleFullscreen}
@@ -341,13 +492,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       {/* ================= MAIN VIEWPORT (SPLIT SCREEN 62/38) ================= */}
       <main className="w-full flex-1 px-8 py-5 grid grid-cols-12 gap-6 items-stretch max-h-[calc(100vh-120px)]">
         {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~62%) ---------------- */}
-        <section className="col-span-7 flex flex-col justify-between rounded-2xl bg-[#181b25]/90 border border-[#232b42] p-7 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+        <section className="col-span-7 flex flex-col justify-between rounded-2xl bg-[#181b25]/90 border border-[#232b42] p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           {/* Ambient tech glows */}
           <div className="absolute -top-28 -left-28 w-96 h-96 bg-[#6366F1]/15 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
           {/* Header tag within card */}
-          <div className="flex items-center justify-between z-10">
+          <div className="flex items-center justify-between z-10 mb-2">
             <div className="flex items-center gap-3">
               <div className="bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/40 px-3 py-1 rounded-md font-mono text-xs tracking-wider flex items-center gap-1.5 shadow-[0_0_14px_rgba(99,102,241,0.3)]">
                 <span className="size-2 rounded-full bg-indigo-400 animate-ping inline-block" />
@@ -358,81 +509,140 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 bg-[#0a0e17]/80 px-3 py-1 rounded-md border border-[#232b42]">
-              <span className="material-symbols-outlined text-cyan-400 text-[18px]">smart_display</span>
-              <span className="font-mono text-xs text-slate-300">Stream HD 1080p · Lossless</span>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleVideoMode}
+                className="flex items-center gap-1.5 bg-[#0a0e17]/80 hover:bg-[#0a0e17] px-3 py-1 rounded-md border border-[#232b42] text-xs font-mono text-slate-300 hover:text-white transition-colors"
+              >
+                <span className="material-symbols-outlined text-cyan-400 text-[18px]">
+                  {videoMode ? "smart_display" : "album"}
+                </span>
+                <span>{videoMode ? "Ver Vinilo" : "Ver Video HD"}</span>
+              </button>
+
+              <div className="flex items-center gap-1.5 bg-[#0a0e17]/80 px-3 py-1 rounded-md border border-[#232b42]">
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-mono text-xs text-slate-300">YouTube Stream HD</span>
+              </div>
             </div>
           </div>
 
-          {/* Middle: Vinyl + Typography Display */}
-          <div className="flex items-center gap-8 my-auto z-10 py-4">
-            {/* Vinyl Record + Album Cover */}
-            <div className="relative w-64 h-64 shrink-0 flex items-center justify-center">
-              {/* Vinyl Record Grooves */}
-              <div className="absolute -right-8 size-56 rounded-full bg-[#080B12] border-4 border-[#1E2433] shadow-[0_0_32px_rgba(0,0,0,0.85)] animate-spin-vinyl flex items-center justify-center z-0">
-                <div className="size-44 rounded-full border border-neutral-700/40 flex items-center justify-center">
-                  <div className="size-32 rounded-full border border-neutral-700/30 flex items-center justify-center">
-                    <div className="size-20 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] border-2 border-[#0a0e17] flex flex-col items-center justify-center p-1 text-center shadow-lg">
-                      <span className="text-white font-mono text-[9px] uppercase tracking-wider font-extrabold">PONELE</span>
-                      <span className="text-white/80 font-mono text-[7px] leading-tight">PLAY</span>
-                      <div className="size-3 rounded-full bg-[#0a0e17] border border-white/40 mt-0.5" />
+          {/* ================= STABLE YOUTUBE CONTAINER ================= */}
+          {/* When videoMode is TRUE: Centered 16:9 Video Canvas */}
+          {/* When videoMode is FALSE: Off-screen continuous audio playback */}
+          <div
+            className={
+              videoMode
+                ? "relative w-full aspect-video max-h-[380px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
+                : "absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none -z-50 overflow-hidden"
+            }
+          >
+            <div id="yt-player-target" className="w-full h-full" />
+            {videoMode && (
+              <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">
+                <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
+                <span>EN VIVO · YOUTUBE PLAYER 1080p</span>
+              </div>
+            )}
+          </div>
+
+          {/* ================= VINYL MODE VIEW (WHEN VIDEO IS OFF) ================= */}
+          {!videoMode && (
+            <div className="flex items-center gap-8 my-auto z-10 py-4">
+              {/* Vinyl Record + Album Cover */}
+              <div className="relative w-64 h-64 shrink-0 flex items-center justify-center">
+                {/* Vinyl Record Grooves */}
+                <div className="absolute -right-8 size-56 rounded-full bg-[#080B12] border-4 border-[#1E2433] shadow-[0_0_32px_rgba(0,0,0,0.85)] animate-spin-vinyl flex items-center justify-center z-0">
+                  <div className="size-44 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                    <div className="size-32 rounded-full border border-neutral-700/30 flex items-center justify-center">
+                      <div className="size-20 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] border-2 border-[#0a0e17] flex flex-col items-center justify-center p-1 text-center shadow-lg">
+                        <span className="text-white font-mono text-[9px] uppercase tracking-wider font-extrabold">PONELE</span>
+                        <span className="text-white/80 font-mono text-[7px] leading-tight">PLAY</span>
+                        <div className="size-3 rounded-full bg-[#0a0e17] border border-white/40 mt-0.5" />
+                      </div>
                     </div>
                   </div>
                 </div>
+
+                {/* Album Cover Front */}
+                <div className="relative size-56 rounded-2xl overflow-hidden border border-[#283250] shadow-2xl z-10 bg-[#0a0e17] flex items-center justify-center">
+                  {nowPlaying?.thumbnailUrl ? (
+                    <Image
+                      src={nowPlaying.thumbnailUrl}
+                      alt={nowPlaying.title}
+                      width={224}
+                      height={224}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-[#0a0e17] flex flex-col items-center justify-center text-indigo-300 p-4">
+                      <Music2 className="size-16 text-indigo-400 mb-2" />
+                      <span className="font-mono text-xs uppercase tracking-widest text-slate-400">PonelePlay Master</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute bottom-3 left-3 text-white font-mono text-[11px] uppercase tracking-wider bg-[#0A0E17]/80 backdrop-blur-md px-2.5 py-0.5 rounded border border-[#283250]">
+                    MODO VINILO · JUKEBOX
+                  </div>
+                </div>
               </div>
 
-              {/* Album Cover Front */}
-              <div className="relative size-56 rounded-2xl overflow-hidden border border-[#283250] shadow-2xl z-10 bg-[#0a0e17] flex items-center justify-center">
-                {nowPlaying?.thumbnailUrl ? (
-                  <Image
-                    src={nowPlaying.thumbnailUrl}
-                    alt={nowPlaying.title}
-                    width={224}
-                    height={224}
-                    className="w-full h-full object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-[#0a0e17] flex flex-col items-center justify-center text-indigo-300 p-4">
-                    <Music2 className="size-16 text-indigo-400 mb-2" />
-                    <span className="font-mono text-xs uppercase tracking-widest text-slate-400">PonelePlay Master</span>
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
-                <div className="absolute bottom-3 left-3 text-white font-mono text-[11px] uppercase tracking-wider bg-[#0A0E17]/80 backdrop-blur-md px-2.5 py-0.5 rounded border border-[#283250]">
-                  JUKEBOX LIVE
+              {/* High-tech Typography Display */}
+              <div className="flex-1 min-w-0 pr-4">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-xs mb-3">
+                  <span className="size-1.5 rounded-full bg-cyan-400" />
+                  VOTADA POR EL SALÓN
+                </div>
+                <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-[1.05] drop-shadow-sm truncate">
+                  {nowPlaying?.title || "Esperando tema..."}
+                </h1>
+                <h2 className="text-xl font-medium text-slate-300 mt-2 truncate">
+                  {nowPlaying?.artist || "Playlist de fondo activa"}
+                </h2>
+                <div className="flex items-center gap-4 mt-4 font-mono text-xs text-slate-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-cyan-400 text-[18px]">album</span>
+                    Audio HD Directo
+                  </span>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-indigo-400 text-[18px]">graphic_eq</span>
+                    Stereo Master
+                  </span>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* High-tech Typography Display */}
-            <div className="flex-1 min-w-0 pr-4">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-xs mb-3">
-                <span className="size-1.5 rounded-full bg-cyan-400" />
-                VOTADA POR EL SALÓN
+          {/* ================= METADATA BELOW VIDEO (WHEN VIDEO IS ON) ================= */}
+          {videoMode && (
+            <div className="z-10 mt-3 flex items-center justify-between">
+              <div className="min-w-0 flex-1 pr-4">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-[11px] mb-1">
+                  <span className="size-1.5 rounded-full bg-cyan-400" />
+                  VOTADA POR EL SALÓN
+                </div>
+                <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-tight truncate">
+                  {nowPlaying?.title || "Esperando tema..."}
+                </h1>
+                <h2 className="text-base font-medium text-slate-300 truncate mt-0.5">
+                  {nowPlaying?.artist || "Playlist de fondo activa"}
+                </h2>
               </div>
-              <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-[1.05] drop-shadow-sm truncate">
-                {nowPlaying?.title || "Esperando tema..."}
-              </h1>
-              <h2 className="text-xl font-medium text-slate-300 mt-2 truncate">
-                {nowPlaying?.artist || "Playlist de fondo activa"}
-              </h2>
-              <div className="flex items-center gap-4 mt-4 font-mono text-xs text-slate-400">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-cyan-400 text-[18px]">album</span>
-                  Audio HD Directo
-                </span>
-                <span>•</span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-indigo-400 text-[18px]">graphic_eq</span>
-                  Stereo Master
-                </span>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-3 py-1 rounded-full border border-indigo-500/30 font-mono text-xs font-bold">
+                  <span className="material-symbols-outlined text-[16px]">thumb_up</span>
+                  <span>{nowPlaying?.voteCount ?? 14} VOTOS</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Bottom: Progress Bar & Attribution Pill */}
-          <div className="z-10 mt-auto bg-[#1c1f29]/90 p-4 rounded-xl border border-[#232b42] shadow-inner">
+          <div className="z-10 mt-3 bg-[#1c1f29]/90 p-4 rounded-xl border border-[#232b42] shadow-inner">
             {/* Timeline Counters */}
             <div className="w-full flex items-center justify-between font-mono text-xs text-slate-300 mb-2">
               <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
