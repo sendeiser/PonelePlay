@@ -18,7 +18,7 @@ export function useNightState(
   options?: UseNightStateOptions,
 ) {
   const pollMs = options?.pollMs ?? 10_000;
-  const debounceMs = options?.debounceMs ?? 150;
+  const debounceMs = options?.debounceMs ?? 350;
 
   const [state, setState] = useState<NightState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,31 +50,26 @@ export function useNightState(
   useEffect(() => {
     void doFetch();
 
-    const unsubscribe = source.subscribe(() => {
+    const unsub = source.subscribe(() => {
       debouncedFetch();
     });
 
     const interval = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) {
-        return;
-      }
       void doFetch();
     }, pollMs);
 
     return () => {
-      unsubscribe();
+      unsub();
       clearInterval(interval);
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [source, doFetch, debouncedFetch, pollMs]);
+  }, [doFetch, debouncedFetch, pollMs, source]);
 
-  return {
-    state,
-    loading,
-    offline,
-    refresh: doFetch,
-  };
+  const refresh = useCallback(async () => {
+    await doFetch();
+  }, [doFetch]);
+
+  return { state, loading, offline, refresh };
 }
-

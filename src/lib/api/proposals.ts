@@ -14,6 +14,33 @@ export interface SearchResult {
   viewsCount?: number;
 }
 
+interface ClientCacheEntry {
+  timestamp: number;
+  results: SearchResult[];
+}
+
+const clientSearchCache = new Map<string, ClientCacheEntry>();
+const CLIENT_CACHE_TTL = 3 * 60 * 1000; // 3 minutes cache
+const MAX_CLIENT_CACHE = 100;
+
+function getClientCached(key: string): SearchResult[] | null {
+  const item = clientSearchCache.get(key);
+  if (!item) return null;
+  if (Date.now() - item.timestamp > CLIENT_CACHE_TTL) {
+    clientSearchCache.delete(key);
+    return null;
+  }
+  return item.results;
+}
+
+function setClientCached(key: string, results: SearchResult[]) {
+  if (clientSearchCache.size >= MAX_CLIENT_CACHE) {
+    const oldestKey = clientSearchCache.keys().next().value;
+    if (oldestKey) clientSearchCache.delete(oldestKey);
+  }
+  clientSearchCache.set(key, { timestamp: Date.now(), results });
+}
+
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -27,6 +54,20 @@ export async function searchYouTube(
   const trimmed = query.trim();
   if (!trimmed) return [];
 
+  const cacheKey = `${trimmed.toLowerCase()}_${isKaraoke}`;
+  const cached = getClientCached(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  // Helper to store in cache before returning
+  const returnWithCache = (res: SearchResult[]): SearchResult[] => {
+    if (res.length > 0) {
+      setClientCached(cacheKey, res);
+    }
+    return res;
+  };
+
   // 1. First, call our local Next.js YouTube search API route
   try {
     const karaokeParam = isKaraoke ? "&karaoke=true" : "";
@@ -34,7 +75,7 @@ export async function searchYouTube(
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data?.results) && data.results.length > 0) {
-        return data.results;
+        return returnWithCache(data.results);
       }
     }
   } catch {
@@ -44,7 +85,7 @@ export async function searchYouTube(
   // 2. Direct YouTube link check
   const directId = parseYoutubeVideoId(trimmed);
   if (directId) {
-    return [
+    return returnWithCache([
       {
         videoId: directId,
         title: `Video de YouTube (${directId})`,
@@ -53,7 +94,7 @@ export async function searchYouTube(
         durationSeconds: 240,
         thumbnailUrl: `https://img.youtube.com/vi/${directId}/hqdefault.jpg`,
       },
-    ];
+    ]);
   }
 
   // 3. Query YouTube proxy function if available, otherwise search local catalog
@@ -64,7 +105,7 @@ export async function searchYouTube(
     });
 
     if (!error && data?.results && Array.isArray(data.results)) {
-      return data.results.map((item: {
+      const mapped = data.results.map((item: {
         videoId: string;
         title: string;
         channelTitle: string;
@@ -78,6 +119,7 @@ export async function searchYouTube(
         durationSeconds: item.durationSeconds || 180,
         thumbnailUrl: item.thumbnailUrl,
       }));
+      return returnWithCache(mapped);
     }
   } catch {
     // Fall back to local catalog search
@@ -89,14 +131,14 @@ export async function searchYouTube(
     `${item.title} ${item.artist}`.toLowerCase().includes(term),
   );
 
-  return matched.map((item) => ({
+  return returnWithCache(matched.map((item) => ({
     videoId: `demo-${item.id}`,
     title: item.title,
     artist: item.artist,
     duration: item.duration,
     durationSeconds: 210,
     thumbnailUrl: "",
-  }));
+  })));
 }
 
 export interface ProposeInput {
@@ -162,4 +204,3 @@ export async function proposeTrack(
     voteCount: res.voteCount ?? 0,
   };
 }
-

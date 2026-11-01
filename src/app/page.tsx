@@ -5,11 +5,11 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#090D16] text-[#dfe2ef] flex flex-col justify-between relative overflow-hidden">
       {/* Background ambient lighting */}
-      <div className="absolute -top-32 left-1/2 -translate-x-1/2 size-[36rem] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute -bottom-32 right-10 size-[30rem] bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -top-32 left-1/2 -translate-x-1/2 size-[36rem] bg-[radial-gradient(circle,rgba(99,102,241,0.12)_0%,transparent_70%)] rounded-full pointer-events-none" />
+      <div className="absolute -bottom-32 right-10 size-[30rem] bg-[radial-gradient(circle,rgba(6,182,212,0.10)_0%,transparent_70%)] rounded-full pointer-events-none" />
 
       {/* Header */}
-      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#1E2333] bg-[#0A0E17]/80 backdrop-blur-md z-10">
+      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#1E2333] bg-[#0A0E17] z-10">
         <div className="flex items-center gap-3">
           <BrandMark className="size-9" />
           <Wordmark className="text-xl" />

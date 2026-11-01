@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Check, Plus } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { cn } from "@/lib/cn";
@@ -12,6 +13,17 @@ interface QueueRowProps {
   disabled?: boolean;
 }
 
+function decodeHtmlEntities(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#039;/g, "'");
+}
+
 function formatDuration(seconds: number | null): string {
   if (!seconds || seconds <= 0) return "--:--";
   const mins = Math.floor(seconds / 60);
@@ -19,8 +31,10 @@ function formatDuration(seconds: number | null): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
+export const QueueRow = memo(function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
   const isNext = rank === 1;
+  const title = decodeHtmlEntities(item.title);
+  const artist = decodeHtmlEntities(item.artist);
 
   return (
     <div
@@ -39,7 +53,7 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 min-w-0">
             <h4 className="text-sm text-white font-bold truncate">
-              {item.title}
+              {title}
             </h4>
             {isNext && (
               <span className="shrink-0 px-1.5 py-0.5 rounded bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
@@ -48,7 +62,7 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
             )}
           </div>
           <p className="text-xs text-slate-400 truncate mt-0.5">
-            {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
+            {artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
           </p>
           <div className="flex items-center gap-2 mt-1 font-mono text-[11px] text-slate-400">
             <span className="text-indigo-400 font-semibold">
@@ -68,8 +82,8 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
           disabled={disabled || item.myVote}
           aria-label={
             item.myVote
-              ? `Ya votaste por ${item.title}`
-              : `Votar por ${item.title}`
+              ? `Ya votaste por ${title}`
+              : `Votar por ${title}`
           }
           className={cn(
             "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all active:scale-95",
@@ -95,4 +109,4 @@ export function QueueRow({ item, rank, onVote, disabled }: QueueRowProps) {
       </div>
     </div>
   );
-}
+});

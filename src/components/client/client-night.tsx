@@ -123,7 +123,7 @@ export function ClientNight({ slug }: { slug: string }) {
       {/* Container Mobile Shell Frame */}
       <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-[#1E2538]/50 relative pb-28">
         {/* TOP APP BAR (Stitch Shared Component) */}
-        <header className="bg-[#0D1220]/90 backdrop-blur-xl border-b border-[#1E2538] sticky top-0 z-40">
+        <header className="bg-[#0D1220] border-b border-[#1E2538] sticky top-0 z-40">
           <div className="flex justify-between items-center w-full px-4 py-2.5 max-w-md mx-auto">
             {/* Brand & Venue Identity */}
             <div className="flex items-center gap-2">
@@ -325,7 +325,7 @@ export function ClientNight({ slug }: { slug: string }) {
         </main>
 
         {/* BOTTOM NAVIGATION BAR (Glassmorphism Dock) */}
-        <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220]/95 backdrop-blur-xl border-t border-[#1E2538]">
+        <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220] border-t border-[#1E2538] shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
           <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1.5">
             {navigationTabs.map(({ id, label, icon }) => {
               const active = tab === id;

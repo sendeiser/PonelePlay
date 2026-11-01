@@ -301,7 +301,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
       )}
 
       {/* Sticky Bottom Control Bar */}
-      <footer className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-[#07090e]/95 backdrop-blur-2xl border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none">
+      <footer className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-[#080b14] border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none">
         {/* Scrubber line */}
         <div className="w-full flex items-center gap-2.5 px-2">
           <span className="font-mono text-[10px] text-cyan-400 font-semibold w-9 text-right">

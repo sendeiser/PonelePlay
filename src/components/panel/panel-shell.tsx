@@ -212,7 +212,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       <PanelPlaybackFooter slug={slug} />
 
       {/* ==================== MOBILE DEDICATED BOTTOM NAVIGATION BAR ==================== */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0c101c]/95 backdrop-blur-2xl border-t border-[#1E2333] flex items-center justify-around px-1 h-16 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0c101c] border-t border-[#1E2333] flex items-center justify-around px-1 h-16 shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
         {nav.map((item) => {
           const isActive = pathname === item.href;
           const icon = iconMap[item.label] || "circle";

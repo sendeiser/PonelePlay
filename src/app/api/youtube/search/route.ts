@@ -2,6 +2,34 @@ import { NextResponse } from "next/server";
 import { parseYoutubeVideoId } from "@/lib/domain/youtube";
 import { demoSearchCatalog } from "@/lib/demo-data";
 
+interface CacheEntry {
+  timestamp: number;
+  results: YouTubeSearchResult[];
+}
+
+const serverSearchCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 min
+const MAX_CACHE_SIZE = 250;
+
+function getServerCached(key: string): YouTubeSearchResult[] | null {
+  const entry = serverSearchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    serverSearchCache.delete(key);
+    return null;
+  }
+  return entry.results;
+}
+
+function setServerCached(key: string, results: YouTubeSearchResult[]) {
+  if (!results || results.length === 0) return;
+  if (serverSearchCache.size >= MAX_CACHE_SIZE) {
+    const oldestKey = serverSearchCache.keys().next().value;
+    if (oldestKey) serverSearchCache.delete(oldestKey);
+  }
+  serverSearchCache.set(key, { timestamp: Date.now(), results });
+}
+
 export interface YouTubeSearchResult {
   videoId: string;
   title: string;
@@ -235,6 +263,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ results: [] });
   }
 
+  const cacheKey = `${q.toLowerCase()}__${isKaraoke}`;
+  const cached = getServerCached(cacheKey);
+  if (cached) {
+    return NextResponse.json({ results: cached, cached: true });
+  }
+
   // 1. Direct YouTube link or 11-char ID
   const directId = parseYoutubeVideoId(q);
   if (directId) {
@@ -287,6 +321,7 @@ export async function GET(request: Request) {
       try {
         const apiResults = await searchViaApi(q, apiKey, isKaraoke);
         if (apiResults.length > 0) {
+          setServerCached(cacheKey, apiResults);
           return NextResponse.json({ results: apiResults });
         }
       } catch {
@@ -296,6 +331,7 @@ export async function GET(request: Request) {
 
     const scrapeResults = await searchViaScrape(q, isKaraoke);
     if (scrapeResults.length > 0) {
+      setServerCached(cacheKey, scrapeResults);
       return NextResponse.json({ results: scrapeResults });
     }
   } catch {
@@ -308,8 +344,7 @@ export async function GET(request: Request) {
     `${item.title} ${item.artist}`.toLowerCase().includes(term),
   );
 
-  return NextResponse.json({
-    results: matched.map((item) => ({
+  const fallbackResults = matched.map((item) => ({
       videoId: `demo-${item.id}`,
       title: isKaraoke ? `${item.title} (Karaoke Letra)` : item.title,
       artist: isKaraoke ? `${item.artist} · Karaoke Oficial` : item.artist,
@@ -319,8 +354,9 @@ export async function GET(request: Request) {
       isKaraoke,
       views: isKaraoke ? "2.4 M visualizaciones" : undefined,
       viewsCount: isKaraoke ? 2400000 : undefined,
-    })),
-  });
+    }));
+  setServerCached(cacheKey, fallbackResults);
+  return NextResponse.json({ results: fallbackResults });
 }
 
 export async function POST(request: Request) {
