@@ -7,7 +7,11 @@ import QRCode from "qrcode";
 import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X, KeyRound } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
-import { createIframeEngine, type IframePlaybackEngine } from "@/components/player/iframe-engine";
+import {
+  createIframeEngine,
+  resolveVideoId,
+  type IframePlaybackEngine,
+} from "@/components/player/iframe-engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
@@ -75,13 +79,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [qr, setQr] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   // Video Mode: default to true so video is always visible
   const [videoMode, setVideoMode] = useState<boolean>(true);
   const [mounted, setMounted] = useState<boolean>(false);
-  const [origin, setOrigin] = useState<string>("");
+  const [origin, setOrigin] = useState<string>(() =>
+    typeof window !== "undefined" ? window.location.origin : "",
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -102,6 +109,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [hudMessage, setHudMessage] = useState<string | null>(null);
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
 
+  const videoContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const handleSeekRef = useRef<(sec: number) => void>(() => {});
   const elapsedRef = useRef(0);
@@ -109,7 +117,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   // Single playback engine: controls the ONE visible YouTube iframe (no hidden 2nd player)
   const engine: IframePlaybackEngine = useMemo(
-    () => createIframeEngine(() => iframeRef.current),
+    () =>
+      createIframeEngine(
+        () => iframeRef.current,
+        (playing) => setIsPlaying(playing),
+      ),
     [],
   );
 
@@ -226,12 +238,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     const timer = setInterval(() => {
       const d = Math.floor(engine.getDuration());
       if (d > 0) setVideoDuration(d);
-      const ct = Math.floor(engine.getCurrentTime());
-      if (ct > 0) {
+      if (engine.hasLiveTime()) {
+        const ct = Math.floor(engine.getCurrentTime());
         setElapsed(ct);
+        elapsedRef.current = ct;
         return;
       }
-      setElapsed((prev) => prev + 1);
+      setElapsed((prev) => {
+        const next = prev + 1;
+        elapsedRef.current = next;
+        return next;
+      });
     }, 1000);
     return () => clearInterval(timer);
   }, [engine, isPlaying]);
@@ -262,10 +279,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     };
   }, [slug]);
 
-  // Fullscreen state listener
+  // Fullscreen state listener (window or dedicated video container)
   useEffect(() => {
     const onFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      const isFs = Boolean(document.fullscreenElement);
+      setIsFullscreen(isFs);
+      setIsVideoFullscreen(
+        Boolean(videoContainerRef.current) &&
+          document.fullscreenElement === videoContainerRef.current,
+      );
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
@@ -278,6 +300,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       document.exitFullscreen().catch(() => {});
     }
   }
+
+  const toggleVideoFullscreen = useCallback(() => {
+    if (document.fullscreenElement === videoContainerRef.current) {
+      document.exitFullscreen().catch(() => {});
+    } else if (videoContainerRef.current) {
+      videoContainerRef.current.requestFullscreen().catch(() => {});
+    }
+  }, []);
 
   function toggleVideoMode() {
     setVideoMode((prev) => {
@@ -334,7 +364,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
       const key = event.key.toLowerCase();
       if (key === "f") {
-        toggleFullscreen();
+        if (videoMode) {
+          toggleVideoFullscreen();
+        } else {
+          toggleFullscreen();
+        }
       }
       if (key === "v") {
         toggleVideoMode();
@@ -368,6 +402,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setQrModal((val) => !val);
       }
       if (key === "escape") {
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
         setQrModal(false);
         setPairModalOpen(false);
       }
@@ -375,17 +412,260 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [engine]);
+  }, [engine, videoMode, toggleVideoFullscreen]);
 
-  // Master Remote Control synchronization (Realtime broadcast & DB state)
+  // Unified track list (live night queue -> runtime queue -> venue fallback -> demo)
+  const allTracks: PlayerTrack[] = useMemo(() => {
+    if (liveNightQueue.length > 0) {
+      if (
+        liveNightNowPlaying &&
+        !liveNightQueue.some((t) => t.itemId === liveNightNowPlaying.itemId)
+      ) {
+        return [liveNightNowPlaying, ...liveNightQueue];
+      }
+      return liveNightQueue;
+    }
+    if (playerState?.queue && playerState.queue.length > 0) {
+      if (
+        playerState.nowPlaying &&
+        !playerState.queue.some((t) => t.itemId === playerState.nowPlaying?.itemId)
+      ) {
+        return [playerState.nowPlaying, ...playerState.queue];
+      }
+      return playerState.queue;
+    }
+    if (playerState?.fallback && playerState.fallback.length > 0) {
+      return playerState.fallback;
+    }
+    if (liveFallbackTracks.length > 0) {
+      return liveFallbackTracks;
+    }
+    return [
+      {
+        itemId: demoNowPlaying.id,
+        trackId: demoNowPlaying.id,
+        title: demoNowPlaying.title,
+        artist: demoNowPlaying.artist,
+        source: demoNowPlaying.source,
+        durationSeconds: 332,
+        youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
+        thumbnailUrl: null,
+        voteCount: demoNowPlaying.votes,
+      },
+      ...demoQueue.map((item) => ({
+        itemId: item.id,
+        trackId: item.id,
+        title: item.title,
+        artist: item.artist,
+        source: item.source,
+        durationSeconds: 252,
+        youtubeVideoId: item.youtubeVideoId,
+        thumbnailUrl: null,
+        voteCount: item.votes,
+      })),
+    ];
+  }, [liveNightQueue, liveNightNowPlaying, playerState, liveFallbackTracks]);
+
+  // Now playing: prioritizing manualNowPlaying -> liveNightNowPlaying -> playerState.nowPlaying -> allTracks[0]
+  const nowPlaying: PlayerTrack | null = useMemo(() => {
+    if (manualNowPlaying) return manualNowPlaying;
+    if (liveNightNowPlaying) return liveNightNowPlaying;
+    if (playerState?.nowPlaying) return playerState.nowPlaying;
+    return allTracks[0] ?? null;
+  }, [manualNowPlaying, liveNightNowPlaying, playerState, allTracks]);
+
+  // Rotated queue: tracks coming after nowPlaying so every Skip genuinely advances to the next track
+  const queue: PlayerTrack[] = useMemo(() => {
+    if (!nowPlaying || allTracks.length === 0) return allTracks;
+    const idx = allTracks.findIndex(
+      (t) =>
+        t.itemId === nowPlaying.itemId ||
+        (t.trackId && t.trackId === nowPlaying.trackId) ||
+        (t.youtubeVideoId && t.youtubeVideoId === nowPlaying.youtubeVideoId),
+    );
+    if (idx === -1) return allTracks;
+    return [...allTracks.slice(idx + 1), ...allTracks.slice(0, idx)];
+  }, [allTracks, nowPlaying]);
+
+  // Load new track into the single YouTube iframe whenever nowPlaying changes
+  useEffect(() => {
+    if (nowPlaying && mounted) {
+      void engine.load(nowPlaying);
+    }
+  }, [nowPlaying, mounted, engine]);
+
+  const venueName =
+    nightState?.venue.name ||
+    playerState?.venue.name ||
+    "Billar Aurora";
+  const duration = videoDuration ?? nowPlaying?.durationSeconds ?? 210;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
+
+  // Refs for stable access inside Realtime callbacks & broadcast interval
+  const durationRef = useRef(duration);
+  durationRef.current = duration;
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
+  const nowPlayingRef = useRef(nowPlaying);
+  nowPlayingRef.current = nowPlaying;
+  const lastCommandSeqRef = useRef<number | null>(null);
+
+  function handleVolumeChange(newVol: number) {
+    setVolume(newVol);
+    engine.setVolume?.(newVol);
+    if (newVol > 0 && isMuted) {
+      setIsMuted(false);
+      engine.unMute?.();
+    }
+  }
+
+  const handleSeek = useCallback(
+    (targetSec: number) => {
+      const maxDur = durationRef.current || 210;
+      const clamped = Math.max(0, Math.min(maxDur, Math.floor(targetSec)));
+      setElapsed(clamped);
+      elapsedRef.current = clamped;
+      engine.seekTo?.(clamped);
+      setHudMessage(`⏩ Posición: ${formatDuration(clamped)}`);
+      setTimeout(() => setHudMessage(null), 2000);
+    },
+    [engine],
+  );
+
+  useEffect(() => {
+    handleSeekRef.current = handleSeek;
+  }, [handleSeek]);
+
+  const handleSeekDelta = useCallback(
+    (deltaSec: number) => {
+      handleSeek(elapsedRef.current + deltaSec);
+    },
+    [handleSeek],
+  );
+
+  const handleSeekClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+      const targetSec = Math.floor(pct * (durationRef.current || 210));
+      handleSeek(targetSec);
+    },
+    [handleSeek],
+  );
+
+  // Reset counters when new track is loaded
+  useEffect(() => {
+    setElapsed(0);
+    elapsedRef.current = 0;
+    setVideoDuration(null);
+  }, [nowPlaying?.itemId, nowPlaying?.youtubeVideoId]);
+
+  const handleSkipNext = useCallback(
+    async (fromRemote = false) => {
+      const candidates = queue.length > 0 ? queue : allTracks;
+      if (candidates.length > 0) {
+        const nextTrack = candidates[0];
+        setManualNowPlaying(nextTrack);
+        setElapsed(0);
+        elapsedRef.current = 0;
+        setVideoDuration(nextTrack.durationSeconds ?? null);
+        setIsPlaying(true);
+        void engine.load(nextTrack);
+        setHudMessage(`⏭️ Siguiente: ${nextTrack.title}`);
+        setTimeout(() => setHudMessage(null), 3000);
+
+        if (!fromRemote) {
+          try {
+            const { playTrackNow } = await import("@/lib/api/master-control");
+            await playTrackNow(slug, {
+              title: nextTrack.title,
+              artist: nextTrack.artist,
+              youtubeVideoId: nextTrack.youtubeVideoId ?? "T_FkEw27XJ0",
+              thumbnailUrl: nextTrack.thumbnailUrl,
+              durationSeconds: nextTrack.durationSeconds ?? undefined,
+              isKaraoke: nextTrack.isKaraoke,
+            });
+          } catch {
+            // Non-blocking fallback
+          }
+        }
+      } else {
+        setHudMessage("No hay más temas en la cola");
+        setTimeout(() => setHudMessage(null), 2500);
+      }
+    },
+    [slug, queue, allTracks, engine],
+  );
+
+  const handleRestartOrPrev = useCallback(() => {
+    const candidates = queue.length > 0 ? queue : allTracks;
+    if (elapsedRef.current <= 5 && candidates.length > 0) {
+      const prevTrack = candidates[candidates.length - 1];
+      setManualNowPlaying(prevTrack);
+      setElapsed(0);
+      elapsedRef.current = 0;
+      setVideoDuration(prevTrack.durationSeconds ?? null);
+      setIsPlaying(true);
+      void engine.load(prevTrack);
+      setHudMessage(`⏮️ Anterior: ${prevTrack.title}`);
+      setTimeout(() => setHudMessage(null), 2500);
+      return;
+    }
+    if (nowPlaying) {
+      setElapsed(0);
+      elapsedRef.current = 0;
+      engine.seekTo?.(0);
+      void engine.play();
+      setHudMessage(`⏮️ Reiniciando: ${nowPlaying.title}`);
+      setTimeout(() => setHudMessage(null), 2500);
+    }
+  }, [nowPlaying, queue, allTracks, engine]);
+
+  // Auto-advance exactly once when the video ends
+  const handleSkipNextRef = useRef(handleSkipNext);
+  useEffect(() => {
+    handleSkipNextRef.current = handleSkipNext;
+  }, [handleSkipNext]);
+
+  useEffect(
+    () =>
+      engine.onEnded(() => {
+        void handleSkipNextRef.current(false);
+      }),
+    [engine],
+  );
+
+  // Keyboard shortcuts for Skip (S) and Restart/Prev (R)
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key.toLowerCase() === "s") {
+        void handleSkipNext(false);
+      } else if (e.key.toLowerCase() === "r") {
+        handleRestartOrPrev();
+      }
+    }
+
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [handleSkipNext, handleRestartOrPrev]);
+
+  // Master Remote Control synchronization (Single persistent Realtime channel + progress broadcast)
   useEffect(() => {
     let active = true;
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
 
     // 1. Initial State from DB
     void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
       fetchPlaybackState(slug)
         .then((st) => {
           if (!active) return;
+          if (typeof st.commandSeq === "number") {
+            lastCommandSeqRef.current = st.commandSeq;
+          }
           if (typeof st.volume === "number") {
             setVolume(st.volume);
             engine.setVolume?.(st.volume);
@@ -411,8 +691,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         .catch(() => {});
     });
 
-    // 2. Realtime listener
-    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+    // 2. Single persistent Realtime listener & progress broadcaster
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
       if (!active) return;
       const supabase = createBrowserSupabase();
@@ -474,16 +753,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 return next;
               });
             } else if (cmd === "skip") {
-              setHudMessage("⏭️ Salteando Tema...");
-              setTimeout(() => setHudMessage(null), 3500);
-              setManualNowPlaying(null);
-              if (liveNightQueue.length > 0) {
-                setManualNowPlaying(liveNightQueue[0]);
-              } else if (playerState?.queue && playerState.queue.length > 0) {
-                setManualNowPlaying(playerState.queue[0]);
-              } else if (liveFallbackTracks.length > 1) {
-                setLiveFallbackTracks((prev) => prev.slice(1));
-              }
+              void handleSkipNextRef.current(true);
             } else if (cmd === "seek") {
               const sec = Number(p.seconds ?? 0);
               handleSeekRef.current(sec);
@@ -492,8 +762,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setManualNowPlaying(track);
               setIsPlaying(true);
               setVideoMode(true);
-              // Same video (e.g. "restart" from the panel) won't remount the iframe → rewind it
               setElapsed(0);
+              elapsedRef.current = 0;
+              void engine.load(track);
               engine.seekTo?.(0);
               void engine.play();
               setHudMessage(`🎵 Reproduciendo: ${track.title}`);
@@ -517,9 +788,27 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "venue_playback_state" },
-          (payload: { new?: { is_paused?: boolean; volume?: number; is_muted?: boolean; karaoke_mode?: boolean } }) => {
+          (payload: {
+            new?: {
+              is_paused?: boolean;
+              volume?: number;
+              is_muted?: boolean;
+              karaoke_mode?: boolean;
+              last_command?: string;
+              command_seq?: number;
+              current_track?: PlayerTrack;
+            };
+          }) => {
             if (!active || !payload.new) return;
             const st = payload.new;
+            const isNewCommand =
+              typeof st.command_seq === "number" &&
+              st.command_seq !== lastCommandSeqRef.current;
+
+            if (typeof st.command_seq === "number") {
+              lastCommandSeqRef.current = st.command_seq;
+            }
+
             if (typeof st.is_paused === "boolean") {
               setIsPlaying(!st.is_paused);
               if (st.is_paused) engine.pause?.();
@@ -538,239 +827,38 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setKaraokeMode(st.karaoke_mode);
               if (st.karaoke_mode) setVideoMode(true);
             }
+            if (isNewCommand && st.last_command === "skip") {
+              void handleSkipNextRef.current(true);
+            } else if (isNewCommand && st.last_command === "play_now" && st.current_track) {
+              setManualNowPlaying(st.current_track);
+              setElapsed(0);
+              elapsedRef.current = 0;
+              void engine.load(st.current_track);
+              engine.seekTo?.(0);
+              void engine.play();
+            }
           },
         )
         .subscribe();
     });
 
-    return () => {
-      active = false;
-      if (channel) {
-        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
-          const supabase = createBrowserSupabase();
-          void supabase.removeChannel(channel!);
-        });
-      }
-    };
-  }, [slug, engine, playerState, liveFallbackTracks, liveNightQueue]);
-
-  // Now playing: prioritizing manualNowPlaying -> liveNightNowPlaying -> playerState.nowPlaying -> liveNightQueue[0] -> fallback -> demo
-  const nowPlaying: PlayerTrack | null = useMemo(() => {
-    if (manualNowPlaying) return manualNowPlaying;
-    if (liveNightNowPlaying) return liveNightNowPlaying;
-    if (playerState?.nowPlaying) return playerState.nowPlaying;
-    if (liveNightQueue.length > 0) return liveNightQueue[0];
-    if (playerState?.queue && playerState.queue.length > 0) return playerState.queue[0];
-    if (playerState?.fallback && playerState.fallback.length > 0) return playerState.fallback[0];
-    if (liveFallbackTracks.length > 0) return liveFallbackTracks[0];
-
-    return {
-      itemId: demoNowPlaying.id,
-      trackId: demoNowPlaying.id,
-      title: demoNowPlaying.title,
-      artist: demoNowPlaying.artist,
-      source: demoNowPlaying.source,
-      durationSeconds: 332,
-      youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
-      thumbnailUrl: null,
-      voteCount: demoNowPlaying.votes,
-    };
-  }, [manualNowPlaying, liveNightNowPlaying, playerState, liveNightQueue, liveFallbackTracks]);
-
-  // Note: switching videos is driven by the iframe `src`/`key` (derived from nowPlaying)
-  // with autoplay=1, so no imperative load is needed here.
-
-  const queue: PlayerTrack[] = useMemo(() => {
-    if (liveNightQueue.length > 0) {
-      // If liveNightNowPlaying is playing the first track, or nowPlaying matches the first queue track, show rest
-      if (
-        (liveNightNowPlaying && liveNightNowPlaying.itemId === liveNightQueue[0]?.itemId) ||
-        (nowPlaying && nowPlaying.itemId === liveNightQueue[0]?.itemId)
-      ) {
-        return liveNightQueue.slice(1);
-      }
-      return liveNightQueue;
-    }
-
-    if (playerState?.queue && playerState.queue.length > 0) return playerState.queue;
-    if (liveFallbackTracks.length > 1) return liveFallbackTracks.slice(1);
-
-    return demoQueue.map((item) => ({
-      itemId: item.id,
-      trackId: item.id,
-      title: item.title,
-      artist: item.artist,
-      source: item.source,
-      durationSeconds: 252,
-      youtubeVideoId: item.youtubeVideoId,
-      thumbnailUrl: null,
-      voteCount: item.votes,
-    }));
-  }, [liveNightQueue, liveNightNowPlaying, nowPlaying, playerState, liveFallbackTracks]);
-
-  const venueName =
-    nightState?.venue.name ||
-    playerState?.venue.name ||
-    "Billar Aurora";
-  const duration = videoDuration ?? nowPlaying?.durationSeconds ?? 210;
-  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
-
-  function handleVolumeChange(newVol: number) {
-    setVolume(newVol);
-    engine.setVolume?.(newVol);
-    if (newVol > 0 && isMuted) {
-      setIsMuted(false);
-      engine.unMute?.();
-    }
-  }
-
-  const handleSeek = useCallback(
-    (targetSec: number) => {
-      const clamped = Math.max(0, Math.min(duration, targetSec));
-      setElapsed(clamped);
-      engine.seekTo?.(clamped);
-      setHudMessage(`⏩ Posición: ${formatDuration(clamped)}`);
-      setTimeout(() => setHudMessage(null), 2000);
-    },
-    [duration, engine]
-  );
-
-  useEffect(() => {
-    handleSeekRef.current = handleSeek;
-  }, [handleSeek]);
-
-  const handleSeekDelta = useCallback(
-    (deltaSec: number) => {
-      handleSeek(elapsed + deltaSec);
-    },
-    [elapsed, handleSeek]
-  );
-
-  const handleSeekClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, clickX / rect.width));
-      const targetSec = Math.floor(pct * duration);
-      handleSeek(targetSec);
-    },
-    [duration, handleSeek]
-  );
-
-  // Reset counters when new track is loaded
-  useEffect(() => {
-    setElapsed(0);
-    setVideoDuration(null);
-  }, [nowPlaying?.itemId]);
-
-  const handleSkipNext = useCallback(async () => {
-    try {
-      const { skipPlayback } = await import("@/lib/api/master-control");
-      await skipPlayback(slug);
-    } catch {
-      // Non-blocking fallback
-    }
-
-    if (queue.length > 0) {
-      const nextTrack = queue[0];
-      setManualNowPlaying(nextTrack);
-      setElapsed(0);
-      setHudMessage(`⏭️ Siguiente: ${nextTrack.title}`);
-      setTimeout(() => setHudMessage(null), 3000);
-    } else if (liveFallbackTracks.length > 1) {
-      setLiveFallbackTracks(liveFallbackTracks.slice(1));
-      setElapsed(0);
-    } else {
-      setHudMessage("No hay más temas en la cola");
-      setTimeout(() => setHudMessage(null), 2500);
-    }
-  }, [slug, queue, liveFallbackTracks]);
-
-  const handleRestartOrPrev = useCallback(() => {
-    if (nowPlaying) {
-      setElapsed(0);
-      engine.seekTo?.(0);
-      void engine.play();
-      setHudMessage(`⏮️ Reiniciando: ${nowPlaying.title}`);
-      setTimeout(() => setHudMessage(null), 2500);
-    }
-  }, [nowPlaying, engine]);
-
-  // Auto-advance exactly once when the video ends (engine de-duplicates YouTube's repeated "ended")
-  const handleSkipNextRef = useRef(handleSkipNext);
-  useEffect(() => {
-    handleSkipNextRef.current = handleSkipNext;
-  }, [handleSkipNext]);
-
-  useEffect(
-    () =>
-      engine.onEnded(() => {
-        void handleSkipNextRef.current();
-      }),
-    [engine],
-  );
-
-  // Play/pause state reported by the iframe, and keyboard shortcuts
-  useEffect(() => {
-    function onIframeMsg(e: MessageEvent) {
-      if (!iframeRef.current?.contentWindow || e.source !== iframeRef.current.contentWindow) return;
-      try {
-        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (!data) return;
-
-        let state: number | null = null;
-        if ((data.event === "infoDelivery" || data.event === "initialDelivery") && typeof data.info?.playerState === "number") {
-          state = data.info.playerState;
-        } else if (data.event === "onStateChange" && typeof data.info === "number") {
-          state = data.info;
-        }
-        if (state === 1) setIsPlaying(true);
-        else if (state === 2) setIsPlaying(false);
-      } catch {}
-    }
-
-    function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.key.toLowerCase() === "s") {
-        void handleSkipNext();
-      } else if (e.key.toLowerCase() === "r") {
-        handleRestartOrPrev();
-      }
-    }
-
-    window.addEventListener("message", onIframeMsg);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("message", onIframeMsg);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [handleSkipNext, handleRestartOrPrev]);
-
-  // Broadcast live TV playback progress to the Admin Panel every 1.5s
-  useEffect(() => {
-    let active = true;
-    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
-
-    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
-      if (!active) return;
-      const supabase = createBrowserSupabase();
-      channel = supabase.channel(`playback-control:${slug}`);
-    });
-
+    // 3. Broadcast live TV playback progress to Admin Panel every 1s over the SAME subscribed channel
     const broadcastTimer = setInterval(() => {
-      if (channel && isPlaying && nowPlaying) {
+      const track = nowPlayingRef.current;
+      if (channel && track) {
         void channel.send({
           type: "broadcast",
           event: "tv_playback_progress",
           payload: {
-            currentTime: elapsed,
-            duration,
-            isPaused: !isPlaying,
-            trackId: nowPlaying.trackId,
+            currentTime: elapsedRef.current,
+            duration: durationRef.current,
+            isPaused: !isPlayingRef.current,
+            trackId: track.trackId,
+            track,
           },
         });
       }
-    }, 1500);
+    }, 1000);
 
     return () => {
       active = false;
@@ -782,7 +870,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         });
       }
     };
-  }, [slug, elapsed, duration, isPlaying, nowPlaying]);
+  }, [slug, engine]);
 
   return (
     <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
@@ -1014,20 +1102,23 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           {/* When videoMode is TRUE: Centered 16:9 Video Canvas */}
           {/* When videoMode is FALSE: Off-screen continuous audio playback */}
           <div
+            ref={videoContainerRef}
             className={
-              videoMode
-                ? "relative w-full aspect-video max-h-[520px] lg:max-h-[580px] xl:max-h-[640px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
-                : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
+              isVideoFullscreen
+                ? "fixed inset-0 z-50 w-screen h-screen bg-black flex flex-col justify-between overflow-hidden"
+                : videoMode
+                  ? "relative w-full aspect-video max-h-[520px] lg:max-h-[580px] xl:max-h-[640px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
+                  : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
-            <div className="w-full h-full">
+            <div className="w-full h-full relative">
               {mounted && (
                 <iframe
+                  id="poneleplay-tv-iframe"
                   ref={iframeRef}
-                  key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
-                  src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+                  src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
                   title={nowPlaying?.title || "TV Player"}
-                  className="w-full h-full border-0"
+                  className="w-full h-full border-0 pointer-events-none select-none"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   onLoad={() => {
@@ -1035,25 +1126,170 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   }}
                 />
               )}
-            </div>
-            {videoMode && (
-              <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">
-                <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
-                <span>EN VIVO · YOUTUBE PLAYER 1080p</span>
-              </div>
-            )}
-            {/* Click to unmute overlay */}
-            {!audioUnlocked && videoMode && (
-              <button
-                type="button"
-                onClick={handleUnlockAudio}
-                className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs cursor-pointer group-hover:bg-black/50 transition-colors"
-              >
-                <div className="px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-mono text-xs font-bold shadow-2xl flex items-center gap-2 animate-bounce">
-                  <Volume2 className="size-5" />
-                  <span>CLIC PARA ACTIVAR AUDIO DEL SALÓN</span>
+
+              {/* TRANSPARENT PROTECTION OVERLAY: Blocks any internal click or navigation on YouTube video */}
+              <div
+                className="absolute inset-0 z-10 cursor-default"
+                onDoubleClick={toggleVideoFullscreen}
+                title="Doble clic para pantalla completa de video"
+              />
+
+              {videoMode && !isVideoFullscreen && (
+                <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg z-20">
+                  <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
+                  <span>EN VIVO · VIDEO SALÓN HD</span>
                 </div>
-              </button>
+              )}
+
+              {/* Dedicated video fullscreen button top-right on video */}
+              {videoMode && !isVideoFullscreen && (
+                <button
+                  type="button"
+                  onClick={toggleVideoFullscreen}
+                  className="absolute top-3 right-3 z-20 size-8 rounded-lg bg-[#0a0e17]/85 hover:bg-[#181b25] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-lg active:scale-90"
+                  title="Pantalla completa del video (F)"
+                >
+                  <Maximize2 className="size-4 text-cyan-400" />
+                </button>
+              )}
+
+              {/* Click to unmute overlay */}
+              {!audioUnlocked && videoMode && (
+                <button
+                  type="button"
+                  onClick={handleUnlockAudio}
+                  className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs cursor-pointer group-hover:bg-black/50 transition-colors"
+                >
+                  <div className="px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-mono text-xs font-bold shadow-2xl flex items-center gap-2 animate-bounce">
+                    <Volume2 className="size-5" />
+                    <span>CLIC PARA ACTIVAR AUDIO DEL SALÓN</span>
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {/* FULLSCREEN HUD: When video is fullscreen, show floating song info and controls */}
+            {isVideoFullscreen && (
+              <div className="absolute inset-0 z-20 flex flex-col justify-between p-6 pointer-events-none bg-gradient-to-b from-black/80 via-transparent to-black/90">
+                {/* Header in Fullscreen */}
+                <div className="flex items-center justify-between pointer-events-auto">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-indigo-500/30 text-white border border-indigo-400/50 px-3 py-1 rounded-md font-mono text-xs font-bold flex items-center gap-2 backdrop-blur-md">
+                      <span className="size-2 rounded-full bg-cyan-400 animate-ping" />
+                      <span>{venueName.toUpperCase()} · PANTALLA COMPLETA</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleVideoFullscreen}
+                    className="size-10 rounded-xl bg-black/60 hover:bg-black/80 border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all active:scale-90"
+                    title="Salir de pantalla completa (Esc o F)"
+                  >
+                    <Minimize2 className="size-5" />
+                  </button>
+                </div>
+
+                {/* Bottom HUD in Fullscreen */}
+                <div className="pointer-events-auto max-w-4xl mx-auto w-full bg-black/75 backdrop-blur-xl border border-white/15 p-4 rounded-2xl shadow-2xl">
+                  {/* Track Info */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="min-w-0 pr-4">
+                      <h2 className="text-xl font-bold text-white truncate drop-shadow-md">
+                        {nowPlaying?.title || "PonelePlay"}
+                      </h2>
+                      <p className="text-xs text-slate-300 font-medium truncate">
+                        {nowPlaying?.artist || venueName}
+                      </p>
+                    </div>
+                    <div className="font-mono text-xs text-slate-300">
+                      <span className="text-cyan-400 font-bold">{formatDuration(elapsed)}</span> /{" "}
+                      <span className="text-slate-400">{formatDuration(duration)}</span>
+                    </div>
+                  </div>
+
+                  {/* Scrubber */}
+                  <div
+                    onClick={handleSeekClick}
+                    className="group/fs-scrub relative w-full h-5 flex items-center cursor-pointer select-none py-1 mb-2"
+                  >
+                    <div className="w-full h-2 group-hover/fs-scrub:h-3 bg-white/20 rounded-full overflow-hidden relative transition-all">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 via-cyan-400 to-indigo-400 rounded-full relative"
+                        style={{ width: `${progressPercent}%` }}
+                      >
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 size-3.5 bg-white rounded-full shadow-lg" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={handleRestartOrPrev}
+                        className="size-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+                        title="Reiniciar tema (R)"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">replay</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSeekDelta(-10)}
+                        className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs flex items-center gap-1 transition-all"
+                        title="-10s"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">replay_10</span>
+                        <span>-10s</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsPlaying((p) => {
+                            const n = !p;
+                            if (n) void engine.play?.();
+                            else engine.pause?.();
+                            return n;
+                          });
+                        }}
+                        className="size-10 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white flex items-center justify-center shadow-lg transition-all"
+                      >
+                        <span className="material-symbols-outlined text-[24px]">
+                          {isPlaying ? "pause" : "play_arrow"}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSeekDelta(10)}
+                        className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs flex items-center gap-1 transition-all"
+                        title="+10s"
+                      >
+                        <span>+10s</span>
+                        <span className="material-symbols-outlined text-[16px]">forward_10</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSkipNext()}
+                        className="size-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+                        title="Saltear al siguiente (S)"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">skip_next</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={toggleVideoFullscreen}
+                        className="size-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
+                        title="Salir de pantalla completa (Esc o F)"
+                      >
+                        <Minimize2 className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
@@ -1239,6 +1475,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 >
                   <span className="material-symbols-outlined text-[18px]">skip_next</span>
                 </button>
+
+                {/* Video Fullscreen Mode */}
+                {videoMode && (
+                  <button
+                    type="button"
+                    onClick={toggleVideoFullscreen}
+                    className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 ml-1"
+                    title="Pantalla completa del video (F)"
+                  >
+                    <Maximize2 className="size-4" />
+                  </button>
+                )}
               </div>
 
               {/* Attribution info */}
