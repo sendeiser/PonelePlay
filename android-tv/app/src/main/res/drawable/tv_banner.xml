@@ -1,49 +1,88 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Background Card -->
-    <item>
-        <shape android:shape="rectangle">
-            <solid android:color="#0a0e17" />
-            <stroke
-                android:width="2dp"
-                android:color="#232b42" />
-            <corners android:radius="12dp" />
-        </shape>
-    </item>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
 
-    <!-- Center Accent Gradient -->
-    <item
-        android:bottom="20dp"
-        android:left="20dp"
-        android:right="20dp"
-        android:top="20dp">
-        <shape android:shape="rectangle">
+    <!-- Card Background -->
+    <path
+        android:fillColor="#0A0E17"
+        android:pathData="M0,0h320v180h-320z" />
+
+    <!-- Ambient Card Gradient -->
+    <path android:pathData="M8,8h304v164h-304z">
+        <aapt:attr name="android:fillColor">
             <gradient
-                android:angle="135"
-                android:endColor="#141824"
-                android:startColor="#1e1b4b" />
-            <corners android:radius="8dp" />
-        </shape>
-    </item>
+                android:startX="8"
+                android:startY="8"
+                android:endX="312"
+                android:endY="172"
+                android:type="linear">
+                <item android:color="#181B25" android:offset="0.0" />
+                <item android:color="#0F131C" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
 
-    <!-- App Logo Icon Center -->
-    <item
-        android:gravity="center"
-        android:width="80dp"
-        android:height="80dp">
-        <vector
-            android:width="80dp"
-            android:height="80dp"
-            android:viewportWidth="24"
-            android:viewportHeight="24">
-            <!-- Music Wave / Jukebox Icon -->
-            <path
-                android:fillColor="#4f46e5"
-                android:pathData="M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55 -2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4V7h4V3h-6z" />
-            <path
-                android:fillColor="#22d3ee"
-                android:pathData="M6,10h2v4H6zM2,12h2v2H2zM18,10h2v4h-2z" />
-        </vector>
-    </item>
-</layer-list>
+    <!-- Outer Border -->
+    <path
+        android:strokeColor="#232B42"
+        android:strokeWidth="2"
+        android:pathData="M8,8h304v164h-304z" />
 
+    <!-- Logo Box (Left) -->
+    <path
+        android:pathData="M40,46h60c6.6,0 12,5.4 12,12v64c0,6.6 -5.4,12 -12,12H40c-6.6,0 -12,-5.4 -12,-12V58c0,-6.6 5.4,-12 12,-12z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="28"
+                android:startY="46"
+                android:endX="112"
+                android:endY="134"
+                android:type="linear">
+                <item android:color="#4F46E5" android:offset="0.0" />
+                <item android:color="#7C3AED" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Logo Equalizer Bars -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,82h4c1.1,0 2,0.9 2,2v14c0,1.1 -0.9,2 -2,2h-4c-1.1,0 -2,-0.9 -2,-2V84c0,-1.1 0.9,-2 2,-2z" />
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M58,72h4c1.1,0 2,0.9 2,2v34c0,1.1 -0.9,2 -2,2h-4c-1.1,0 -2,-0.9 -2,-2V74c0,-1.1 0.9,-2 2,-2z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,62h4c1.1,0 2,0.9 2,2v54c0,1.1 -0.9,2 -2,2h-4c-1.1,0 -2,-0.9 -2,-2V64c0,-1.1 0.9,-2 2,-2z" />
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M78,74h4c1.1,0 2,0.9 2,2v30c0,1.1 -0.9,2 -2,2h-4c-1.1,0 -2,-0.9 -2,-2V76c0,-1.1 0.9,-2 2,-2z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M88,86h4c1.1,0 2,0.9 2,2v10c0,1.1 -0.9,2 -2,2h-4c-1.1,0 -2,-0.9 -2,-2V88c0,-1.1 0.9,-2 2,-2z" />
+
+    <!-- Live indicator -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M102,42a5,5 0 1,0 10,0a5,5 0 1,0 -10,0" />
+
+    <!-- Text: PONELEPLAY (Simulated Vector Geometry) -->
+    <!-- Pill Badge: PANTALLA TV -->
+    <path
+        android:pathData="M136,54h110c4.4,0 8,3.6 8,8v10c0,4.4 -3.6,8 -8,8H136c-4.4,0 -8,-3.6 -8,-8V62c0,-4.4 3.6,-8 8,-8z"
+        android:fillColor="#232B42" />
+
+    <!-- Indicator Cyan Dot in Badge -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M144,67a3,3 0 1,0 6,0a3,3 0 1,0 -6,0" />
+
+    <!-- Decorative Audio Visualizer Waves (Right Bottom) -->
+    <path
+        android:fillColor="#4F46E5"
+        android:pathData="M136,96h8v24h-8zM150,90h8v30h-8zM164,84h8v36h-8zM178,92h8v28h-8zM192,100h8v20h-8zM206,88h8v32h-8zM220,80h8v40h-8zM234,94h8v26h-8zM248,102h8v18h-8z" />
+</vector>

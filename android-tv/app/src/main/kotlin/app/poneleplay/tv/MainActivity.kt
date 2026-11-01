@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.SoundEffectConstants
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -15,21 +16,29 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -37,6 +46,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import app.poneleplay.tv.ui.theme.PonelePlayTVTheme
+import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
 
@@ -92,6 +102,67 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/**
+ * TV D-Pad Focusable Button with prominent visual feedback (scale, border, bright colors).
+ */
+@Composable
+fun TVButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    isPrimary: Boolean = false,
+    focusRequester: FocusRequester? = null
+) {
+    val view = LocalView.current
+    var isFocused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(targetValue = if (isFocused) 1.08f else 1.0f, label = "button_scale")
+
+    val backgroundColor = when {
+        isFocused -> Color(0xFF22D3EE) // Bright Cyan on Focus
+        isPrimary -> Color(0xFF4F46E5) // Solid Indigo
+        else -> Color(0xFF141824)     // Dark Card
+    }
+
+    val textColor = when {
+        isFocused -> Color(0xFF0A0E17) // Dark text on bright cyan
+        else -> Color.White
+    }
+
+    val borderColor = when {
+        isFocused -> Color.White
+        else -> Color(0xFF232B42)
+    }
+
+    Box(
+        modifier = modifier
+            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .scale(scale)
+            .onFocusChanged { focusState ->
+                if (focusState.isFocused && !isFocused) {
+                    view.playSoundEffect(SoundEffectConstants.NAVIGATION_RIGHT)
+                }
+                isFocused = focusState.isFocused
+            }
+            .focusable()
+            .clickable {
+                view.playSoundEffect(SoundEffectConstants.CLICK)
+                onClick()
+            }
+            .background(backgroundColor, RoundedCornerShape(12.dp))
+            .border(if (isFocused) 3.dp else 1.5.dp, borderColor, RoundedCornerShape(12.dp))
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = textColor,
+            fontSize = 14.sp,
+            fontWeight = if (isFocused) FontWeight.ExtraBold else FontWeight.SemiBold,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun TVPlayerApp(
@@ -102,11 +173,15 @@ fun TVPlayerApp(
     onBindWebView: (WebView) -> Unit,
     onExitApp: () -> Unit
 ) {
+    // Default to the computer's detected local IP or saved preference
+    val defaultLocalIp = "http://192.168.18.2:3000"
+    val defaultCloud = "https://poneleplay.app"
+
     var venueSlug by remember {
         mutableStateOf(prefs.getString("venue_slug", "billar-aurora") ?: "billar-aurora")
     }
     var serverUrl by remember {
-        mutableStateOf(prefs.getString("server_url", "https://poneleplay.app") ?: "https://poneleplay.app")
+        mutableStateOf(prefs.getString("server_url", defaultLocalIp) ?: defaultLocalIp)
     }
     var currentUrl by remember {
         mutableStateOf("${serverUrl.trimEnd('/')}/player/$venueSlug")
@@ -116,12 +191,35 @@ fun TVPlayerApp(
     var hasError by remember { mutableStateOf(false) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
+    val errorFocusRequester = remember { FocusRequester() }
+    val settingsFocusRequester = remember { FocusRequester() }
+
     // Intercept Back button on TV remote
     BackHandler(enabled = true) {
         if (showSettings) {
             onDismissSettings()
         } else {
             onOpenSettings()
+        }
+    }
+
+    // Auto-focus the first button on error screen
+    LaunchedEffect(hasError) {
+        if (hasError) {
+            delay(150)
+            try {
+                errorFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Auto-focus when settings open
+    LaunchedEffect(showSettings) {
+        if (showSettings) {
+            delay(150)
+            try {
+                settingsFocusRequester.requestFocus()
+            } catch (_: Exception) {}
         }
     }
 
@@ -139,7 +237,6 @@ fun TVPlayerApp(
                     settings.apply {
                         javaScriptEnabled = true
                         domStorageEnabled = true
-                        databaseEnabled = true
                         mediaPlaybackRequiresUserGesture = false // Key for auto-playing music/video on TV!
                         allowFileAccess = true
                         allowContentAccess = true
@@ -209,77 +306,151 @@ fun TVPlayerApp(
         )
 
         // Loading Indicator Overlay
-        if (isLoading) {
+        if (isLoading && !hasError) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0x990A0E17)),
+                    .background(Color(0xCC0A0E17)),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(
-                        color = Color(0xFF4F46E5),
-                        strokeWidth = 3.dp
+                        color = Color(0xFF22D3EE),
+                        strokeWidth = 4.dp,
+                        modifier = Modifier.size(48.dp)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = "Conectando con la sala...",
+                        text = "Conectando con la pantalla del salón...",
                         color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = currentUrl,
+                        color = Color(0xFF94A3B8),
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }
         }
 
-        // Connection Error / Offline Overlay
+        // Connection Error Screen with D-Pad Navigable Quick Options
         if (hasError) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xE60A0E17)),
+                    .background(Color(0xEE0A0E17)),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
+                Card(
+                    modifier = Modifier
+                        .width(620.dp)
+                        .padding(24.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF141824)),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp)
                 ) {
-                    Text(
-                        text = "⚠️ No se pudo conectar con el servidor",
-                        color = Color(0xFFEF4444),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Verificá la conexión a Internet de la TV o la URL: $currentUrl",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 14.sp
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        Button(
-                            onClick = {
-                                hasError = false
-                                isLoading = true
-                                webViewRef?.reload()
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(28.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ No se pudo conectar con el servidor",
+                            color = Color(0xFFEF4444),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "La URL intentada no respondió:",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = currentUrl,
+                            color = Color(0xFF22D3EE),
+                            fontSize = 13.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "Elegí una conexión rápida con el control remoto:",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Quick Connection Buttons (D-Pad Navigable)
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Reintentar Conexión")
-                        }
-                        OutlinedButton(
-                            onClick = onOpenSettings,
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                        ) {
-                            Text("Ajustes del Bar")
+                            TVButton(
+                                text = "💻 Conectar a PC Local ($defaultLocalIp)",
+                                onClick = {
+                                    serverUrl = defaultLocalIp
+                                    prefs.edit().putString("server_url", defaultLocalIp).apply()
+                                    currentUrl = "$defaultLocalIp/player/$venueSlug"
+                                    hasError = false
+                                    isLoading = true
+                                    webViewRef?.loadUrl(currentUrl)
+                                },
+                                isPrimary = true,
+                                focusRequester = errorFocusRequester,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            TVButton(
+                                text = "🌐 Conectar a Servidor Cloud ($defaultCloud)",
+                                onClick = {
+                                    serverUrl = defaultCloud
+                                    prefs.edit().putString("server_url", defaultCloud).apply()
+                                    currentUrl = "$defaultCloud/player/$venueSlug"
+                                    hasError = false
+                                    isLoading = true
+                                    webViewRef?.loadUrl(currentUrl)
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                TVButton(
+                                    text = "🔄 Reintentar",
+                                    onClick = {
+                                        hasError = false
+                                        isLoading = true
+                                        webViewRef?.reload()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                TVButton(
+                                    text = "⚙️ Cambiar URL o Bar",
+                                    onClick = onOpenSettings,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Remote Setup & Settings Modal Dialog
+        // Full Settings Modal Dialog (Accessible via TV Remote MENU / BACK)
         if (showSettings) {
             var tempSlug by remember { mutableStateOf(venueSlug) }
             var tempServer by remember { mutableStateOf(serverUrl) }
@@ -287,16 +458,16 @@ fun TVPlayerApp(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xCC000000)),
+                    .background(Color(0xDD000000)),
                 contentAlignment = Alignment.Center
             ) {
                 Card(
                     modifier = Modifier
-                        .width(480.dp)
-                        .padding(16.dp),
-                    shape = RoundedCornerShape(16.dp),
+                        .width(560.dp)
+                        .padding(20.dp),
+                    shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF141824)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 20.dp)
                 ) {
                     Column(
                         modifier = Modifier
@@ -305,45 +476,50 @@ fun TVPlayerApp(
                         horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = "⚙️ Configuración de Pantalla TV",
+                            text = "⚙️ Ajustes de Pantalla PonelePlay TV",
                             color = Color.White,
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Ajustá la sala asignada a este televisor",
+                            text = "Configurá la dirección del servidor y el identificador del bar",
                             color = Color(0xFF94A3B8),
                             fontSize = 12.sp,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
 
-                        // Venue Slug Input
+                        // Presets Row
                         Text(
-                            text = "Identificador del Bar (Slug):",
+                            text = "Servidores Frecuentes:",
                             color = Color(0xFFCBD5E1),
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
-                        OutlinedTextField(
-                            value = tempSlug,
-                            onValueChange = { tempSlug = it.trim().lowercase() },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedBorderColor = Color(0xFF4F46E5),
-                                unfocusedBorderColor = Color(0xFF232B42)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            TVButton(
+                                text = "PC Local (:3000)",
+                                onClick = { tempServer = defaultLocalIp },
+                                focusRequester = settingsFocusRequester,
+                                modifier = Modifier.weight(1f)
                             )
-                        )
+                            TVButton(
+                                text = "PonelePlay Cloud",
+                                onClick = { tempServer = defaultCloud },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         // Server URL Input
                         Text(
-                            text = "Servidor Web:",
+                            text = "Dirección del Servidor (URL):",
                             color = Color(0xFFCBD5E1),
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         OutlinedTextField(
@@ -352,23 +528,48 @@ fun TVPlayerApp(
                             singleLine = true,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 8.dp),
+                                .padding(vertical = 4.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White,
-                                focusedBorderColor = Color(0xFF4F46E5),
+                                focusedBorderColor = Color(0xFF22D3EE),
                                 unfocusedBorderColor = Color(0xFF232B42)
                             )
                         )
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
-                        // Action Buttons
+                        // Venue Slug Input
+                        Text(
+                            text = "Identificador del Bar (Slug de sala):",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        OutlinedTextField(
+                            value = tempSlug,
+                            onValueChange = { tempSlug = it.trim().lowercase() },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF22D3EE),
+                                unfocusedBorderColor = Color(0xFF232B42)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Actions
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Button(
+                            TVButton(
+                                text = "Guardar y Conectar",
                                 onClick = {
                                     venueSlug = tempSlug
                                     serverUrl = tempServer
@@ -378,35 +579,29 @@ fun TVPlayerApp(
                                         .apply()
 
                                     currentUrl = "${tempServer.trimEnd('/')}/player/$tempSlug"
+                                    hasError = false
+                                    isLoading = true
                                     webViewRef?.loadUrl(currentUrl)
                                     onDismissSettings()
                                 },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5))
-                            ) {
-                                Text("Guardar y Conectar")
-                            }
+                                isPrimary = true,
+                                modifier = Modifier.weight(1.2f)
+                            )
 
-                            OutlinedButton(
-                                onClick = {
-                                    webViewRef?.reload()
-                                    onDismissSettings()
-                                },
-                                modifier = Modifier.weight(0.7f),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                            ) {
-                                Text("Recargar")
-                            }
+                            TVButton(
+                                text = "Cancelar",
+                                onClick = onDismissSettings,
+                                modifier = Modifier.weight(0.8f)
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        TextButton(
+                        TVButton(
+                            text = "Cerrar Aplicación",
                             onClick = onExitApp,
                             modifier = Modifier.align(Alignment.CenterHorizontally)
-                        ) {
-                            Text("Salir de la App", color = Color(0xFF94A3B8), fontSize = 12.sp)
-                        }
+                        )
                     }
                 }
             }

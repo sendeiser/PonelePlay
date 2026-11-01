@@ -50,3 +50,4 @@ cd android-tv
 
 El archivo generado se guarda en:
 `android-tv/app/build/outputs/apk/debug/app-debug.apk`
+
