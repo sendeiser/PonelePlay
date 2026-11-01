@@ -7,6 +7,7 @@ import type { QueueItemView } from "@/lib/api/contracts";
 
 interface NowPlayingCardProps {
   item: QueueItemView | null;
+  slug?: string;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -16,28 +17,111 @@ function formatDuration(seconds: number | null): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function NowPlayingCard({ item }: NowPlayingCardProps) {
+export function NowPlayingCard({ item, slug }: NowPlayingCardProps) {
   const [elapsed, setElapsed] = useState(0);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [isLiveSynced, setIsLiveSynced] = useState(false);
 
+  // Reset counters when track changes
   useEffect(() => {
-    if (!item?.durationSeconds) {
-      setElapsed(0);
-      return;
-    }
+    setElapsed(0);
+    setVideoDuration(item?.durationSeconds ?? null);
+    setIsPaused(false);
+  }, [item?.id, item?.trackId, item?.durationSeconds]);
 
-    // Realistic elapsed calculation based on creation / play timestamp
-    const startTime = new Date(item.createdAt).getTime();
-    const updateElapsed = () => {
-      const now = Date.now();
-      const diffSecs = Math.max(0, Math.floor((now - startTime) / 1000));
-      const dur = item.durationSeconds ?? 180;
-      setElapsed(diffSecs % dur);
+  // Realtime synchronization with TV player & Admin controls
+  useEffect(() => {
+    if (!slug) return;
+    let active = true;
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+
+    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+      if (!active) return;
+      try {
+        const supabase = createBrowserSupabase();
+
+        channel = supabase
+          .channel(`playback-control:${slug}`)
+          .on(
+            "broadcast",
+            { event: "tv_playback_progress" },
+            (msg: {
+              payload?: {
+                currentTime?: number;
+                duration?: number;
+                isPaused?: boolean;
+                trackId?: string;
+              };
+            }) => {
+              if (!active || !msg.payload) return;
+              const { currentTime, duration: d, isPaused: p } = msg.payload;
+              if (typeof currentTime === "number" && !isNaN(currentTime)) {
+                setElapsed(Math.floor(currentTime));
+                setIsLiveSynced(true);
+              }
+              if (typeof d === "number" && !isNaN(d) && d > 0) {
+                setVideoDuration(Math.floor(d));
+              }
+              if (typeof p === "boolean") {
+                setIsPaused(p);
+              }
+            },
+          )
+          .on(
+            "broadcast",
+            { event: "playback_command" },
+            (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
+              if (!active) return;
+              const cmd = msg.payload?.command;
+              const p = msg.payload?.payload || {};
+              if (cmd === "pause") setIsPaused(true);
+              else if (cmd === "resume") setIsPaused(false);
+              else if (cmd === "toggle_pause") setIsPaused((prev) => !prev);
+              else if (cmd === "seek" && typeof p.seconds === "number") {
+                setElapsed(Math.floor(p.seconds));
+              } else if (cmd === "play_now") {
+                setElapsed(0);
+                setIsPaused(false);
+              }
+            },
+          )
+          .subscribe();
+      } catch {
+        // Safe fallback in test or SSR environments without Supabase credentials
+      }
+    });
+
+    return () => {
+      active = false;
+      if (channel) {
+        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+          try {
+            const supabase = createBrowserSupabase();
+            void supabase.removeChannel(channel!);
+          } catch {
+            // Ignore in test or unconfigured env
+          }
+        });
+      }
     };
+  }, [slug]);
 
-    updateElapsed();
-    const interval = setInterval(updateElapsed, 1000);
-    return () => clearInterval(interval);
-  }, [item]);
+  // Smooth local ticker between 1s TV progress broadcasts
+  useEffect(() => {
+    if (!item) return;
+    if (isPaused) return;
+
+    const timer = setInterval(() => {
+      setElapsed((prev) => {
+        const maxDur = videoDuration ?? item.durationSeconds ?? 210;
+        if (prev >= maxDur) return maxDur;
+        return prev + 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [item, isPaused, videoDuration]);
 
   if (!item) {
     return (
@@ -167,8 +251,10 @@ export function NowPlayingCard({ item }: NowPlayingCardProps) {
         <div className="flex justify-between items-center font-mono text-xs text-slate-400">
           <span>{formatDuration(elapsed)}</span>
           <span className="flex items-center gap-1 text-indigo-400 font-semibold text-[11px]">
-            <span className="material-symbols-outlined text-[13px]">graphic_eq</span>
-            Sincronizado
+            <span className="material-symbols-outlined text-[13px]">
+              {isPaused ? "pause" : "graphic_eq"}
+            </span>
+            {isPaused ? "En Pausa" : isLiveSynced ? "Sincronizado" : "En Vivo"}
           </span>
           <span>{formatDuration(duration)}</span>
         </div>

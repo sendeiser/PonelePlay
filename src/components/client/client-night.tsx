@@ -181,7 +181,7 @@ export function ClientNight({ slug }: { slug: string }) {
               className="space-y-4"
             >
               {/* NOW PLAYING HERO CARD */}
-              <NowPlayingCard item={state.nowPlaying} />
+              <NowPlayingCard item={state.nowPlaying} slug={slug} />
 
               {/* PROPOSE SONG CTA BANNER */}
               <section className="relative bg-[#131826] rounded-xl p-1.5 border border-[#1E2538] shadow-md hover:border-indigo-500/40 transition-colors">

@@ -286,11 +286,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     const onFsChange = () => {
       const isFs = Boolean(document.fullscreenElement);
       setIsFullscreen(isFs);
-      const isVideoFs =
-        Boolean(videoContainerRef.current) &&
-        document.fullscreenElement === videoContainerRef.current;
-      setIsVideoFullscreen(isVideoFs);
-      isVideoFullscreenRef.current = isVideoFs;
+      if (!isFs && isVideoFullscreenRef.current) {
+        setIsVideoFullscreen(false);
+        isVideoFullscreenRef.current = false;
+      }
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
@@ -309,7 +308,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       const next = !prev;
       isVideoFullscreenRef.current = next;
       if (next) {
-        videoContainerRef.current?.requestFullscreen().catch(() => {});
+        setVideoMode(true);
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
       } else if (document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
@@ -797,7 +799,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 if (next) {
                   setVideoMode(true);
                   setHudMessage("🖥️ Pantalla Completa Activada desde Panel");
-                  videoContainerRef.current?.requestFullscreen().catch(() => {});
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                  }
                 } else {
                   setHudMessage("🖥️ Modo Normal Restaurado desde Panel");
                   if (document.fullscreenElement) {
@@ -814,7 +818,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               if (enableFs) {
                 setVideoMode(true);
                 setHudMessage("🖥️ Pantalla Completa Activada desde Panel");
-                videoContainerRef.current?.requestFullscreen().catch(() => {});
+                if (!document.fullscreenElement) {
+                  document.documentElement.requestFullscreen().catch(() => {});
+                }
               } else {
                 setHudMessage("🖥️ Modo Normal Restaurado desde Panel");
                 if (document.fullscreenElement) {
@@ -876,13 +882,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               void engine.load(st.current_track);
               engine.seekTo?.(0);
               void engine.play();
-            } else if (isNewCommand && st.last_command === "toggle_fullscreen") {
+            } else if (isNewCommand && (st.last_command === "toggle_fullscreen" || st.last_command === "set_fullscreen")) {
               setIsVideoFullscreen((prev) => {
-                const next = !prev;
+                const next = st.last_command === "set_fullscreen" ? true : !prev;
                 isVideoFullscreenRef.current = next;
                 if (next) {
                   setVideoMode(true);
-                  videoContainerRef.current?.requestFullscreen().catch(() => {});
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                  }
                 } else if (document.fullscreenElement) {
                   document.exitFullscreen().catch(() => {});
                 }
@@ -926,7 +934,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, [slug, engine]);
 
   return (
-    <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
+    <div
+      className={
+        isVideoFullscreen
+          ? "fixed inset-0 z-[99999] w-screen h-screen bg-black overflow-hidden select-none"
+          : "tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none"
+      }
+    >
       {/* Realtime Master Control HUD Message Toast */}
       {hudMessage && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#0A0E17]/95 text-white font-mono text-sm font-bold px-6 py-2.5 rounded-full border border-indigo-500/50 shadow-2xl backdrop-blur-md animate-fade-in flex items-center gap-2">
@@ -945,7 +959,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       ) : null}
 
       {/* ================= TOP BAR (NOCTURNE PRECISION HEADER) ================= */}
-      <header className="w-full px-8 py-3 flex justify-between items-center z-50 bg-[#0A0E17]/95 backdrop-blur-xl border-b border-[#232b42] shadow-xl">
+      {!isVideoFullscreen && (
+        <header className="w-full px-8 py-3 flex justify-between items-center z-50 bg-[#0A0E17]/95 backdrop-blur-xl border-b border-[#232b42] shadow-xl">
         {/* Brand / Logo & Venue Anchor */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
@@ -1111,45 +1126,64 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           </button>
         </div>
       </header>
+      )}
 
-      {/* ================= MAIN VIEWPORT (SPLIT SCREEN 62/38) ================= */}
-      <main className="w-full flex-1 px-8 py-4 grid grid-cols-12 gap-6 items-stretch max-h-[calc(100vh-115px)]">
-        {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~62%) ---------------- */}
-        <section className="col-span-7 flex flex-col justify-between rounded-2xl bg-[#181b25]/90 border border-[#232b42] p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+      {/* ================= MAIN VIEWPORT (SPLIT SCREEN 62/38 OR FULLSCREEN 100%) ================= */}
+      <main
+        className={
+          isVideoFullscreen
+            ? "w-full h-full p-0 m-0 block overflow-hidden bg-black"
+            : "w-full flex-1 px-8 py-4 grid grid-cols-12 gap-6 items-stretch max-h-[calc(100vh-115px)]"
+        }
+      >
+        {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~62% OR FULLSCREEN 100%) ---------------- */}
+        <section
+          className={
+            isVideoFullscreen
+              ? "w-full h-full p-0 m-0 border-0 rounded-none bg-black block overflow-hidden"
+              : "col-span-7 flex flex-col justify-between rounded-2xl bg-[#181b25]/90 border border-[#232b42] p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl"
+          }
+        >
           {/* Ambient tech glows */}
-          <div className="absolute -top-28 -left-28 w-96 h-96 bg-[#6366F1]/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+          {!isVideoFullscreen && (
+            <>
+              <div className="absolute -top-28 -left-28 w-96 h-96 bg-[#6366F1]/15 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -right-24 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+            </>
+          )}
 
           {/* Header tag within card */}
-          <div className="flex items-center justify-between z-10 mb-2">
-            <div className="flex items-center gap-3">
-              <div className="bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/40 px-3 py-1 rounded-md font-mono text-xs tracking-wider flex items-center gap-1.5 shadow-[0_0_14px_rgba(99,102,241,0.3)]">
-                <span className="size-2 rounded-full bg-indigo-400 animate-ping inline-block" />
-                SONANDO AHORA
-              </div>
-              <span className="font-mono text-xs text-slate-400 tracking-wider">
-                CANAL AUDIO #01 · PRINCIPAL
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={toggleVideoMode}
-                className="flex items-center gap-1.5 bg-[#0a0e17]/80 hover:bg-[#0a0e17] px-3 py-1 rounded-md border border-[#232b42] text-xs font-mono text-slate-300 hover:text-white transition-colors"
-              >
-                <span className="material-symbols-outlined text-cyan-400 text-[18px]">
-                  {videoMode ? "smart_display" : "album"}
+          {!isVideoFullscreen && (
+            <div className="flex items-center justify-between z-10 mb-2">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/40 px-3 py-1 rounded-md font-mono text-xs tracking-wider flex items-center gap-1.5 shadow-[0_0_14px_rgba(99,102,241,0.3)]">
+                  <span className="size-2 rounded-full bg-indigo-400 animate-ping inline-block" />
+                  SONANDO AHORA
+                </div>
+                <span className="font-mono text-xs text-slate-400 tracking-wider">
+                  CANAL AUDIO #01 · PRINCIPAL
                 </span>
-                <span>{videoMode ? "Ver Vinilo" : "Ver Video HD"}</span>
-              </button>
+              </div>
 
-              <div className="flex items-center gap-1.5 bg-[#0a0e17]/80 px-3 py-1 rounded-md border border-[#232b42]">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-mono text-xs text-slate-300">YouTube Stream HD</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={toggleVideoMode}
+                  className="flex items-center gap-1.5 bg-[#0a0e17]/80 hover:bg-[#0a0e17] px-3 py-1 rounded-md border border-[#232b42] text-xs font-mono text-slate-300 hover:text-white transition-colors"
+                >
+                  <span className="material-symbols-outlined text-cyan-400 text-[18px]">
+                    {videoMode ? "smart_display" : "album"}
+                  </span>
+                  <span>{videoMode ? "Ver Vinilo" : "Ver Video HD"}</span>
+                </button>
+
+                <div className="flex items-center gap-1.5 bg-[#0a0e17]/80 px-3 py-1 rounded-md border border-[#232b42]">
+                  <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-mono text-xs text-slate-300">YouTube Stream HD</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ================= STABLE YOUTUBE CONTAINER ================= */}
           {/* When isVideoFullscreen is TRUE: Clean Fullscreen Video without any playback controls */}
@@ -1159,7 +1193,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             ref={videoContainerRef}
             className={
               isVideoFullscreen
-                ? "fixed inset-0 z-[9999] w-screen h-screen bg-black flex items-center justify-center overflow-hidden"
+                ? "w-full h-full bg-black flex items-center justify-center overflow-hidden relative"
                 : videoMode
                   ? "relative w-full aspect-video max-h-[520px] lg:max-h-[580px] xl:max-h-[640px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
                   : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
@@ -1187,6 +1221,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 onDoubleClick={toggleVideoFullscreen}
                 title="PonelePlay TV Salón"
               />
+
+              {/* Discreet hover-only exit fullscreen button on TV */}
+              {isVideoFullscreen && (
+                <button
+                  type="button"
+                  onClick={toggleVideoFullscreen}
+                  className="absolute top-4 right-4 z-30 opacity-0 hover:opacity-100 transition-opacity bg-black/80 hover:bg-black text-white font-mono text-xs px-3.5 py-1.5 rounded-lg border border-white/20 backdrop-blur-md flex items-center gap-1.5 shadow-2xl cursor-pointer"
+                  title="Salir de pantalla completa (F o Escape)"
+                >
+                  <Minimize2 className="size-3.5 text-cyan-400" />
+                  <span>Salir de Pantalla Completa</span>
+                </button>
+              )}
 
               {videoMode && !isVideoFullscreen && (
                 <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg z-20">
@@ -1223,8 +1270,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           </div>
 
-          {/* ================= VINYL MODE VIEW (WHEN VIDEO IS OFF) ================= */}
-          {!videoMode && (
+          {/* ================= VINYL MODE VIEW (WHEN VIDEO IS OFF AND NOT FULLSCREEN) ================= */}
+          {!isVideoFullscreen && !videoMode && (
             <div className="flex items-center gap-8 my-auto z-10 py-4">
               {/* Vinyl Record + Album Cover */}
               <div className="relative w-64 h-64 shrink-0 flex items-center justify-center">
@@ -1292,8 +1339,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           )}
 
-          {/* ================= METADATA BELOW VIDEO (WHEN VIDEO IS ON) ================= */}
-          {videoMode && (
+          {/* ================= METADATA BELOW VIDEO (WHEN VIDEO IS ON AND NOT FULLSCREEN) ================= */}
+          {!isVideoFullscreen && videoMode && (
             <div className="z-10 mt-3 flex items-center justify-between">
               <div className="min-w-0 flex-1 pr-4">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-[11px] mb-1">
@@ -1317,124 +1364,127 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           )}
 
-          {/* Bottom: Progress Bar & Direct TV Controls */}
-          <div className="z-10 mt-3 bg-[#1c1f29]/95 p-4 rounded-xl border border-[#232b42] shadow-inner">
-            {/* Timeline Counters */}
-            <div className="w-full flex items-center justify-between font-mono text-xs text-slate-300 mb-1">
-              <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
-              <span className="text-slate-500 text-[11px] tracking-widest uppercase">EN REPRODUCCIÓN</span>
-              <span className="text-slate-400 font-semibold tracking-wider">{formatDuration(duration)}</span>
-            </div>
+          {/* Bottom: Progress Bar & Direct TV Controls (HIDDEN IN FULLSCREEN) */}
+          {!isVideoFullscreen && (
+            <div className="z-10 mt-3 bg-[#1c1f29]/95 p-4 rounded-xl border border-[#232b42] shadow-inner">
+              {/* Timeline Counters */}
+              <div className="w-full flex items-center justify-between font-mono text-xs text-slate-300 mb-1">
+                <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
+                <span className="text-slate-500 text-[11px] tracking-widest uppercase">EN REPRODUCCIÓN</span>
+                <span className="text-slate-400 font-semibold tracking-wider">{formatDuration(duration)}</span>
+              </div>
 
-            {/* Modern Interactive Scrubber Progress Bar */}
-            <div
-              onClick={handleSeekClick}
-              className="group/scrub relative w-full h-5 flex items-center cursor-pointer select-none py-1"
-              title="Hacer clic para adelantar o retroceder el video en la pantalla"
-            >
-              <div className="w-full h-2.5 group-hover/scrub:h-3.5 bg-[#0a0e17] rounded-full overflow-hidden p-0 relative shadow-inner border border-[#232b42] transition-all">
-                <div
-                  className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_16px_rgba(99,102,241,0.6)] transition-all duration-150"
-                  style={{ width: `${progressPercent}%` }}
-                >
-                  <div className="absolute right-0 top-1/2 -translate-y-1/2 size-4 bg-white rounded-full shadow-[0_0_8px_#ffffff] border-2 border-[#6366F1] scale-100 group-hover/scrub:scale-125 transition-transform" />
+              {/* Modern Interactive Scrubber Progress Bar */}
+              <div
+                onClick={handleSeekClick}
+                className="group/scrub relative w-full h-5 flex items-center cursor-pointer select-none py-1"
+                title="Hacer clic para adelantar o retroceder el video en la pantalla"
+              >
+                <div className="w-full h-2.5 group-hover/scrub:h-3.5 bg-[#0a0e17] rounded-full overflow-hidden p-0 relative shadow-inner border border-[#232b42] transition-all">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_16px_rgba(99,102,241,0.6)] transition-all duration-150"
+                    style={{ width: `${progressPercent}%` }}
+                  >
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 size-4 bg-white rounded-full shadow-[0_0_8px_#ffffff] border-2 border-[#6366F1] scale-100 group-hover/scrub:scale-125 transition-transform" />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Direct TV Control Bar */}
-            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#283250]">
-              <div className="flex items-center gap-2">
-                {/* Reiniciar */}
-                <button
-                  type="button"
-                  onClick={handleRestartOrPrev}
-                  className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
-                  title="Reiniciar canción (R)"
-                >
-                  <span className="material-symbols-outlined text-[18px]">replay</span>
-                </button>
-
-                {/* -10s */}
-                <button
-                  type="button"
-                  onClick={() => handleSeekDelta(-10)}
-                  className="px-2.5 py-1 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] font-mono text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-1"
-                  title="Retroceder 10 segundos (Flecha Izquierda)"
-                >
-                  <span className="material-symbols-outlined text-[16px]">replay_10</span>
-                  <span>-10s</span>
-                </button>
-
-                {/* Play / Pause Primary Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPlaying((prev) => {
-                      const next = !prev;
-                      if (next) void engine.play?.();
-                      else engine.pause?.();
-                      return next;
-                    });
-                  }}
-                  className="size-9 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/25 transition-all active:scale-95"
-                  title={isPlaying ? "Pausar video (Espacio)" : "Reanudar video (Espacio)"}
-                >
-                  <span className="material-symbols-outlined text-[20px]">
-                    {isPlaying ? "pause" : "play_arrow"}
-                  </span>
-                </button>
-
-                {/* +10s */}
-                <button
-                  type="button"
-                  onClick={() => handleSeekDelta(10)}
-                  className="px-2.5 py-1 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] font-mono text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-1"
-                  title="Adelantar 10 segundos (Flecha Derecha)"
-                >
-                  <span>+10s</span>
-                  <span className="material-symbols-outlined text-[16px]">forward_10</span>
-                </button>
-
-                {/* Skip Next */}
-                <button
-                  type="button"
-                  onClick={() => void handleSkipNext()}
-                  className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
-                  title="Saltear al siguiente tema (S)"
-                >
-                  <span className="material-symbols-outlined text-[18px]">skip_next</span>
-                </button>
-
-                {/* Video Fullscreen Mode */}
-                {videoMode && (
+              {/* Direct TV Control Bar */}
+              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#283250]">
+                <div className="flex items-center gap-2">
+                  {/* Reiniciar */}
                   <button
                     type="button"
-                    onClick={toggleVideoFullscreen}
-                    className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 ml-1"
-                    title="Pantalla completa del video (F)"
+                    onClick={handleRestartOrPrev}
+                    className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
+                    title="Reiniciar canción (R)"
                   >
-                    <Maximize2 className="size-4" />
+                    <span className="material-symbols-outlined text-[18px]">replay</span>
                   </button>
-                )}
-              </div>
 
-              {/* Attribution info */}
-              <div className="flex items-center gap-3">
-                <p className="text-xs text-slate-300 hidden md:block">
-                  Playlist: <span className="text-white font-bold">{venueName}</span>
-                </p>
-                <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-3 py-1 rounded-full border border-indigo-500/30 font-mono text-xs font-bold">
-                  <span className="material-symbols-outlined text-[16px]">graphic_eq</span>
-                  <span>EN SALA</span>
+                  {/* -10s */}
+                  <button
+                    type="button"
+                    onClick={() => handleSeekDelta(-10)}
+                    className="px-2.5 py-1 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] font-mono text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-1"
+                    title="Retroceder 10 segundos (Flecha Izquierda)"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">replay_10</span>
+                    <span>-10s</span>
+                  </button>
+
+                  {/* Play / Pause Primary Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPlaying((prev) => {
+                        const next = !prev;
+                        if (next) void engine.play?.();
+                        else engine.pause?.();
+                        return next;
+                      });
+                    }}
+                    className="size-9 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/25 transition-all active:scale-95"
+                    title={isPlaying ? "Pausar video (Espacio)" : "Reanudar video (Espacio)"}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isPlaying ? "pause" : "play_arrow"}
+                    </span>
+                  </button>
+
+                  {/* +10s */}
+                  <button
+                    type="button"
+                    onClick={() => handleSeekDelta(10)}
+                    className="px-2.5 py-1 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] font-mono text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-1"
+                    title="Adelantar 10 segundos (Flecha Derecha)"
+                  >
+                    <span>+10s</span>
+                    <span className="material-symbols-outlined text-[16px]">forward_10</span>
+                  </button>
+
+                  {/* Skip Next */}
+                  <button
+                    type="button"
+                    onClick={() => void handleSkipNext()}
+                    className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
+                    title="Saltear al siguiente tema (S)"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">skip_next</span>
+                  </button>
+
+                  {/* Video Fullscreen Mode */}
+                  {videoMode && (
+                    <button
+                      type="button"
+                      onClick={toggleVideoFullscreen}
+                      className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 ml-1"
+                      title="Pantalla completa del video (F)"
+                    >
+                      <Maximize2 className="size-4" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Attribution info */}
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-slate-300 hidden md:block">
+                    Playlist: <span className="text-white font-bold">{venueName}</span>
+                  </p>
+                  <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-3 py-1 rounded-full border border-indigo-500/30 font-mono text-xs font-bold">
+                    <span className="material-symbols-outlined text-[16px]">graphic_eq</span>
+                    <span>EN SALA</span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </section>
 
-        {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~38%) ---------------- */}
-        <section className="col-span-5 flex flex-col justify-between gap-4">
+        {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~38%) (HIDDEN IN FULLSCREEN) ---------------- */}
+        {!isVideoFullscreen && (
+          <section className="col-span-5 flex flex-col justify-between gap-4">
           {/* TOP SECTION: CRISP MODERN QR ENGAGEMENT CARD */}
           <div className="rounded-2xl bg-[#181b25]/95 border border-[#232b42] p-5 shadow-2xl flex items-center gap-5 relative overflow-hidden backdrop-blur-xl">
             <div className="absolute -right-12 -top-12 size-44 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -1536,31 +1586,34 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           </div>
         </section>
+        )}
       </main>
 
-      {/* ================= BOTTOM MARQUEE BAR ================= */}
-      <footer className="w-full bg-[#0a0e17] border-t border-[#232b42] py-2 px-6 overflow-hidden z-40">
-        <div className="animate-marquee items-center gap-12 font-mono text-xs text-slate-400">
-          <span className="flex items-center gap-2">
-            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
-            <span>·</span>
-            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
-            <span>·</span>
-            <span>Cada consumición suma créditos de votos</span>
-            <span>·</span>
-            <span>Jukebox impulsado por PonelePlay</span>
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
-            <span>·</span>
-            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
-            <span>·</span>
-            <span>Cada consumición suma créditos de votos</span>
-            <span>·</span>
-            <span>Jukebox impulsado por PonelePlay</span>
-          </span>
-        </div>
-      </footer>
+      {/* ================= BOTTOM MARQUEE BAR (HIDDEN IN FULLSCREEN) ================= */}
+      {!isVideoFullscreen && (
+        <footer className="w-full bg-[#0a0e17] border-t border-[#232b42] py-2 px-6 overflow-hidden z-40">
+          <div className="animate-marquee items-center gap-12 font-mono text-xs text-slate-400">
+            <span className="flex items-center gap-2">
+              <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
+              <span>·</span>
+              <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
+              <span>·</span>
+              <span>Cada consumición suma créditos de votos</span>
+              <span>·</span>
+              <span>Jukebox impulsado por PonelePlay</span>
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
+              <span>·</span>
+              <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
+              <span>·</span>
+              <span>Cada consumición suma créditos de votos</span>
+              <span>·</span>
+              <span>Jukebox impulsado por PonelePlay</span>
+            </span>
+          </div>
+        </footer>
+      )}
 
       {/* Smart TV Pairing Modal (6-Digit PIN & Token Support) */}
       <TvPairingModal

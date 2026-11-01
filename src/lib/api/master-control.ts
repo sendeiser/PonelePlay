@@ -74,17 +74,53 @@ export async function sendPlaybackCommand(
 
   // 2. Broadcast via realtime channel for sub-50ms instant TV reaction
   try {
-    const channel = supabase.channel(`playback-control:${slug}`);
-    void channel.send({
-      type: "broadcast",
-      event: "playback_command",
-      payload: {
-        command,
-        payload,
-        state: res,
-        timestamp: Date.now(),
-      },
-    });
+    const channels = supabase.getChannels();
+    const existing = channels.find(
+      (c) =>
+        c.topic === `realtime:playback-control:${slug}` ||
+        c.topic === `playback-control:${slug}`,
+    );
+    if (existing && existing.state === "joined") {
+      void existing.send({
+        type: "broadcast",
+        event: "playback_command",
+        payload: {
+          command,
+          payload,
+          state: res,
+          timestamp: Date.now(),
+        },
+      });
+    } else {
+      const channel = existing ?? supabase.channel(`playback-control:${slug}`);
+      if (channel.state === "joined") {
+        void channel.send({
+          type: "broadcast",
+          event: "playback_command",
+          payload: {
+            command,
+            payload,
+            state: res,
+            timestamp: Date.now(),
+          },
+        });
+      } else {
+        channel.subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            void channel.send({
+              type: "broadcast",
+              event: "playback_command",
+              payload: {
+                command,
+                payload,
+                state: res,
+                timestamp: Date.now(),
+              },
+            });
+          }
+        });
+      }
+    }
   } catch {
     // Non-blocking broadcast fallback
   }
