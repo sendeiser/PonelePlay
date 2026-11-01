@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { PlayerScreen } from "@/components/player/player-screen";
+import { ClientPlayerScreen } from "@/components/player/client-player-screen";
 
 export const metadata: Metadata = {
   title: "Pantalla del salón · PonelePlay",
@@ -17,12 +17,12 @@ export default async function PlayerPage({
   return (
     <Suspense
       fallback={
-        <div className="flex h-screen items-center justify-center bg-felt-950 font-mono text-xs text-cream/40">
+        <div className="flex h-screen items-center justify-center bg-[#07090e] font-mono text-xs text-indigo-300">
           Cargando pantalla del salón...
         </div>
       }
     >
-      <PlayerScreen slug={slug} />
+      <ClientPlayerScreen slug={slug} />
     </Suspense>
   );
 }

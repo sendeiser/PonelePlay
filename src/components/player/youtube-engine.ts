@@ -36,11 +36,12 @@ export function loadYoutubeIframeApi(): Promise<void> {
 
     // 2. Inject script if not present
     if (!document.getElementById("youtube-iframe-api")) {
-      const tag = document.createElement("script");
-      tag.id = "youtube-iframe-api";
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName("script")[0];
-      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+      try {
+        const tag = document.createElement("script");
+        tag.id = "youtube-iframe-api";
+        tag.src = "https://www.youtube.com/iframe_api";
+        (document.head || document.body || document.documentElement).appendChild(tag);
+      } catch {}
     }
 
     const prevOnReady = window.onYouTubeIframeAPIReady;
