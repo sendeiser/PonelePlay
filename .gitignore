@@ -40,3 +40,8 @@ Thumbs.db
 .trae/
 .windsurf/
 skills/
+
+# Android TV build artifacts
+android-tv/.gradle/
+android-tv/app/build/
+android-tv/local.properties
