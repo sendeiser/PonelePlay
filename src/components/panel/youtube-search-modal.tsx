@@ -27,6 +27,7 @@ export function YouTubeSearchModal({
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [isKaraoke, setIsKaraoke] = useState(false);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string>(
     defaultPlaylistId || (playlists[0]?.id ?? ""),
   );
@@ -54,7 +55,7 @@ export function YouTubeSearchModal({
     setSearching(true);
     const handler = setTimeout(async () => {
       try {
-        const data = await searchYouTube(query);
+        const data = await searchYouTube(query, isKaraoke);
         if (active) setResults(data);
       } catch {
         if (active) setResults([]);
@@ -67,7 +68,7 @@ export function YouTubeSearchModal({
       active = false;
       clearTimeout(handler);
     };
-  }, [query]);
+  }, [query, isKaraoke]);
 
   if (!isOpen) return null;
 
@@ -128,29 +129,47 @@ export function YouTubeSearchModal({
 
         {/* Destination Playlist Selector & Search input */}
         <div className="pt-4 space-y-3">
-          {playlists.length > 0 && (
-            <div className="flex items-center gap-3">
-              <label
-                htmlFor="target-playlist-select"
-                className="font-mono text-xs text-slate-300 shrink-0"
-              >
-                Destino:
-              </label>
-              <select
-                id="target-playlist-select"
-                value={selectedPlaylistId}
-                onChange={(e) => setSelectedPlaylistId(e.target.value)}
-                className="flex-1 rounded-xl bg-[#0a0e17] border border-[#232b42] px-3 py-2 text-xs font-mono text-white focus:border-indigo-500 focus:outline-none"
-              >
-                {playlists.map((pl) => (
-                  <option key={pl.id} value={pl.id}>
-                    Playlist: {pl.name} ({pl.trackCount ?? 0} tracks)
-                  </option>
-                ))}
-                <option value="">Solo Catálogo General (Sin Playlist)</option>
-              </select>
-            </div>
-          )}
+          <div className="flex items-center justify-between gap-2">
+            {playlists.length > 0 ? (
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <label
+                  htmlFor="target-playlist-select"
+                  className="font-mono text-xs text-slate-300 shrink-0"
+                >
+                  Destino:
+                </label>
+                <select
+                  id="target-playlist-select"
+                  value={selectedPlaylistId}
+                  onChange={(e) => setSelectedPlaylistId(e.target.value)}
+                  className="flex-1 rounded-xl bg-[#0a0e17] border border-[#232b42] px-3 py-2 text-xs font-mono text-white focus:border-indigo-500 focus:outline-none truncate"
+                >
+                  {playlists.map((pl) => (
+                    <option key={pl.id} value={pl.id}>
+                      Playlist: {pl.name} ({pl.trackCount ?? 0} tracks)
+                    </option>
+                  ))}
+                  <option value="">Solo Catálogo General (Sin Playlist)</option>
+                </select>
+              </div>
+            ) : <div />}
+
+            {/* Karaoke Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={() => setIsKaraoke((prev) => !prev)}
+              className={`px-3 py-2 rounded-xl font-mono text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0 ${
+                isKaraoke
+                  ? "bg-pink-600/30 text-pink-300 border-pink-500/60 shadow-md shadow-pink-500/20"
+                  : "bg-[#0a0e17] text-slate-400 border-[#232b42] hover:text-white"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">
+                {isKaraoke ? "mic_external_on" : "mic"}
+              </span>
+              <span>{isKaraoke ? "🎤 Filtro Karaoke (ON)" : "🎤 Karaoke"}</span>
+            </button>
+          </div>
 
           <div className="relative">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
@@ -158,7 +177,11 @@ export function YouTubeSearchModal({
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Escribí artista, canción o pegá el link de YouTube..."
+              placeholder={
+                isKaraoke
+                  ? "Buscando versiones karaoke más vistas..."
+                  : "Escribí artista, canción o pegá el link de YouTube..."
+              }
               className="w-full h-11 pl-10 pr-10 rounded-xl bg-[#0a0e17] border border-[#232b42] text-xs text-white placeholder:text-slate-500 font-mono focus:border-indigo-500 focus:outline-none"
               autoFocus
             />

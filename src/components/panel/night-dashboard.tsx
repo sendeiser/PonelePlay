@@ -17,6 +17,7 @@ import {
 import { nightPhase } from "@/lib/domain/night";
 import { type PanelRole } from "@/lib/domain/permissions";
 import { PairPlayerDialog } from "./pair-player";
+import { ManualPlaybackModal } from "./manual-playback-modal";
 
 interface NightDashboardProps {
   slug: string;
@@ -44,23 +45,91 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
   // Booth Audio & Playback Controls
   const [isPaused, setIsPaused] = useState(false);
-  const [volume, setVolume] = useState(78);
+  const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
+  const [karaokeMode, setKaraokeMode] = useState(false);
   const [playerResetMsg, setPlayerResetMsg] = useState<string | null>(null);
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+
+  // Sync initial playback state from backend
+  useEffect(() => {
+    let active = true;
+    void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
+      fetchPlaybackState(slug)
+        .then((st) => {
+          if (!active) return;
+          setIsPaused(st.isPaused);
+          setVolume(st.volume);
+          setIsMuted(st.isMuted);
+          setKaraokeMode(st.karaokeMode);
+        })
+        .catch(() => {});
+    });
+    return () => {
+      active = false;
+    };
+  }, [slug]);
+
+  const handleTogglePause = useCallback(async () => {
+    const next = !isPaused;
+    setIsPaused(next);
+    try {
+      const { togglePausePlayback } = await import("@/lib/api/master-control");
+      await togglePausePlayback(slug);
+    } catch {
+      // Non-blocking fallback
+    }
+  }, [isPaused, slug]);
+
+  const handleVolumeChange = useCallback(async (newVol: number) => {
+    setVolume(newVol);
+    if (isMuted) setIsMuted(false);
+    try {
+      const { setPlaybackVolume } = await import("@/lib/api/master-control");
+      await setPlaybackVolume(slug, newVol);
+    } catch {
+      // Non-blocking fallback
+    }
+  }, [isMuted, slug]);
+
+  const handleToggleMute = useCallback(async () => {
+    const next = !isMuted;
+    setIsMuted(next);
+    try {
+      const { toggleMutePlayback } = await import("@/lib/api/master-control");
+      await toggleMutePlayback(slug);
+    } catch {
+      // Non-blocking fallback
+    }
+  }, [isMuted, slug]);
+
+  const handleKaraokeToggle = useCallback(async () => {
+    const next = !karaokeMode;
+    setKaraokeMode(next);
+    try {
+      const { setKaraokeMode: setKm } = await import("@/lib/api/master-control");
+      await setKm(slug, next);
+    } catch {
+      // Non-blocking fallback
+    }
+  }, [karaokeMode, slug]);
 
   const handleSkip = useCallback(async () => {
-    if (!state?.nowPlaying) return;
     setActionLoading(true);
     setErrorMsg(null);
     try {
-      await skipCurrent(state.nowPlaying.id, staffToken);
+      const { skipPlayback } = await import("@/lib/api/master-control");
+      await skipPlayback(slug);
+      if (state?.nowPlaying) {
+        await skipCurrent(state.nowPlaying.id, staffToken);
+      }
       await refresh();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Error al saltear canción");
     } finally {
       setActionLoading(false);
     }
-  }, [state?.nowPlaying, staffToken, refresh]);
+  }, [slug, state?.nowPlaying, staffToken, refresh]);
 
   // Keyboard shortcuts for staff (F4: Tickets, Space: Play/Pause, S: Skip, M: Mute)
   useEffect(() => {
@@ -76,10 +145,10 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         e.preventDefault();
         window.location.href = `/panel/${slug}/tickets`;
       } else if (e.key.toLowerCase() === "m") {
-        setIsMuted((prev) => !prev);
+        void handleToggleMute();
       } else if (e.key === " ") {
         e.preventDefault();
-        setIsPaused((prev) => !prev);
+        void handleTogglePause();
       } else if (e.key.toLowerCase() === "s" && state?.nowPlaying) {
         e.preventDefault();
         void handleSkip();
@@ -88,12 +157,19 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [slug, state?.nowPlaying, handleSkip]);
+  }, [slug, state?.nowPlaying, handleSkip, handleToggleMute, handleTogglePause]);
 
-  function handleRestartPlayer() {
-    setPlayerResetMsg("Comando de reinicio enviado al reproductor TV.");
+  async function handleRestartPlayer() {
+    setPlayerResetMsg("Enviando orden de reinicio a pantallas TV...");
+    try {
+      const { reloadPlayback } = await import("@/lib/api/master-control");
+      await reloadPlayback(slug);
+      setPlayerResetMsg("¡Comando de reinicio ejecutado!");
+    } catch {
+      setPlayerResetMsg("Comando de reinicio enviado.");
+    }
     void refresh();
-    setTimeout(() => setPlayerResetMsg(null), 3000);
+    setTimeout(() => setPlayerResetMsg(null), 3500);
   }
 
   const phase = nightPhase(state);
@@ -440,14 +516,54 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                   Control Maestro de Cabina
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-slate-400">Nivel Administrador</span>
+              <span className="text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-1">
+                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>En Vivo TV</span>
+              </span>
             </div>
+
+            {/* Modo Karaoke Live Switch */}
+            <button
+              type="button"
+              onClick={() => void handleKaraokeToggle()}
+              className={`w-full flex items-center justify-between p-2.5 rounded-xl border font-mono text-xs font-bold transition-all ${
+                karaokeMode
+                  ? "bg-gradient-to-r from-pink-950/60 to-purple-950/60 border-pink-500/50 text-pink-200 shadow-lg shadow-pink-500/20"
+                  : "bg-[#181b25] border-[#232b42] text-slate-300 hover:text-white hover:border-pink-500/30"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-lg text-pink-400">
+                  mic_external_on
+                </span>
+                <span>Modo Karaoke en Vivo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase ${
+                  karaokeMode
+                    ? "bg-pink-500 text-white font-bold animate-pulse"
+                    : "bg-slate-800 text-slate-400"
+                }`}>
+                  {karaokeMode ? "ACTIVO" : "INACTIVO"}
+                </span>
+              </div>
+            </button>
+
+            {/* Quick Button: Poner Canción Manualmente */}
+            <button
+              type="button"
+              onClick={() => setManualModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-2.5 px-3 rounded-lg text-xs font-mono font-bold shadow-md shadow-emerald-600/25 transition-all active:scale-95"
+            >
+              <span className="material-symbols-outlined text-base">queue_music</span>
+              <span>+ Poner Canción Manualmente</span>
+            </button>
 
             {/* Main Player Control Buttons */}
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => setIsPaused((prev) => !prev)}
+                onClick={() => void handleTogglePause()}
                 className="flex items-center justify-center gap-2 bg-[#181b25] hover:bg-[#202534] text-white py-2.5 px-3 rounded-lg text-xs font-mono font-bold border border-[#1E2333] hover:border-indigo-500/40 transition-all active:scale-95"
               >
                 <span className="material-symbols-outlined text-lg text-indigo-400">
@@ -458,7 +574,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
               <button
                 type="button"
-                disabled={actionLoading || !nowPlaying}
+                disabled={actionLoading || (!nowPlaying && queue.length === 0)}
                 onClick={() => void handleSkip()}
                 className="flex items-center justify-center gap-2 bg-[#181b25] hover:bg-rose-500/10 text-rose-400 py-2.5 px-3 rounded-lg text-xs font-mono font-bold border border-rose-500/30 transition-all active:scale-95 disabled:opacity-40"
               >
@@ -481,7 +597,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsMuted((prev) => !prev)}
+                  onClick={() => void handleToggleMute()}
                   className="text-slate-400 hover:text-indigo-400 transition-colors"
                   title="Silenciar / Activar Sonido (M)"
                 >
@@ -494,18 +610,12 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                   min="0"
                   max="100"
                   value={isMuted ? 0 : volume}
-                  onChange={(e) => {
-                    setVolume(Number(e.target.value));
-                    if (isMuted) setIsMuted(false);
-                  }}
+                  onChange={(e) => void handleVolumeChange(Number(e.target.value))}
                   className="w-full accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer border border-[#1E2333]"
                 />
                 <button
                   type="button"
-                  onClick={() => {
-                    setVolume(100);
-                    setIsMuted(false);
-                  }}
+                  onClick={() => void handleVolumeChange(100)}
                   className="text-slate-400 hover:text-indigo-400 transition-colors"
                   title="Volumen al máximo"
                 >
@@ -517,7 +627,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               <div className="pt-1 flex items-center justify-between border-t border-[#1E2333]/50">
                 <button
                   type="button"
-                  onClick={() => setIsMuted((prev) => !prev)}
+                  onClick={() => void handleToggleMute()}
                   className="flex items-center gap-1.5 text-[11px] font-mono text-rose-400 hover:text-rose-300 underline py-0.5"
                 >
                   <span className="material-symbols-outlined text-sm">mic_off</span>
@@ -543,7 +653,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
             <div className="flex items-center justify-between pt-1 text-[11px] font-mono text-slate-400">
               <button
                 type="button"
-                onClick={handleRestartPlayer}
+                onClick={() => void handleRestartPlayer()}
                 className="hover:text-indigo-400 text-indigo-300 underline transition-colors"
               >
                 Reiniciar Player TV
@@ -683,6 +793,15 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         venueId={state?.venue.id || ""}
         slug={slug}
         onClose={() => setPairDialogOpen(false)}
+      />
+
+      {/* Manual Track Selection & Master Playback Modal */}
+      <ManualPlaybackModal
+        isOpen={manualModalOpen}
+        onClose={() => setManualModalOpen(false)}
+        slug={slug}
+        defaultKaraoke={karaokeMode}
+        onActionComplete={() => void refresh()}
       />
     </div>
   );

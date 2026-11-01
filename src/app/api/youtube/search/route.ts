@@ -9,6 +9,9 @@ export interface YouTubeSearchResult {
   duration: string;
   durationSeconds: number;
   thumbnailUrl: string;
+  isKaraoke?: boolean;
+  views?: string;
+  viewsCount?: number;
 }
 
 function parseDurationString(str?: string): number {
@@ -23,6 +26,37 @@ function parseDurationString(str?: string): number {
   return 210;
 }
 
+function parseViewsString(str?: string): number {
+  if (!str) return 0;
+  const s = str.toLowerCase().replace(/ visualizaciones| views/g, "").trim();
+  if (s.includes("m")) {
+    const val = parseFloat(s.replace(/m.*/, "").replace(",", ".").trim());
+    return isNaN(val) ? 0 : val * 1000000;
+  }
+  if (s.includes("k")) {
+    const val = parseFloat(s.replace(/k.*/, "").replace(",", ".").trim());
+    return isNaN(val) ? 0 : val * 1000;
+  }
+  const num = parseInt(s.replace(/\D/g, ""), 10);
+  return isNaN(num) ? 0 : num;
+}
+
+function isKaraokeVideo(title: string, channel: string): boolean {
+  const t = `${title} ${channel}`.toLowerCase();
+  return (
+    t.includes("karaoke") ||
+    t.includes("instrumental") ||
+    t.includes("canta") ||
+    t.includes("con letra") ||
+    t.includes("letra") ||
+    t.includes("backing track") ||
+    t.includes("sing along") ||
+    t.includes("sing-along") ||
+    t.includes("cantaokey") ||
+    t.includes("sing king") ||
+    t.includes("karaofun")
+  );
+}
 
 interface YouTubeInitialData {
   contents?: {
@@ -38,6 +72,7 @@ interface YouTubeInitialData {
                   ownerText?: { runs?: Array<{ text?: string }> };
                   shortBylineText?: { runs?: Array<{ text?: string }> };
                   lengthText?: { simpleText?: string };
+                  viewCountText?: { simpleText?: string };
                   thumbnail?: { thumbnails?: Array<{ url?: string }> };
                 };
               }>;
@@ -49,8 +84,12 @@ interface YouTubeInitialData {
   };
 }
 
-async function searchViaScrape(query: string): Promise<YouTubeSearchResult[]> {
-  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&hl=es`;
+async function searchViaScrape(query: string, isKaraoke: boolean): Promise<YouTubeSearchResult[]> {
+  const effectiveQuery = isKaraoke && !query.toLowerCase().includes("karaoke")
+    ? `${query} karaoke`
+    : query;
+
+  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(effectiveQuery)}&hl=es`;
   const response = await fetch(url, {
     headers: {
       "User-Agent":
@@ -84,18 +123,25 @@ async function searchViaScrape(query: string): Promise<YouTubeSearchResult[]> {
       const v = item.videoRenderer;
       if (!v || !v.videoId) continue;
 
-      const title = v.title?.runs?.[0]?.text?.trim();
+      const title = v.title?.runs?.[0]?.text?.trim() || "";
       const channel =
         v.ownerText?.runs?.[0]?.text?.trim() ||
         v.shortBylineText?.runs?.[0]?.text?.trim() ||
         "YouTube";
       const durationStr = v.lengthText?.simpleText || "3:30";
       const durationSecs = parseDurationString(durationStr);
+      const viewsStr = v.viewCountText?.simpleText || "";
+      const viewsCount = parseViewsString(viewsStr);
       const thumbnail =
         v.thumbnail?.thumbnails?.slice(-1)[0]?.url ||
         `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`;
 
       if (title) {
+        // In Karaoke mode, only accept authentic karaoke versions
+        if (isKaraoke && !isKaraokeVideo(title, channel)) {
+          continue;
+        }
+
         results.push({
           videoId: v.videoId,
           title,
@@ -103,46 +149,87 @@ async function searchViaScrape(query: string): Promise<YouTubeSearchResult[]> {
           duration: durationStr,
           durationSeconds: durationSecs,
           thumbnailUrl: thumbnail,
+          isKaraoke: isKaraoke || isKaraokeVideo(title, channel),
+          views: viewsStr,
+          viewsCount,
         });
       }
-      if (results.length >= 8) break;
+      if (results.length >= (isKaraoke ? 15 : 8)) break;
     }
-    if (results.length >= 8) break;
+    if (results.length >= (isKaraoke ? 15 : 8)) break;
   }
 
-  return results;
+  // Sort karaoke results strictly by most viewed descending
+  if (isKaraoke) {
+    results.sort((a, b) => (b.viewsCount || 0) - (a.viewsCount || 0));
+  }
+
+  return results.slice(0, 8);
 }
 
-async function searchViaApi(query: string, apiKey: string): Promise<YouTubeSearchResult[]> {
-  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${encodeURIComponent(query)}&key=${apiKey}`;
+async function searchViaApi(
+  query: string,
+  apiKey: string,
+  isKaraoke: boolean,
+): Promise<YouTubeSearchResult[]> {
+  const effectiveQuery = isKaraoke && !query.toLowerCase().includes("karaoke")
+    ? `${query} karaoke`
+    : query;
+
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=${
+    isKaraoke ? "viewCount" : "relevance"
+  }&maxResults=15&q=${encodeURIComponent(effectiveQuery)}&key=${apiKey}`;
+
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`YouTube API failed: ${response.status}`);
   }
   const data = await response.json();
-  return (data.items || []).map((item: {
+  const rawItems = (data.items || []) as Array<{
     id: { videoId: string };
     snippet: {
       title: string;
       channelTitle: string;
       thumbnails?: { high?: { url?: string }; default?: { url?: string } };
     };
-  }) => ({
-    videoId: item.id.videoId,
-    title: item.snippet.title,
-    artist: item.snippet.channelTitle,
-    duration: "3:30",
-    durationSeconds: 210,
-    thumbnailUrl:
-      item.snippet.thumbnails?.high?.url ||
-      item.snippet.thumbnails?.default?.url ||
-      `https://img.youtube.com/vi/${item.id.videoId}/hqdefault.jpg`,
-  }));
+  }>;
+
+  const mapped: YouTubeSearchResult[] = [];
+
+  for (const item of rawItems) {
+    const title = item.snippet.title;
+    const channel = item.snippet.channelTitle;
+
+    if (isKaraoke && !isKaraokeVideo(title, channel)) {
+      continue;
+    }
+
+    mapped.push({
+      videoId: item.id.videoId,
+      title,
+      artist: channel,
+      duration: "3:30",
+      durationSeconds: 210,
+      thumbnailUrl:
+        item.snippet.thumbnails?.high?.url ||
+        item.snippet.thumbnails?.default?.url ||
+        `https://img.youtube.com/vi/${item.id.videoId}/hqdefault.jpg`,
+      isKaraoke: isKaraoke || isKaraokeVideo(title, channel),
+    });
+
+    if (mapped.length >= 8) break;
+  }
+
+  return mapped;
 }
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() || "";
+  const isKaraoke =
+    searchParams.get("karaoke") === "true" ||
+    searchParams.get("karaoke") === "1" ||
+    searchParams.get("mode") === "karaoke";
 
   if (!q) {
     return NextResponse.json({ results: [] });
@@ -157,17 +244,19 @@ export async function GET(request: Request) {
       );
       if (oembedRes.ok) {
         const oembed = await oembedRes.json();
+        const title = oembed.title || `Video de YouTube (${directId})`;
         return NextResponse.json({
           results: [
             {
               videoId: directId,
-              title: oembed.title || `Video de YouTube (${directId})`,
+              title,
               artist: oembed.author_name || "YouTube",
               duration: "3:45",
               durationSeconds: 225,
               thumbnailUrl:
                 oembed.thumbnail_url ||
                 `https://img.youtube.com/vi/${directId}/hqdefault.jpg`,
+              isKaraoke: isKaraoke || isKaraokeVideo(title, oembed.author_name || ""),
             },
           ],
         });
@@ -185,6 +274,7 @@ export async function GET(request: Request) {
           duration: "3:45",
           durationSeconds: 225,
           thumbnailUrl: `https://img.youtube.com/vi/${directId}/hqdefault.jpg`,
+          isKaraoke,
         },
       ],
     });
@@ -195,7 +285,7 @@ export async function GET(request: Request) {
     const apiKey = process.env.YOUTUBE_API_KEY;
     if (apiKey) {
       try {
-        const apiResults = await searchViaApi(q, apiKey);
+        const apiResults = await searchViaApi(q, apiKey, isKaraoke);
         if (apiResults.length > 0) {
           return NextResponse.json({ results: apiResults });
         }
@@ -204,7 +294,7 @@ export async function GET(request: Request) {
       }
     }
 
-    const scrapeResults = await searchViaScrape(q);
+    const scrapeResults = await searchViaScrape(q, isKaraoke);
     if (scrapeResults.length > 0) {
       return NextResponse.json({ results: scrapeResults });
     }
@@ -221,11 +311,14 @@ export async function GET(request: Request) {
   return NextResponse.json({
     results: matched.map((item) => ({
       videoId: `demo-${item.id}`,
-      title: item.title,
-      artist: item.artist,
+      title: isKaraoke ? `${item.title} (Karaoke Letra)` : item.title,
+      artist: isKaraoke ? `${item.artist} · Karaoke Oficial` : item.artist,
       duration: item.duration,
       durationSeconds: 210,
       thumbnailUrl: "",
+      isKaraoke,
+      views: isKaraoke ? "2.4 M visualizaciones" : undefined,
+      viewsCount: isKaraoke ? 2400000 : undefined,
     })),
   });
 }
@@ -234,8 +327,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const q = typeof body.query === "string" ? body.query : "";
+    const isKaraoke = Boolean(body.karaoke || body.mode === "karaoke");
     const url = new URL(request.url);
     url.searchParams.set("q", q);
+    if (isKaraoke) url.searchParams.set("karaoke", "true");
     return GET(new Request(url.toString(), { headers: request.headers }));
   } catch {
     return NextResponse.json({ results: [] });

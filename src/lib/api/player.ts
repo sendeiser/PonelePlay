@@ -15,6 +15,7 @@ export const playerTrackSchema = z.object({
   startedAt: z.string().nullable().optional(),
   createdAt: z.string().nullable().optional(),
   position: z.number().optional(),
+  isKaraoke: z.boolean().optional(),
 });
 
 export type PlayerTrack = z.infer<typeof playerTrackSchema>;

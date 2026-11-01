@@ -52,6 +52,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [karaokeMode, setKaraokeMode] = useState(false);
+  const [hudMessage, setHudMessage] = useState<string | null>(null);
+  const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
 
   // Playback engine
   const engine: PlaybackEngine = useMemo(() => {
@@ -252,8 +255,178 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [engine]);
 
-  // Now playing: prioritizing playerState.nowPlaying -> live fallback -> demo
+  // Master Remote Control synchronization (Realtime broadcast & DB state)
+  useEffect(() => {
+    let active = true;
+
+    // 1. Initial State from DB
+    void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
+      fetchPlaybackState(slug)
+        .then((st) => {
+          if (!active) return;
+          if (typeof st.volume === "number") {
+            setVolume(st.volume);
+            engine.setVolume?.(st.volume);
+          }
+          if (typeof st.isMuted === "boolean") {
+            setIsMuted(st.isMuted);
+            if (st.isMuted) engine.mute?.();
+            else engine.unMute?.();
+          }
+          if (typeof st.isPaused === "boolean") {
+            setIsPlaying(!st.isPaused);
+            if (st.isPaused) engine.pause?.();
+            else void engine.play?.();
+          }
+          if (typeof st.karaokeMode === "boolean") {
+            setKaraokeMode(st.karaokeMode);
+            if (st.karaokeMode) setVideoMode(true);
+          }
+          if (st.currentTrack) {
+            setManualNowPlaying(st.currentTrack);
+          }
+        })
+        .catch(() => {});
+    });
+
+    // 2. Realtime listener
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+      if (!active) return;
+      const supabase = createBrowserSupabase();
+
+      channel = supabase
+        .channel(`playback-control:${slug}`)
+        .on(
+          "broadcast",
+          { event: "playback_command" },
+          (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
+            if (!active) return;
+            const cmd = msg.payload?.command;
+            const p = msg.payload?.payload || {};
+
+            if (cmd === "pause") {
+              engine.pause?.();
+              setIsPlaying(false);
+              setHudMessage("⏸️ Música Pausada desde Cabina");
+              setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "resume") {
+              void engine.play?.();
+              setIsPlaying(true);
+              setHudMessage("▶️ Música Reanudada desde Cabina");
+              setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "toggle_pause") {
+              setIsPlaying((prev) => {
+                const next = !prev;
+                if (next) void engine.play?.();
+                else engine.pause?.();
+                setHudMessage(next ? "▶️ Música Reanudada" : "⏸️ Música Pausada");
+                setTimeout(() => setHudMessage(null), 3500);
+                return next;
+              });
+            } else if (cmd === "set_volume") {
+              const vol = Number(p.volume ?? 85);
+              setVolume(vol);
+              engine.setVolume?.(vol);
+              setIsMuted(false);
+              engine.unMute?.();
+              setHudMessage(`🔊 Volumen: ${vol}%`);
+              setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "mute") {
+              setIsMuted(true);
+              engine.mute?.();
+              setHudMessage("🔇 Salón Silenciado (Corte de Emergencia)");
+              setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "unmute") {
+              setIsMuted(false);
+              engine.unMute?.();
+              setHudMessage("🔊 Audio Restablecido");
+              setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "toggle_mute") {
+              setIsMuted((prev) => {
+                const next = !prev;
+                if (next) engine.mute?.();
+                else engine.unMute?.();
+                setHudMessage(next ? "🔇 Audio Silenciado" : "🔊 Audio Activo");
+                setTimeout(() => setHudMessage(null), 3500);
+                return next;
+              });
+            } else if (cmd === "skip") {
+              setHudMessage("⏭️ Salteando Tema...");
+              setTimeout(() => setHudMessage(null), 3500);
+              setManualNowPlaying(null);
+              if (playerState?.queue && playerState.queue.length > 0) {
+                setManualNowPlaying(playerState.queue[0]);
+              } else if (liveFallbackTracks.length > 1) {
+                setLiveFallbackTracks((prev) => prev.slice(1));
+              }
+            } else if (cmd === "play_now" && p.track) {
+              const track = p.track as PlayerTrack;
+              setManualNowPlaying(track);
+              setIsPlaying(true);
+              setVideoMode(true);
+              void engine.load(track).then(() => engine.play?.());
+              setHudMessage(`🎵 Reproduciendo: ${track.title}`);
+              setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "reload") {
+              setHudMessage("🔄 Reiniciando Sistema TV...");
+              setTimeout(() => window.location.reload(), 800);
+            } else if (cmd === "set_karaoke_mode") {
+              const enabled = Boolean(p.enabled);
+              setKaraokeMode(enabled);
+              if (enabled) {
+                setVideoMode(true);
+                setHudMessage("🎤 Modo Karaoke Activado!");
+              } else {
+                setHudMessage("🎧 Modo Normal Restaurado");
+              }
+              setTimeout(() => setHudMessage(null), 3500);
+            }
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "venue_playback_state" },
+          (payload: { new?: { is_paused?: boolean; volume?: number; is_muted?: boolean; karaoke_mode?: boolean } }) => {
+            if (!active || !payload.new) return;
+            const st = payload.new;
+            if (typeof st.is_paused === "boolean") {
+              setIsPlaying(!st.is_paused);
+              if (st.is_paused) engine.pause?.();
+              else void engine.play?.();
+            }
+            if (typeof st.volume === "number") {
+              setVolume(st.volume);
+              engine.setVolume?.(st.volume);
+            }
+            if (typeof st.is_muted === "boolean") {
+              setIsMuted(st.is_muted);
+              if (st.is_muted) engine.mute?.();
+              else engine.unMute?.();
+            }
+            if (typeof st.karaoke_mode === "boolean") {
+              setKaraokeMode(st.karaoke_mode);
+              if (st.karaoke_mode) setVideoMode(true);
+            }
+          },
+        )
+        .subscribe();
+    });
+
+    return () => {
+      active = false;
+      if (channel) {
+        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+          const supabase = createBrowserSupabase();
+          void supabase.removeChannel(channel!);
+        });
+      }
+    };
+  }, [slug, engine, playerState, liveFallbackTracks]);
+
+  // Now playing: prioritizing manualNowPlaying -> playerState.nowPlaying -> live fallback -> demo
   const nowPlaying: PlayerTrack | null = useMemo(() => {
+    if (manualNowPlaying) return manualNowPlaying;
     if (playerState?.nowPlaying) return playerState.nowPlaying;
     if (playerState?.queue && playerState.queue.length > 0) return playerState.queue[0];
     if (playerState?.fallback && playerState.fallback.length > 0) return playerState.fallback[0];
@@ -270,7 +443,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       thumbnailUrl: null,
       voteCount: demoNowPlaying.votes,
     };
-  }, [playerState, liveFallbackTracks]);
+  }, [manualNowPlaying, playerState, liveFallbackTracks]);
 
   // Load and play track as soon as nowPlaying is determined
   useEffect(() => {
@@ -313,6 +486,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   return (
     <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
+      {/* Realtime Master Control HUD Message Toast */}
+      {hudMessage && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#0A0E17]/95 text-white font-mono text-sm font-bold px-6 py-2.5 rounded-full border border-indigo-500/50 shadow-2xl backdrop-blur-md animate-fade-in flex items-center gap-2">
+          <span>{hudMessage}</span>
+        </div>
+      )}
+
       {/* Runtime coordinator if connected with token */}
       {token ? (
         <PlayerRuntime
@@ -352,6 +532,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               {venueName}
             </span>
           </div>
+
+          {/* Karaoke Mode Active Badge */}
+          {karaokeMode || nowPlaying?.isKaraoke ? (
+            <div className="flex items-center gap-2 bg-gradient-to-r from-pink-500/25 via-purple-500/25 to-cyan-500/25 px-3.5 py-1 rounded-full border border-pink-500/40 shadow-[0_0_16px_rgba(236,72,153,0.35)] animate-pulse">
+              <span className="material-symbols-outlined text-pink-400 text-[18px]">
+                mic_external_on
+              </span>
+              <span className="text-pink-200 font-mono text-xs font-bold tracking-wider uppercase">
+                MODO KARAOKE ACTIVO
+              </span>
+            </div>
+          ) : null}
 
           {/* Live Session Status */}
           <div className="flex items-center gap-2 bg-indigo-500/15 px-3 py-1 rounded-full border border-indigo-500/30 shadow-[0_0_14px_rgba(99,102,241,0.25)]">

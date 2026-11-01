@@ -24,6 +24,7 @@ interface ProposalSearchProps {
 
 const filterChips = [
   "Top Búsquedas",
+  "🎤 Karaoke",
   "Rock Nacional",
   "Cachengue",
   "Indie / Pop",
@@ -67,7 +68,8 @@ export function ProposalSearch({
     setSearching(true);
     const handler = setTimeout(async () => {
       try {
-        const data = await searchYouTube(query);
+        const isKaraokeSearch = activeChip === "🎤 Karaoke";
+        const data = await searchYouTube(query, isKaraokeSearch);
         if (active) setResults(data);
       } catch {
         if (active) setResults([]);
@@ -80,7 +82,7 @@ export function ProposalSearch({
       active = false;
       clearTimeout(handler);
     };
-  }, [query]);
+  }, [query, activeChip]);
 
   async function handlePropose(item: SearchResult) {
     if (cooldownSeconds > 0) {

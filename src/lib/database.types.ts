@@ -145,6 +145,17 @@ export interface Database {
         position: number;
         created_at: string;
       }>;
+      venue_playback_state: TableDefinition<{
+        venue_id: string;
+        is_paused: boolean;
+        volume: number;
+        is_muted: boolean;
+        karaoke_mode: boolean;
+        current_track: Record<string, unknown> | null;
+        last_command: string | null;
+        command_seq: number;
+        updated_at: string;
+      }>;
     };
     Views: {
       [_ in never]: never;

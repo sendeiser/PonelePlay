@@ -9,6 +9,9 @@ export interface SearchResult {
   duration: string;
   durationSeconds: number;
   thumbnailUrl: string;
+  isKaraoke?: boolean;
+  views?: string;
+  viewsCount?: number;
 }
 
 function formatDuration(seconds: number): string {
@@ -19,13 +22,15 @@ function formatDuration(seconds: number): string {
 
 export async function searchYouTube(
   query: string,
+  isKaraoke: boolean = false,
 ): Promise<SearchResult[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
 
   // 1. First, call our local Next.js YouTube search API route
   try {
-    const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(trimmed)}`);
+    const karaokeParam = isKaraoke ? "&karaoke=true" : "";
+    const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(trimmed)}${karaokeParam}`);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data?.results) && data.results.length > 0) {

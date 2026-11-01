@@ -264,7 +264,9 @@ async function run() {
   // TEST 8: Client Flow (Join, Redeem, Propose, Vote)
   // ----------------------------------------------------
   console.log("\n[8/11] Testing Client Flow (Anonymous Sign-In, Join, Redeem, Propose, Vote)...");
-  const anonClient = createClient(supabaseUrl, anonKey);
+  const anonClient = createClient(supabaseUrl, anonKey, {
+    auth: { persistSession: false },
+  });
   const { error: anonSignInErr } = await anonClient.auth.signInAnonymously();
   assert(!anonSignInErr, "Anonymous client can authenticate via Supabase Auth", anonSignInErr);
 
@@ -285,12 +287,13 @@ async function run() {
   // Propose a track
   const sampleTrack = catalog[0];
   const uniqueKey = `yt:${sampleTrack.id}:${Date.now()}`;
+  const uniqueVid = `vid${Date.now()}`;
   const { data: proposalRes, error: proposeErr } = await anonClient.rpc("propose_track", {
     p_track: {
       title: `${sampleTrack.title} (Live)`,
       artist: sampleTrack.artist,
       durationSeconds: 210,
-      youtubeVideoId: "uniqueVid123",
+      youtubeVideoId: uniqueVid,
       dedupeKey: uniqueKey,
     },
   });
@@ -397,6 +400,57 @@ async function run() {
   // Re-open for user convenience so the venue is left in ready state
   await ownerClient.rpc("owner_open_night");
   console.log("  (Re-opened night session so demo environment is live and ready)");
+
+  // ----------------------------------------------------
+  // 12. Master Control & Karaoke Mode
+  // ----------------------------------------------------
+  console.log("\n[12/12] Testing Master Control & Karaoke Mode...");
+  const { data: stData, error: stErr } = await ownerClient.rpc("get_playback_state", {
+    p_venue_slug: slug,
+  });
+  assert(!stErr && stData?.ok === true, "get_playback_state returns live TV playback state", stErr);
+
+  const { data: volData, error: volErr } = await ownerClient.rpc("send_playback_command", {
+    p_venue_slug: slug,
+    p_command: "set_volume",
+    p_payload: { volume: 92 },
+  });
+  assert(!volErr && volData?.volume === 92, "send_playback_command 'set_volume' updates volume to 92", volErr);
+
+  const { data: kmData, error: kmErr } = await ownerClient.rpc("send_playback_command", {
+    p_venue_slug: slug,
+    p_command: "set_karaoke_mode",
+    p_payload: { enabled: true },
+  });
+  assert(!kmErr && kmData?.karaokeMode === true, "send_playback_command 'set_karaoke_mode' enables karaoke mode", kmErr);
+
+  const { data: playNowData, error: playNowErr } = await ownerClient.rpc("send_playback_command", {
+    p_venue_slug: slug,
+    p_command: "play_now",
+    p_payload: {
+      track: {
+        title: "De Música Ligera (Versión Karaoke)",
+        artist: "Soda Stereo",
+        youtubeVideoId: "mjJ-ybMo4ZM",
+        durationSeconds: 208,
+      },
+    },
+  });
+  assert(!playNowErr && playNowData?.currentTrack?.title?.includes("Música Ligera"), "send_playback_command 'play_now' immediately forces track playback", playNowErr);
+
+  // Test live karaoke YouTube search
+  try {
+    const ytres = await fetch("http://localhost:3000/api/youtube/search?q=de+musica+ligera&karaoke=true");
+    const ytdata = await ytres.json();
+    const hasKaraokeResults = Array.isArray(ytdata.results) && ytdata.results.length > 0;
+    assert(hasKaraokeResults, "YouTube search endpoint returns live karaoke results");
+    const allKaraoke = ytdata.results.every((r) => r.isKaraoke === true);
+    assert(allKaraoke, "All returned tracks are verified karaoke versions");
+    const topViews = ytdata.results[0]?.viewsCount;
+    assert(typeof topViews === "number" && topViews > 100000, `Top karaoke video sorted by most views: ${topViews?.toLocaleString()} views`);
+  } catch (err) {
+    assert(false, "YouTube search live test failed", err);
+  }
 
   // ----------------------------------------------------
   // SUMMARY
