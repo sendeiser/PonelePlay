@@ -26,7 +26,8 @@ export type PlaybackCommand =
   | "play_now"
   | "enqueue_top"
   | "reload"
-  | "set_karaoke_mode";
+  | "set_karaoke_mode"
+  | "seek";
 
 export async function fetchPlaybackState(slug: string): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
@@ -133,6 +134,13 @@ export async function setKaraokeMode(
   enabled: boolean,
 ): Promise<PlaybackState> {
   return sendPlaybackCommand(slug, "set_karaoke_mode", { enabled });
+}
+
+export async function seekPlayback(
+  slug: string,
+  seconds: number,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "seek", { seconds });
 }
 
 export async function playTrackNow(

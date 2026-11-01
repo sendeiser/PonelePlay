@@ -51,6 +51,7 @@ export interface YTPlayerInstance {
   destroy(): void;
   getCurrentTime(): number;
   getDuration(): number;
+  seekTo(seconds: number, allowSeekAhead?: boolean): void;
   loadVideoById(videoId: string): void;
   mute(): void;
   unMute(): void;

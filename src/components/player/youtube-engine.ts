@@ -230,6 +230,16 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
       }
     },
 
+    seekTo(seconds: number): void {
+      if (player) {
+        try {
+          player.seekTo(seconds, true);
+        } catch {}
+      } else {
+        postToFallbackIframe("seekTo", [seconds, true]);
+      }
+    },
+
     unMute(): void {
       if (player) {
         try {

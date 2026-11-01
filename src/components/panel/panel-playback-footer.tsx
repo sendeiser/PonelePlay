@@ -23,6 +23,7 @@ import {
   setPlaybackVolume,
   toggleMutePlayback,
   skipPlayback,
+  seekPlayback,
   setKaraokeMode as setKmRemote,
   sendPlaybackCommand,
 } from "@/lib/api/master-control";
@@ -47,6 +48,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   // Modals
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -105,10 +107,30 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
             else if (cmd === "unmute") setIsMuted(false);
             else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
             else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
-            else if (cmd === "play_now" && p.track) {
+            else if (cmd === "seek" && typeof p.seconds === "number") {
+              setElapsed(Math.floor(p.seconds));
+            } else if (cmd === "play_now" && p.track) {
               setCurrentTrack(p.track as PlayerTrack);
               setIsPaused(false);
               setElapsed(0);
+              setVideoDuration(null);
+            }
+          },
+        )
+        .on(
+          "broadcast",
+          { event: "tv_playback_progress" },
+          (msg: { payload?: { currentTime?: number; duration?: number; isPaused?: boolean; trackId?: string } }) => {
+            if (!active || !msg.payload) return;
+            const { currentTime, duration: d, isPaused: p } = msg.payload;
+            if (typeof currentTime === "number" && !isNaN(currentTime)) {
+              setElapsed(Math.floor(currentTime));
+            }
+            if (typeof d === "number" && !isNaN(d) && d > 0) {
+              setVideoDuration(Math.floor(d));
+            }
+            if (typeof p === "boolean") {
+              setIsPaused(p);
             }
           },
         )
@@ -216,8 +238,31 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
     }
   };
 
-  const duration = currentTrack?.durationSeconds ?? 210;
+  const duration = videoDuration ?? currentTrack?.durationSeconds ?? 210;
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
+
+  const handleSeek = async (newSec: number) => {
+    const clamped = Math.max(0, Math.min(duration, newSec));
+    setElapsed(clamped);
+    showToast(`⏩ Posición: ${formatDuration(clamped)}`);
+    try {
+      await seekPlayback(slug, clamped);
+    } catch {
+      // non-blocking
+    }
+  };
+
+  const handleSeekDelta = async (deltaSec: number) => {
+    await handleSeek(elapsed + deltaSec);
+  };
+
+  const handleScrubberClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetSec = Math.floor(pct * duration);
+    void handleSeek(targetSec);
+  };
 
   return (
     <>
@@ -235,10 +280,18 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
           <span className="font-mono text-[10px] text-cyan-400 font-semibold w-9 text-right">
             {formatDuration(elapsed)}
           </span>
-          <div className="flex-1 h-1.5 bg-[#181b25] rounded-full overflow-hidden relative border border-white/5">
+          <div
+            onClick={handleScrubberClick}
+            className="flex-1 h-2 hover:h-2.5 bg-[#181b25] rounded-full overflow-hidden relative border border-white/5 cursor-pointer group transition-all"
+            title="Click para adelantar o retroceder el video en la TV"
+          >
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 rounded-full transition-all duration-300"
+              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 rounded-full transition-all duration-150 pointer-events-none"
               style={{ width: `${progressPercent}%` }}
+            />
+            <div
+              className="absolute top-1/2 -translate-y-1/2 size-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+              style={{ left: `calc(${progressPercent}% - 6px)` }}
             />
           </div>
           <span className="font-mono text-[10px] text-slate-400 font-semibold w-9">
@@ -294,7 +347,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
           </div>
 
           {/* CENTER: Main Playback Transport Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {/* Prev / Restart */}
             <button
               type="button"
@@ -305,6 +358,16 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
               <RotateCcw className="size-4" />
             </button>
 
+            {/* Seek -10s */}
+            <button
+              type="button"
+              onClick={() => void handleSeekDelta(-10)}
+              className="h-8 px-2 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 font-mono text-[11px] font-bold"
+              title="Retroceder 10 segundos en la TV"
+            >
+              -10s
+            </button>
+
             {/* Play / Pause Primary Button */}
             <button
               type="button"
@@ -313,6 +376,16 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
               title={isPaused ? "Reanudar música en TV (Espacio)" : "Pausar música en TV (Espacio)"}
             >
               {isPaused ? <Play className="size-5 fill-white ml-0.5" /> : <Pause className="size-5 fill-white" />}
+            </button>
+
+            {/* Seek +10s */}
+            <button
+              type="button"
+              onClick={() => void handleSeekDelta(10)}
+              className="h-8 px-2 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 font-mono text-[11px] font-bold"
+              title="Adelantar 10 segundos en la TV"
+            >
+              +10s
             </button>
 
             {/* Skip Next */}

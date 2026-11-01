@@ -6,6 +6,7 @@ export interface PlaybackEngine {
   pause?(): void;
   stop(): void;
   setVolume?(volume: number): void;
+  seekTo?(seconds: number): void;
   unMute?(): void;
   mute?(): void;
   isMuted?(): boolean;

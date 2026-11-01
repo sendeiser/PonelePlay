@@ -76,7 +76,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [qr, setQr] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [elapsed, setElapsed] = useState(165);
+  const [elapsed, setElapsed] = useState(0);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   // Video Mode: default to true so video is always visible
   const [videoMode, setVideoMode] = useState<boolean>(() => {
@@ -96,6 +97,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const handleSeekRef = useRef<(sec: number) => void>(() => {});
+  const elapsedRef = useRef(0);
+  elapsedRef.current = elapsed;
 
   const postToIframe = useCallback((func: string, args: unknown[] = []) => {
     if (iframeRef.current?.contentWindow) {
@@ -213,6 +217,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   // Elapsed runner syncing with engine or clock
   useEffect(() => {
+    if (!isPlaying) return;
     const timer = setInterval(() => {
       if (engine.getCurrentTime) {
         const ct = Math.floor(engine.getCurrentTime());
@@ -221,12 +226,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           return;
         }
       }
-      if (isPlaying) {
-        setElapsed((prev) => prev + 1);
-      }
+      setElapsed((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
   }, [engine, isPlaying]);
+
+  // Keep YouTube iframe listening to receive continuous infoDelivery events
+  useEffect(() => {
+    const timer = setInterval(() => {
+      postToIframe("listening");
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [postToIframe]);
 
   // QR Code generator
   useEffect(() => {
@@ -351,6 +362,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           return next;
         });
       }
+      if (key === "arrowleft") {
+        event.preventDefault();
+        handleSeekRef.current(elapsedRef.current - 10);
+      }
+      if (key === "arrowright") {
+        event.preventDefault();
+        handleSeekRef.current(elapsedRef.current + 10);
+      }
       if (key === "q") {
         setQrModal((val) => !val);
       }
@@ -471,6 +490,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               } else if (liveFallbackTracks.length > 1) {
                 setLiveFallbackTracks((prev) => prev.slice(1));
               }
+            } else if (cmd === "seek") {
+              const sec = Number(p.seconds ?? 0);
+              handleSeekRef.current(sec);
             } else if (cmd === "play_now" && p.track) {
               const track = p.track as PlayerTrack;
               setManualNowPlaying(track);
@@ -599,8 +621,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     nightState?.venue.name ||
     playerState?.venue.name ||
     "Billar Aurora";
-  const duration = nowPlaying?.durationSeconds ?? 332;
-  const progressPercent = Math.min(100, Math.max(3, (elapsed / duration) * 100));
+  const duration = videoDuration ?? nowPlaying?.durationSeconds ?? 210;
+  const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
 
   function handleVolumeChange(newVol: number) {
     setVolume(newVol);
@@ -610,6 +632,46 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       engine.unMute?.();
     }
   }
+
+  const handleSeek = useCallback(
+    (targetSec: number) => {
+      const clamped = Math.max(0, Math.min(duration, targetSec));
+      setElapsed(clamped);
+      postToIframe("seekTo", [clamped, true]);
+      engine.seekTo?.(clamped);
+      setHudMessage(`⏩ Posición: ${formatDuration(clamped)}`);
+      setTimeout(() => setHudMessage(null), 2000);
+    },
+    [duration, engine, postToIframe]
+  );
+
+  useEffect(() => {
+    handleSeekRef.current = handleSeek;
+  }, [handleSeek]);
+
+  const handleSeekDelta = useCallback(
+    (deltaSec: number) => {
+      handleSeek(elapsed + deltaSec);
+    },
+    [elapsed, handleSeek]
+  );
+
+  const handleSeekClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const pct = Math.max(0, Math.min(1, clickX / rect.width));
+      const targetSec = Math.floor(pct * duration);
+      handleSeek(targetSec);
+    },
+    [duration, handleSeek]
+  );
+
+  // Reset counters when new track is loaded
+  useEffect(() => {
+    setElapsed(0);
+    setVideoDuration(null);
+  }, [nowPlaying?.itemId]);
 
   const handleSkipNext = useCallback(async () => {
     try {
@@ -648,13 +710,37 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }, [nowPlaying, engine]);
 
-  // Auto-advance when YouTube video finishes or via shortcuts
+  // Auto-advance when YouTube video finishes, real-time progress sync, or via shortcuts
   useEffect(() => {
     function onIframeMsg(e: MessageEvent) {
       try {
         const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (data?.event === "onStateChange" && data?.info === 0) {
-          handleSkipNext();
+        if (!data) return;
+
+        // 1. Exact playback position and duration delivery from YouTube
+        if ((data.event === "infoDelivery" || data.event === "initialDelivery") && data.info) {
+          if (typeof data.info.currentTime === "number") {
+            setElapsed(Math.floor(data.info.currentTime));
+          }
+          if (typeof data.info.duration === "number" && data.info.duration > 0) {
+            setVideoDuration(Math.floor(data.info.duration));
+          }
+          if (typeof data.info.playerState === "number") {
+            if (data.info.playerState === 1) setIsPlaying(true);
+            else if (data.info.playerState === 2) setIsPlaying(false);
+            else if (data.info.playerState === 0) void handleSkipNext();
+          }
+        }
+
+        // 2. State change events
+        if (data.event === "onStateChange") {
+          if (data.info === 0) {
+            void handleSkipNext();
+          } else if (data.info === 1) {
+            setIsPlaying(true);
+          } else if (data.info === 2) {
+            setIsPlaying(false);
+          }
         }
       } catch {}
     }
@@ -662,7 +748,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement) return;
       if (e.key.toLowerCase() === "s") {
-        handleSkipNext();
+        void handleSkipNext();
       } else if (e.key.toLowerCase() === "r") {
         handleRestartOrPrev();
       }
@@ -675,6 +761,44 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       window.removeEventListener("keydown", onKey);
     };
   }, [handleSkipNext, handleRestartOrPrev]);
+
+  // Broadcast live TV playback progress to the Admin Panel every 1.5s
+  useEffect(() => {
+    let active = true;
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+
+    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+      if (!active) return;
+      const supabase = createBrowserSupabase();
+      channel = supabase.channel(`playback-control:${slug}`);
+    });
+
+    const broadcastTimer = setInterval(() => {
+      if (channel && isPlaying && nowPlaying) {
+        void channel.send({
+          type: "broadcast",
+          event: "tv_playback_progress",
+          payload: {
+            currentTime: elapsed,
+            duration,
+            isPaused: !isPlaying,
+            trackId: nowPlaying.trackId,
+          },
+        });
+      }
+    }, 1500);
+
+    return () => {
+      active = false;
+      clearInterval(broadcastTimer);
+      if (channel) {
+        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+          const supabase = createBrowserSupabase();
+          void supabase.removeChannel(channel!);
+        });
+      }
+    };
+  }, [slug, elapsed, duration, isPlaying, nowPlaying]);
 
   return (
     <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
@@ -912,11 +1036,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <iframe
               ref={iframeRef}
               key={nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}
-              src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&rel=0&modestbranding=1&origin=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}&widget_referrer=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}`}
+              src={`https://www.youtube-nocookie.com/embed/${nowPlaying?.youtubeVideoId?.trim() || "T_FkEw27XJ0"}?autoplay=1&enablejsapi=1&controls=1&rel=0&modestbranding=1&playsinline=1&origin=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}&widget_referrer=${typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : ""}`}
               title={nowPlaying?.title || "TV Player"}
               className="w-full h-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
+              onLoad={() => {
+                postToIframe("listening");
+              }}
             />
             <div id="yt-player-target" className="hidden pointer-events-none" />
             {videoMode && (
@@ -1034,42 +1161,101 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           )}
 
-          {/* Bottom: Progress Bar & Attribution Pill */}
-          <div className="z-10 mt-3 bg-[#1c1f29]/90 p-4 rounded-xl border border-[#232b42] shadow-inner">
+          {/* Bottom: Progress Bar & Direct TV Controls */}
+          <div className="z-10 mt-3 bg-[#1c1f29]/95 p-4 rounded-xl border border-[#232b42] shadow-inner">
             {/* Timeline Counters */}
-            <div className="w-full flex items-center justify-between font-mono text-xs text-slate-300 mb-2">
+            <div className="w-full flex items-center justify-between font-mono text-xs text-slate-300 mb-1">
               <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
               <span className="text-slate-500 text-[11px] tracking-widest uppercase">EN REPRODUCCIÓN</span>
               <span className="text-slate-400 font-semibold tracking-wider">{formatDuration(duration)}</span>
             </div>
 
-            {/* Modern Indigo-Violet to Cyan Progress Bar */}
-            <div className="w-full h-2.5 bg-[#0a0e17] rounded-full overflow-hidden p-0 relative shadow-inner border border-[#232b42]">
-              <div
-                className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_16px_rgba(99,102,241,0.6)]"
-                style={{ width: `${progressPercent}%` }}
-              >
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 size-3.5 bg-white rounded-full shadow-[0_0_8px_#ffffff] border-2 border-[#6366F1]" />
+            {/* Modern Interactive Scrubber Progress Bar */}
+            <div
+              onClick={handleSeekClick}
+              className="group/scrub relative w-full h-5 flex items-center cursor-pointer select-none py-1"
+              title="Hacer clic para adelantar o retroceder el video en la pantalla"
+            >
+              <div className="w-full h-2.5 group-hover/scrub:h-3.5 bg-[#0a0e17] rounded-full overflow-hidden p-0 relative shadow-inner border border-[#232b42] transition-all">
+                <div
+                  className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_16px_rgba(99,102,241,0.6)] transition-all duration-150"
+                  style={{ width: `${progressPercent}%` }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 size-4 bg-white rounded-full shadow-[0_0_8px_#ffffff] border-2 border-[#6366F1] scale-100 group-hover/scrub:scale-125 transition-transform" />
+                </div>
               </div>
             </div>
 
-            {/* Attribution Pill */}
+            {/* Direct TV Control Bar */}
             <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#283250]">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-lg bg-[#262a34] border border-[#283250] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-cyan-400 text-[18px]">table_bar</span>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-200">
-                    Playlist activa: <span className="text-white font-bold">{venueName}</span>
-                  </p>
-                  <p className="font-mono text-[10px] text-slate-400">
-                    Música continua transmitida en vivo a través de YouTube HD
-                  </p>
-                </div>
+              <div className="flex items-center gap-2">
+                {/* Reiniciar */}
+                <button
+                  type="button"
+                  onClick={handleRestartOrPrev}
+                  className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
+                  title="Reiniciar canción (R)"
+                >
+                  <span className="material-symbols-outlined text-[18px]">replay</span>
+                </button>
+
+                {/* -10s */}
+                <button
+                  type="button"
+                  onClick={() => handleSeekDelta(-10)}
+                  className="px-2.5 py-1 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] font-mono text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-1"
+                  title="Retroceder 10 segundos (Flecha Izquierda)"
+                >
+                  <span className="material-symbols-outlined text-[16px]">replay_10</span>
+                  <span>-10s</span>
+                </button>
+
+                {/* Play / Pause Primary Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPlaying((prev) => {
+                      const next = !prev;
+                      if (next) void engine.play?.();
+                      else engine.pause?.();
+                      return next;
+                    });
+                  }}
+                  className="size-9 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/25 transition-all active:scale-95"
+                  title={isPlaying ? "Pausar video (Espacio)" : "Reanudar video (Espacio)"}
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    {isPlaying ? "pause" : "play_arrow"}
+                  </span>
+                </button>
+
+                {/* +10s */}
+                <button
+                  type="button"
+                  onClick={() => handleSeekDelta(10)}
+                  className="px-2.5 py-1 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] font-mono text-xs font-bold text-slate-300 hover:text-white transition-all active:scale-90 flex items-center gap-1"
+                  title="Adelantar 10 segundos (Flecha Derecha)"
+                >
+                  <span>+10s</span>
+                  <span className="material-symbols-outlined text-[16px]">forward_10</span>
+                </button>
+
+                {/* Skip Next */}
+                <button
+                  type="button"
+                  onClick={() => void handleSkipNext()}
+                  className="size-8 rounded-lg bg-[#262a34] hover:bg-[#323746] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
+                  title="Saltear al siguiente tema (S)"
+                >
+                  <span className="material-symbols-outlined text-[18px]">skip_next</span>
+                </button>
               </div>
 
+              {/* Attribution info */}
               <div className="flex items-center gap-3">
+                <p className="text-xs text-slate-300 hidden md:block">
+                  Playlist: <span className="text-white font-bold">{venueName}</span>
+                </p>
                 <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-3 py-1 rounded-full border border-indigo-500/30 font-mono text-xs font-bold">
                   <span className="material-symbols-outlined text-[16px]">graphic_eq</span>
                   <span>EN SALA</span>
