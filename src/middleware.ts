@@ -4,18 +4,18 @@ import { createServerClient } from "@supabase/ssr";
 import type { Database } from "./lib/database.types";
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({ request });
-  const cookieStore = request.cookies;
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookies) => {
-          cookies.forEach(({ name, value, options }) => {
-            cookieStore.set({ name, value, ...options });
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            response.cookies.set(name, value, options);
           });
         },
       },
@@ -25,7 +25,9 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.auth.getUser();
   if (request.nextUrl.pathname.startsWith("/panel")) {
     if (!data.user) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", request.nextUrl.pathname);
+      return NextResponse.redirect(loginUrl);
     }
   }
   return response;
