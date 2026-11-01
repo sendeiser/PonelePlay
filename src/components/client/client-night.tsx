@@ -7,7 +7,6 @@ import {
   Disc3,
   Info,
   ListMusic,
-  Music2,
   Search,
   Ticket,
 } from "lucide-react";
@@ -23,6 +22,7 @@ import { NowPlayingCard } from "./parts/now-playing-card";
 import { BalanceCard } from "./parts/balance-card";
 import { QueueRow } from "./parts/queue-row";
 import { RedeemSheet } from "./parts/redeem-sheet";
+import { ProposalSearch } from "./parts/proposal-search";
 import { cn } from "@/lib/cn";
 
 type TabId = "cola" | "buscar" | "votos";
@@ -259,36 +259,17 @@ export function ClientNight({ slug }: { slug: string }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25 }}
           >
-            <div className="flex items-end justify-between gap-3">
-              <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
-                  Sumá tu tema
-                </p>
-                <h1 className="font-display text-3xl font-extrabold tracking-tight">
-                  Poné tu canción
-                </h1>
-              </div>
-              <span className="rounded-full border border-mint/25 bg-mint/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-mint">
-                Gratis
-              </span>
-            </div>
-
-            <div className="mt-8 flex flex-col items-center rounded-3xl border border-dashed border-cream/15 px-6 py-12 text-center">
-              <Music2 className="size-10 text-amber/60" aria-hidden="true" />
-              <h2 className="mt-4 font-display text-lg font-bold">
-                Búsqueda y propuestas
-              </h2>
-              <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-cream/50">
-                Podés proponer canciones buscando en YouTube o pegando un link directo.
-              </p>
-              <button
-                type="button"
-                onClick={() => setTab("cola")}
-                className="mt-5 rounded-full border border-cream/20 bg-cream/5 px-4 py-2 text-xs font-semibold text-cream/80 hover:bg-cream/10"
-              >
-                Volver a la cola
-              </button>
-            </div>
+            <ProposalSearch
+              queue={queue}
+              proposalsEnabled={state.settings.proposalsEnabled}
+              proposalsUsed={state.me?.proposalsUsed ?? 0}
+              maxProposals={state.settings.maxProposalsPerParticipant}
+              onProposed={async () => {
+                await refresh();
+                setTab("cola");
+              }}
+              onNotify={notify}
+            />
           </motion.div>
         ) : null}
 
