@@ -7,8 +7,7 @@ import QRCode from "qrcode";
 import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X, KeyRound } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
-import { createYoutubeEngine } from "@/components/player/youtube-engine";
-import type { PlaybackEngine } from "@/components/player/engine";
+import { createIframeEngine, type IframePlaybackEngine } from "@/components/player/iframe-engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
@@ -108,21 +107,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const elapsedRef = useRef(0);
   elapsedRef.current = elapsed;
 
-  const postToIframe = useCallback((func: string, args: unknown[] = []) => {
-    if (iframeRef.current?.contentWindow) {
-      try {
-        iframeRef.current.contentWindow.postMessage(
-          JSON.stringify({ event: "command", func, args }),
-          "*"
-        );
-      } catch {}
-    }
-  }, []);
+  // Single playback engine: controls the ONE visible YouTube iframe (no hidden 2nd player)
+  const engine: IframePlaybackEngine = useMemo(
+    () => createIframeEngine(() => iframeRef.current),
+    [],
+  );
 
-  // Playback engine
-  const engine: PlaybackEngine = useMemo(() => {
-    return createYoutubeEngine("yt-player-target");
-  }, []);
+  // Listen to the iframe's messages (time, duration, state, ended, errors)
+  useEffect(() => engine.attach(), [engine]);
+
+  // YouTube embed handshake, repeated so every newly mounted iframe (new song) answers
+  useEffect(() => {
+    const timer = setInterval(() => engine.handshake(), 1000);
+    return () => clearInterval(timer);
+  }, [engine]);
 
   // Check token from search params or localStorage
   useEffect(() => {
@@ -222,29 +220,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.clearInterval(interval);
   }, []);
 
-  // Elapsed runner syncing with engine or clock
+  // Elapsed runner: real position/duration reported by the single YouTube iframe
   useEffect(() => {
     if (!isPlaying) return;
     const timer = setInterval(() => {
-      if (engine.getCurrentTime) {
-        const ct = Math.floor(engine.getCurrentTime());
-        if (ct > 0) {
-          setElapsed(ct);
-          return;
-        }
+      const d = Math.floor(engine.getDuration());
+      if (d > 0) setVideoDuration(d);
+      const ct = Math.floor(engine.getCurrentTime());
+      if (ct > 0) {
+        setElapsed(ct);
+        return;
       }
       setElapsed((prev) => prev + 1);
     }, 1000);
     return () => clearInterval(timer);
   }, [engine, isPlaying]);
-
-  // Keep YouTube iframe listening to receive continuous infoDelivery events
-  useEffect(() => {
-    const timer = setInterval(() => {
-      postToIframe("listening");
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [postToIframe]);
 
   // QR Code generator
   useEffect(() => {
@@ -300,34 +290,31 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }
 
   const handleUnlockAudio = useCallback(() => {
-    postToIframe("unMute");
-    postToIframe("setVolume", [85]);
-    postToIframe("playVideo");
     engine.unMute?.();
     engine.setVolume?.(85);
-    void engine.play?.();
+    void engine.play();
     setAudioUnlocked(true);
     setIsMuted(false);
-  }, [engine, postToIframe]);
+  }, [engine]);
 
-  // Sync isPlaying with iframe
+  // Sync isPlaying with the player
   useEffect(() => {
     if (isPlaying) {
-      postToIframe("playVideo");
+      void engine.play();
     } else {
-      postToIframe("pauseVideo");
+      engine.pause?.();
     }
-  }, [isPlaying, postToIframe]);
+  }, [isPlaying, engine]);
 
-  // Sync volume and mute with iframe
+  // Sync volume and mute with the player (engine re-applies them on every new song)
   useEffect(() => {
+    engine.setVolume?.(volume);
     if (isMuted) {
-      postToIframe("mute");
+      engine.mute?.();
     } else {
-      postToIframe("unMute");
-      postToIframe("setVolume", [volume]);
+      engine.unMute?.();
     }
-  }, [volume, isMuted, postToIframe]);
+  }, [volume, isMuted, engine]);
 
   // Global click anywhere to unlock audio & video immediately
   useEffect(() => {
@@ -505,7 +492,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setManualNowPlaying(track);
               setIsPlaying(true);
               setVideoMode(true);
-              void engine.load(track).then(() => engine.play?.());
+              // Same video (e.g. "restart" from the panel) won't remount the iframe → rewind it
+              setElapsed(0);
+              engine.seekTo?.(0);
+              void engine.play();
               setHudMessage(`🎵 Reproduciendo: ${track.title}`);
               setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "reload") {
@@ -587,14 +577,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     };
   }, [manualNowPlaying, liveNightNowPlaying, playerState, liveNightQueue, liveFallbackTracks]);
 
-  // Load and play track as soon as nowPlaying is determined
-  useEffect(() => {
-    if (nowPlaying && engine) {
-      void engine.load(nowPlaying).then(() => {
-        void engine.play?.();
-      });
-    }
-  }, [nowPlaying, engine]);
+  // Note: switching videos is driven by the iframe `src`/`key` (derived from nowPlaying)
+  // with autoplay=1, so no imperative load is needed here.
 
   const queue: PlayerTrack[] = useMemo(() => {
     if (liveNightQueue.length > 0) {
@@ -644,12 +628,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     (targetSec: number) => {
       const clamped = Math.max(0, Math.min(duration, targetSec));
       setElapsed(clamped);
-      postToIframe("seekTo", [clamped, true]);
       engine.seekTo?.(clamped);
       setHudMessage(`⏩ Posición: ${formatDuration(clamped)}`);
       setTimeout(() => setHudMessage(null), 2000);
     },
-    [duration, engine, postToIframe]
+    [duration, engine]
   );
 
   useEffect(() => {
@@ -691,64 +674,58 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     if (queue.length > 0) {
       const nextTrack = queue[0];
       setManualNowPlaying(nextTrack);
-      void engine.load(nextTrack).then(() => engine.play?.());
       setElapsed(0);
       setHudMessage(`⏭️ Siguiente: ${nextTrack.title}`);
       setTimeout(() => setHudMessage(null), 3000);
     } else if (liveFallbackTracks.length > 1) {
-      const nextTracks = liveFallbackTracks.slice(1);
-      setLiveFallbackTracks(nextTracks);
-      if (nextTracks[0]) {
-        void engine.load(nextTracks[0]).then(() => engine.play?.());
-        setElapsed(0);
-      }
+      setLiveFallbackTracks(liveFallbackTracks.slice(1));
+      setElapsed(0);
     } else {
       setHudMessage("No hay más temas en la cola");
       setTimeout(() => setHudMessage(null), 2500);
     }
-  }, [slug, queue, liveFallbackTracks, engine]);
+  }, [slug, queue, liveFallbackTracks]);
 
   const handleRestartOrPrev = useCallback(() => {
     if (nowPlaying) {
-      void engine.load(nowPlaying).then(() => engine.play?.());
       setElapsed(0);
+      engine.seekTo?.(0);
+      void engine.play();
       setHudMessage(`⏮️ Reiniciando: ${nowPlaying.title}`);
       setTimeout(() => setHudMessage(null), 2500);
     }
   }, [nowPlaying, engine]);
 
-  // Auto-advance when YouTube video finishes, real-time progress sync, or via shortcuts
+  // Auto-advance exactly once when the video ends (engine de-duplicates YouTube's repeated "ended")
+  const handleSkipNextRef = useRef(handleSkipNext);
+  useEffect(() => {
+    handleSkipNextRef.current = handleSkipNext;
+  }, [handleSkipNext]);
+
+  useEffect(
+    () =>
+      engine.onEnded(() => {
+        void handleSkipNextRef.current();
+      }),
+    [engine],
+  );
+
+  // Play/pause state reported by the iframe, and keyboard shortcuts
   useEffect(() => {
     function onIframeMsg(e: MessageEvent) {
+      if (!iframeRef.current?.contentWindow || e.source !== iframeRef.current.contentWindow) return;
       try {
         const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
         if (!data) return;
 
-        // 1. Exact playback position and duration delivery from YouTube
-        if ((data.event === "infoDelivery" || data.event === "initialDelivery") && data.info) {
-          if (typeof data.info.currentTime === "number") {
-            setElapsed(Math.floor(data.info.currentTime));
-          }
-          if (typeof data.info.duration === "number" && data.info.duration > 0) {
-            setVideoDuration(Math.floor(data.info.duration));
-          }
-          if (typeof data.info.playerState === "number") {
-            if (data.info.playerState === 1) setIsPlaying(true);
-            else if (data.info.playerState === 2) setIsPlaying(false);
-            else if (data.info.playerState === 0) void handleSkipNext();
-          }
+        let state: number | null = null;
+        if ((data.event === "infoDelivery" || data.event === "initialDelivery") && typeof data.info?.playerState === "number") {
+          state = data.info.playerState;
+        } else if (data.event === "onStateChange" && typeof data.info === "number") {
+          state = data.info;
         }
-
-        // 2. State change events
-        if (data.event === "onStateChange") {
-          if (data.info === 0) {
-            void handleSkipNext();
-          } else if (data.info === 1) {
-            setIsPlaying(true);
-          } else if (data.info === 2) {
-            setIsPlaying(false);
-          }
-        }
+        if (state === 1) setIsPlaying(true);
+        else if (state === 2) setIsPlaying(false);
       } catch {}
     }
 
@@ -1043,8 +1020,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
-            {/* Stable wrapper: the iframe remounts on every song change (key), so it
-                must not have siblings that third-party code may mutate. */}
             <div className="w-full h-full">
               {mounted && (
                 <iframe
@@ -1056,13 +1031,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   onLoad={() => {
-                    postToIframe("listening");
+                    engine.handshake();
                   }}
                 />
               )}
             </div>
-            {/* Unmanaged host for the YouTube IFrame API engine (React renders no children here) */}
-            <div id="yt-player-target" className="hidden pointer-events-none" />
             {videoMode && (
               <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">
                 <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
