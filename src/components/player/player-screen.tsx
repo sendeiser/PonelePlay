@@ -1239,7 +1239,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   onClick={handleUnlockAudio}
                   className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs cursor-pointer group-hover:bg-black/50 transition-colors"
                 >
-                  <div className="px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-mono text-xs font-bold shadow-2xl flex items-center gap-2 animate-bounce">
+                  <div className="px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-mono text-xs font-bold shadow-2xl flex items-center gap-2 animate-pulse">
                     <Volume2 className="size-5" />
                     <span>CLIC PARA ACTIVAR AUDIO DEL SALÓN</span>
                   </div>

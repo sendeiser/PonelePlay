@@ -133,7 +133,7 @@ export function StaffManager({ slug }: StaffManagerProps) {
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold transition-all active:scale-95 shadow-md shadow-indigo-600/30"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono text-xs font-bold transition-all active:scale-95 shadow-sm"
         >
           <span className="material-symbols-outlined text-base">person_add</span>
           <span>+ Registrar Mozo / Staff</span>

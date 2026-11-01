@@ -167,7 +167,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           <button
             type="submit"
             disabled={saving}
-            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95 transition-all disabled:opacity-50"
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono text-xs font-bold flex items-center gap-2 shadow-sm active:scale-95 transition-all disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-base">save</span>
             <span>{saving ? "Guardando..." : "Guardar Configuración"}</span>

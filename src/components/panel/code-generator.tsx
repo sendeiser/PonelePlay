@@ -199,7 +199,7 @@ export function CodeGenerator({
               type="button"
               disabled={loading || credits <= 0}
               onClick={handleGenerate}
-              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono font-bold text-sm tracking-tight shadow-[0_0_24px_-4px_rgba(99,102,241,0.5)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-sm tracking-tight shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
                 <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

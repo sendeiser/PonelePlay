@@ -34,3 +34,9 @@ Thumbs.db
 *.tsbuildinfo
 
 .stitch-screens/
+
+# Skills symlinks for other IDEs
+.claude/
+.trae/
+.windsurf/
+skills/
