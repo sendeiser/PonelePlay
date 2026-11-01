@@ -149,10 +149,10 @@ body {
 /* Marquee drift */
 @keyframes marqueeDrift {
   0% {
-    transform: translateX(0%);
+    transform: translate3d(0, 0, 0);
   }
   100% {
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
@@ -160,6 +160,8 @@ body {
   display: flex;
   width: 200%;
   animation: marqueeDrift 28s linear infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
 /* Receipt Perforations */

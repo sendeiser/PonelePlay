@@ -198,6 +198,9 @@ fun TVPlayerApp(
         savedServer
     }
 
+    var displayZoom by remember {
+        mutableStateOf(prefs.getInt("display_zoom", 82))
+    }
     var venueSlug by remember {
         mutableStateOf(prefs.getString("venue_slug", "billar-aurora") ?: "billar-aurora")
     }
@@ -244,6 +247,14 @@ fun TVPlayerApp(
         }
     }
 
+    // Auto-focus WebView when return from settings
+    LaunchedEffect(showSettings, hasError) {
+        if (!showSettings && !hasError) {
+            delay(150)
+            webViewRef?.requestFocus()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Fullscreen Hardware-Accelerated WebView
         AndroidView(
@@ -266,11 +277,15 @@ fun TVPlayerApp(
                         useWideViewPort = true
                         loadWithOverviewMode = true
                         cacheMode = WebSettings.LOAD_DEFAULT
+                        textZoom = displayZoom
                         userAgentString =
                             "Mozilla/5.0 (Linux; Android 14; PonelePlayTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
                     }
 
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                    overScrollMode = View.OVER_SCROLL_NEVER
+                    isVerticalScrollBarEnabled = false
+                    isHorizontalScrollBarEnabled = false
                     setBackgroundColor(android.graphics.Color.parseColor("#0A0E17"))
 
                     webViewClient = object : WebViewClient() {
@@ -476,6 +491,7 @@ fun TVPlayerApp(
         if (showSettings) {
             var tempSlug by remember { mutableStateOf(venueSlug) }
             var tempServer by remember { mutableStateOf(serverUrl) }
+            var tempZoom by remember { mutableStateOf(displayZoom) }
 
             Box(
                 modifier = Modifier
@@ -585,6 +601,38 @@ fun TVPlayerApp(
                             )
                         )
 
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "Escala de Pantalla (Zoom TV):",
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            TVButton(
+                                text = "75% (Compacto)",
+                                onClick = { tempZoom = 75 },
+                                isPrimary = tempZoom == 75,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TVButton(
+                                text = "82% (Recomendado)",
+                                onClick = { tempZoom = 82 },
+                                isPrimary = tempZoom == 82,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TVButton(
+                                text = "100% (Grande)",
+                                onClick = { tempZoom = 100 },
+                                isPrimary = tempZoom == 100,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(20.dp))
 
                         // Actions
@@ -597,10 +645,13 @@ fun TVPlayerApp(
                                 onClick = {
                                     venueSlug = tempSlug
                                     serverUrl = tempServer
+                                    displayZoom = tempZoom
                                     prefs.edit()
                                         .putString("venue_slug", tempSlug)
                                         .putString("server_url", tempServer)
+                                        .putInt("display_zoom", tempZoom)
                                         .apply()
+                                    webViewRef?.settings?.textZoom = tempZoom
 
                                     currentUrl = "${tempServer.trimEnd('/')}/player/$tempSlug"
                                     hasError = false
