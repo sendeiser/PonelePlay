@@ -113,6 +113,22 @@ export interface Database {
         created_at: string;
         redeemed_at: string | null;
       }>;
+      fallback_tracks: TableDefinition<{
+        id: string;
+        venue_id: string;
+        track_id: string;
+        position: number;
+      }>;
+      player_devices: TableDefinition<{
+        id: string;
+        venue_id: string;
+        name: string;
+        token_hash: string;
+        paired_by_owner_id: string;
+        last_seen_at: string | null;
+        revoked_at: string | null;
+        created_at: string;
+      }>;
     };
     Views: {
       [_ in never]: never;

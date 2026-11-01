@@ -1,0 +1,156 @@
+"use client";
+
+import { useState } from "react";
+import { ArrowDown, ArrowUp, Check, ListMusic, RefreshCw, Trash2 } from "lucide-react";
+import { BallChip } from "@/components/ball-chip";
+import { SourceBadge } from "@/components/source-badge";
+import { reorderFallback, type TrackRow } from "@/lib/api/catalog";
+
+interface FallbackListProps {
+  venueId: string;
+  tracks: TrackRow[];
+  onOrderSaved?: () => void;
+}
+
+export function FallbackList({
+  venueId,
+  tracks: initialTracks,
+  onOrderSaved,
+}: FallbackListProps) {
+  const [tracks, setTracks] = useState<TrackRow[]>(initialTracks);
+  const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function move(index: number, direction: "up" | "down") {
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= tracks.length) return;
+
+    const copy = [...tracks];
+    const temp = copy[index];
+    copy[index] = copy[targetIndex];
+    copy[targetIndex] = temp;
+    setTracks(copy);
+    setSavedSuccess(false);
+  }
+
+  function remove(index: number) {
+    const copy = tracks.filter((_, i) => i !== index);
+    setTracks(copy);
+    setSavedSuccess(false);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const ids = tracks.map((t) => t.id);
+      await reorderFallback(venueId, ids);
+      setSavedSuccess(true);
+      onOrderSaved?.();
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al guardar orden de respaldo",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-display text-sm font-bold text-cream flex items-center gap-2">
+            <ListMusic className="size-4 text-amber" />
+            Lista de Respaldo (Fallback)
+          </h3>
+          <p className="text-xs text-cream/50">
+            Canciones que suenan cuando la cola de votación queda vacía
+          </p>
+        </div>
+
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void handleSave()}
+          className="flex items-center gap-1.5 rounded-xl bg-amber px-3 py-1.5 font-display text-xs font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
+        >
+          {saving ? (
+            <RefreshCw className="size-3.5 animate-spin" />
+          ) : savedSuccess ? (
+            <Check className="size-3.5" />
+          ) : null}
+          {savedSuccess ? "Guardado" : "Guardar orden"}
+        </button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="text-xs text-coral">
+          {error}
+        </p>
+      ) : null}
+
+      {tracks.length > 0 ? (
+        <ul className="space-y-2">
+          {tracks.map((track, idx) => (
+            <li
+              key={track.id}
+              className="flex items-center justify-between gap-3 rounded-xl border border-cream/5 bg-white/[0.015] p-3"
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <BallChip n={idx + 1} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-cream">
+                    {track.title}
+                  </p>
+                  <p className="truncate text-[11px] text-cream/45">
+                    {track.artist}
+                  </p>
+                </div>
+                <SourceBadge source={track.source} />
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  disabled={idx === 0}
+                  onClick={() => move(idx, "up")}
+                  className="grid size-7 place-items-center rounded-lg border border-cream/10 text-cream/60 hover:text-cream disabled:opacity-20"
+                  aria-label="Subir"
+                >
+                  <ArrowUp className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  disabled={idx === tracks.length - 1}
+                  onClick={() => move(idx, "down")}
+                  className="grid size-7 place-items-center rounded-lg border border-cream/10 text-cream/60 hover:text-cream disabled:opacity-20"
+                  aria-label="Bajar"
+                >
+                  <ArrowDown className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove(idx)}
+                  className="grid size-7 place-items-center rounded-lg border border-coral/20 text-coral hover:bg-coral/10"
+                  aria-label="Quitar de respaldo"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-cream/10 p-8 text-center text-xs text-cream/40">
+          No hay canciones en la lista de respaldo.
+        </div>
+      )}
+    </div>
+  );
+}
+
