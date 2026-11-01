@@ -5,12 +5,15 @@ import { SourceBadge } from "@/components/source-badge";
 import { TrackForm } from "./track-form";
 import { UploadTrack } from "./upload-track";
 import { FallbackList } from "./fallback-list";
+import { PlaylistManager } from "./playlist-manager";
+import { YouTubeSearchModal } from "./youtube-search-modal";
 import {
   archiveTrack,
   fetchCatalog,
   fetchFallback,
   type TrackRow,
 } from "@/lib/api/catalog";
+import { fetchPlaylists, type VenuePlaylist } from "@/lib/api/playlists";
 import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 
 interface CatalogManagerProps {
@@ -27,12 +30,14 @@ function formatDuration(seconds: number | null): string {
 
 export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerProps) {
   const [venueId, setVenueId] = useState<string | null>(propVenueId || null);
-  const [tab, setTab] = useState<"catalog" | "fallback" | "add">("catalog");
+  const [tab, setTab] = useState<"playlists" | "catalog" | "fallback" | "add">("playlists");
   const [tracks, setTracks] = useState<TrackRow[]>([]);
   const [fallbackTracks, setFallbackTracks] = useState<TrackRow[]>([]);
+  const [playlists, setPlaylists] = useState<VenuePlaylist[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ytModalOpen, setYtModalOpen] = useState(false);
 
   // Resolve venueId if not provided
   useEffect(() => {
@@ -62,12 +67,14 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
     setLoading(true);
     setError(null);
     try {
-      const [cat, fb] = await Promise.all([
+      const [cat, fb, pls] = await Promise.all([
         fetchCatalog(venueId),
         fetchFallback(venueId),
+        fetchPlaylists(venueId),
       ]);
       setTracks(cat);
       setFallbackTracks(fb);
+      setPlaylists(pls);
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Error al cargar el catálogo",
@@ -111,54 +118,66 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
         <div>
           <div className="flex items-center gap-2 font-mono text-xs text-cyan-400 mb-1">
             <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/20">
-              SALÓN PRINCIPAL · AMBIENTACIÓN
+              SALÓN PRINCIPAL · AMBIENTACIÓN & YOUTUBE
             </span>
             <span className="text-slate-500">/panel/{slug}/catalogo</span>
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight">
-            Gestión de Catálogo & Playlist de Fondo
+            Playlists Personalizadas & Catálogo
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Configuración del loop acústico continuo cuando no existan solicitudes pagas activas en la cola.
+            Creá listas musicales buscando en YouTube o subiendo MP3 para la pantalla de TV y la música de fondo.
           </p>
         </div>
 
-        {/* Cabecera Metrics Deck */}
-        <div className="grid grid-cols-3 gap-3 min-w-[420px] font-mono text-xs">
-          <div className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
-              <span>TOTAL CATÁLOGO</span>
-              <span className="material-symbols-outlined text-sm text-indigo-400">library_music</span>
-            </div>
-            <div className="mt-2">
-              <span className="text-xl font-bold text-white">{tracks.length}</span>
-              <span className="text-indigo-300 ml-1 font-bold">Tracks</span>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
-              <span>TIEMPO TOTAL</span>
-              <span className="material-symbols-outlined text-sm text-cyan-400">timelapse</span>
-            </div>
-            <div className="mt-2">
-              <span className="text-xl font-bold text-white">{Math.round(totalMinutes)}m</span>
-              <span className="text-slate-400 block text-[10px]">Playlist de Fondo</span>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
-              <span>FALLBACK LOOP</span>
-              <span className="material-symbols-outlined text-sm text-emerald-400">repeat</span>
-            </div>
-            <div className="mt-2">
-              <span className="text-xl font-bold text-emerald-400">{fallbackTracks.length}</span>
-              <span className="text-slate-400 ml-1 text-[10px]">Activas</span>
-            </div>
-          </div>
+        {/* Action button: Search YouTube directly */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setYtModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white font-mono text-xs font-bold shadow-lg shadow-red-600/30 transition-all active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[18px]">smart_display</span>
+            <span>Buscar en YouTube</span>
+          </button>
         </div>
       </section>
+
+      {/* Cabecera Metrics Deck */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs">
+        <div className="p-4 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
+            <span>PLAYLISTS CREADAS</span>
+            <span className="material-symbols-outlined text-sm text-cyan-400">queue_music</span>
+          </div>
+          <div className="mt-2">
+            <span className="text-2xl font-bold text-white">{playlists.length}</span>
+            <span className="text-cyan-300 ml-1 font-bold">Listas</span>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
+            <span>TOTAL CANCIONES</span>
+            <span className="material-symbols-outlined text-sm text-indigo-400">library_music</span>
+          </div>
+          <div className="mt-2">
+            <span className="text-2xl font-bold text-white">{tracks.length}</span>
+            <span className="text-indigo-300 ml-1 font-bold">Tracks ({Math.round(totalMinutes)}m)</span>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-xl bg-[#181b25] border border-[#232b42] flex flex-col justify-between">
+          <div className="flex items-center justify-between text-slate-400 text-[10px] uppercase">
+            <span>ACTIVA EN TV (LOOP)</span>
+            <span className="material-symbols-outlined text-sm text-emerald-400">repeat</span>
+          </div>
+          <div className="mt-2">
+            <span className="text-2xl font-bold text-emerald-400">{fallbackTracks.length}</span>
+            <span className="text-slate-400 ml-1 text-[11px]">En Rotación</span>
+          </div>
+        </div>
+      </div>
 
       {error && (
         <div className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
@@ -168,37 +187,50 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
       )}
 
       {/* Tabs navigation bar */}
-      <div className="flex items-center gap-2 border-b border-[#1E2333] pb-3">
+      <div className="flex items-center gap-2 border-b border-[#1E2333] pb-3 overflow-x-auto">
+        <button
+          type="button"
+          onClick={() => setTab("playlists")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all shrink-0 ${
+            tab === "playlists"
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+              : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-base">queue_music</span>
+          <span>Playlists Personalizadas ({playlists.length})</span>
+        </button>
+
         <button
           type="button"
           onClick={() => setTab("catalog")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all shrink-0 ${
             tab === "catalog"
               ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
               : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
           }`}
         >
           <span className="material-symbols-outlined text-base">library_music</span>
-          <span>Catálogo de Canciones ({tracks.length})</span>
+          <span>Catálogo General ({tracks.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTab("fallback")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all shrink-0 ${
             tab === "fallback"
               ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
               : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
           }`}
         >
-          <span className="material-symbols-outlined text-base">queue_music</span>
-          <span>Playlist de Fondo ({fallbackTracks.length})</span>
+          <span className="material-symbols-outlined text-base">repeat</span>
+          <span>Fondo en Vivo TV ({fallbackTracks.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTab("add")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-bold transition-all shrink-0 ${
             tab === "add"
               ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
               : "bg-[#181b25] text-slate-400 hover:text-white border border-[#232b42]"
@@ -208,6 +240,14 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
           <span>+ Agregar Canción</span>
         </button>
       </div>
+
+      {/* Tab 0: Custom Playlists View */}
+      {tab === "playlists" && venueId && (
+        <PlaylistManager
+          venueId={venueId}
+          onActivatedFallback={() => void loadData()}
+        />
+      )}
 
       {/* Tab 1: Catalog view */}
       {tab === "catalog" && (
@@ -226,13 +266,25 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
               />
             </div>
 
-            <button
-              type="button"
-              onClick={() => void loadData()}
-              className="size-10 rounded-xl border border-[#232b42] text-slate-400 hover:text-white hover:bg-[#181b25] flex items-center justify-center transition-colors"
-            >
-              <span className="material-symbols-outlined text-base">refresh</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setYtModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">smart_display</span>
+                <span>Buscar en YouTube</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void loadData()}
+                className="size-10 rounded-xl border border-[#232b42] text-slate-400 hover:text-white hover:bg-[#181b25] flex items-center justify-center transition-colors"
+                title="Actualizar catálogo"
+              >
+                <span className="material-symbols-outlined text-base">refresh</span>
+              </button>
+            </div>
           </div>
 
           {loading && tracks.length === 0 ? (
@@ -240,9 +292,16 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
               Cargando catálogo...
             </p>
           ) : filteredTracks.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-500 font-mono space-y-2">
+            <div className="py-12 text-center text-xs font-mono text-slate-500 space-y-2">
               <span className="material-symbols-outlined text-slate-600 text-3xl">music_off</span>
               <p>No se encontraron canciones en el catálogo.</p>
+              <button
+                type="button"
+                onClick={() => setYtModalOpen(true)}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-mono text-xs font-bold"
+              >
+                Buscar en YouTube
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -345,6 +404,17 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
             />
           </div>
         </div>
+      )}
+
+      {/* YouTube Live Search Modal */}
+      {venueId && (
+        <YouTubeSearchModal
+          isOpen={ytModalOpen}
+          onClose={() => setYtModalOpen(false)}
+          venueId={venueId}
+          playlists={playlists}
+          onTrackAdded={() => void loadData()}
+        />
       )}
     </div>
   );

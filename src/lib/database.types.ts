@@ -129,6 +129,22 @@ export interface Database {
         revoked_at: string | null;
         created_at: string;
       }>;
+      venue_playlists: TableDefinition<{
+        id: string;
+        venue_id: string;
+        name: string;
+        description: string | null;
+        is_active: boolean;
+        created_at: string;
+        updated_at: string;
+      }>;
+      playlist_tracks: TableDefinition<{
+        id: string;
+        playlist_id: string;
+        track_id: string;
+        position: number;
+        created_at: string;
+      }>;
     };
     Views: {
       [_ in never]: never;

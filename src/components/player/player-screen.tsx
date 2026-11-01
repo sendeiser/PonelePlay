@@ -1,17 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X } from "lucide-react";
+import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X, KeyRound } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import { createYoutubeEngine } from "@/components/player/youtube-engine";
 import type { PlaybackEngine } from "@/components/player/engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
+import { fetchFallback } from "@/lib/api/catalog";
 
 interface PlayerScreenProps {
   slug: string;
@@ -28,8 +29,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const searchParams = useSearchParams();
   const [token, setToken] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState("");
-  const [isDemo, setIsDemo] = useState(false);
+  const [pairModalOpen, setPairModalOpen] = useState(false);
   const [playerState, setPlayerState] = useState<PlayerStateResponse | null>(null);
+  const [liveFallbackTracks, setLiveFallbackTracks] = useState<PlayerTrack[]>([]);
 
   const [clock, setClock] = useState("23:48");
   const [qr, setQr] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(165);
 
-  // Video Mode: true = view YouTube video in 16:9 stage; false = view spinning vinyl & album cover
+  // Video Mode: default to true so video is always visible
   const [videoMode, setVideoMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("poneleplay.player.videoMode");
@@ -46,10 +48,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return true;
   });
 
-  const [volume, setVolume] = useState(80);
+  const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+
+  // Playback engine
+  const engine: PlaybackEngine = useMemo(() => {
+    return createYoutubeEngine("yt-player-target");
+  }, []);
 
   // Check token from search params or localStorage
   useEffect(() => {
@@ -65,6 +72,47 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       setToken(saved);
     }
   }, [searchParams, slug]);
+
+  // If no token, fetch venue fallback tracks directly from Supabase
+  useEffect(() => {
+    if (token) return;
+
+    async function fetchVenueTracks() {
+      try {
+        const { createBrowserSupabase } = await import("@/lib/api/supabase/browser");
+        const supabase = createBrowserSupabase();
+        const { data: vData } = await supabase
+          .from("venues")
+          .select("id")
+          .eq("slug", slug)
+          .single();
+
+        if (vData && typeof vData === "object" && "id" in vData) {
+          const venueId = (vData as { id: string }).id;
+          const fbTracks = await fetchFallback(venueId);
+          if (fbTracks.length > 0) {
+            setLiveFallbackTracks(
+              fbTracks.map((tr) => ({
+                itemId: `fb-${tr.id}`,
+                trackId: tr.id,
+                title: tr.title,
+                artist: tr.artist,
+                source: tr.source,
+                durationSeconds: tr.durationSeconds ?? 210,
+                youtubeVideoId: tr.youtubeVideoId ?? "T_FkEw27XJ0",
+                thumbnailUrl: tr.thumbnailUrl ?? null,
+                voteCount: 0,
+              })),
+            );
+          }
+        }
+      } catch {
+        // Fallback to demo tracks
+      }
+    }
+
+    void fetchVenueTracks();
+  }, [slug, token]);
 
   // Live clock
   useEffect(() => {
@@ -82,7 +130,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.clearInterval(interval);
   }, []);
 
-  // Elapsed runner simulation
+  // Elapsed runner
   useEffect(() => {
     const timer = setInterval(() => {
       setElapsed((prev) => (prev + 1) % 320);
@@ -143,14 +191,30 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     });
   }
 
-  // Playback engine
-  const engine: PlaybackEngine = useMemo(() => {
-    return createYoutubeEngine("yt-player-target");
-  }, []);
+  const handleUnlockAudio = useCallback(() => {
+    engine.unMute?.();
+    engine.setVolume?.(85);
+    void engine.play?.();
+    setAudioUnlocked(true);
+    setIsMuted(false);
+  }, [engine]);
+
+  // Global click anywhere to unlock audio & video immediately
+  useEffect(() => {
+    const onFirstClick = () => {
+      if (!audioUnlocked) {
+        handleUnlockAudio();
+      }
+    };
+    window.addEventListener("click", onFirstClick, { once: true });
+    return () => window.removeEventListener("click", onFirstClick);
+  }, [audioUnlocked, handleUnlockAudio]);
 
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      if (event.target instanceof HTMLInputElement) return;
+
       const key = event.key.toLowerCase();
       if (key === "f") {
         toggleFullscreen();
@@ -180,6 +244,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
       if (key === "escape") {
         setQrModal(false);
+        setPairModalOpen(false);
       }
     }
 
@@ -187,36 +252,39 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [engine]);
 
-  // Now playing and queue derived from live state or demo
+  // Now playing: prioritizing playerState.nowPlaying -> live fallback -> demo
   const nowPlaying: PlayerTrack | null = useMemo(() => {
     if (playerState?.nowPlaying) return playerState.nowPlaying;
-    if (isDemo || !token) {
-      return {
-        itemId: demoNowPlaying.id,
-        trackId: demoNowPlaying.id,
-        title: demoNowPlaying.title,
-        artist: demoNowPlaying.artist,
-        source: demoNowPlaying.source,
-        durationSeconds: 332,
-        youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
-        thumbnailUrl: null,
-        voteCount: demoNowPlaying.votes,
-      };
-    }
-    return null;
-  }, [playerState, isDemo, token]);
+    if (playerState?.queue && playerState.queue.length > 0) return playerState.queue[0];
+    if (playerState?.fallback && playerState.fallback.length > 0) return playerState.fallback[0];
+    if (liveFallbackTracks.length > 0) return liveFallbackTracks[0];
 
-  // In demo mode, load demo track into engine
+    return {
+      itemId: demoNowPlaying.id,
+      trackId: demoNowPlaying.id,
+      title: demoNowPlaying.title,
+      artist: demoNowPlaying.artist,
+      source: demoNowPlaying.source,
+      durationSeconds: 332,
+      youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
+      thumbnailUrl: null,
+      voteCount: demoNowPlaying.votes,
+    };
+  }, [playerState, liveFallbackTracks]);
+
+  // Load and play track as soon as nowPlaying is determined
   useEffect(() => {
-    if (isDemo && nowPlaying && engine) {
+    if (nowPlaying && engine) {
       void engine.load(nowPlaying).then(() => {
         void engine.play?.();
       });
     }
-  }, [isDemo, nowPlaying, engine]);
+  }, [nowPlaying, engine]);
 
   const queue: PlayerTrack[] = useMemo(() => {
     if (playerState?.queue && playerState.queue.length > 0) return playerState.queue;
+    if (liveFallbackTracks.length > 1) return liveFallbackTracks.slice(1);
+
     return demoQueue.map((item) => ({
       itemId: item.id,
       trackId: item.id,
@@ -228,7 +296,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       thumbnailUrl: null,
       voteCount: item.votes,
     }));
-  }, [playerState]);
+  }, [playerState, liveFallbackTracks]);
 
   const venueName = playerState?.venue.name || "Lounge Central · Bar & Music";
   const duration = nowPlaying?.durationSeconds ?? 332;
@@ -241,89 +309,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       setIsMuted(false);
       engine.unMute?.();
     }
-  }
-
-  function handleUnlockAudio() {
-    engine.unMute?.();
-    void engine.play?.();
-    setAudioUnlocked(true);
-  }
-
-  // Pairing gate
-  if (!token && !isDemo) {
-    return (
-      <div className="tech-bg relative flex min-h-dvh flex-col items-center justify-center p-6 text-[#dfe2ef]">
-        <div className="w-full max-w-md rounded-2xl border border-[#232b42] bg-[#181b25]/95 p-8 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-600 flex items-center justify-center text-white shadow-lg">
-              <span className="material-symbols-outlined text-[24px]">tv</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white tracking-tight">
-                Reproductor TV del Salón
-              </h1>
-              <p className="font-mono text-xs text-slate-400">PonelePlay Host Precision</p>
-            </div>
-          </div>
-
-          <p className="mt-5 text-xs text-slate-300 leading-relaxed">
-            Esta pantalla se sincroniza automáticamente con la cabina del bar y reproduce la música y videos de YouTube en vivo.
-          </p>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (tokenInput.trim()) {
-                setToken(tokenInput.trim());
-                localStorage.setItem(`poneleplay.player.${slug}`, tokenInput.trim());
-              }
-            }}
-            className="mt-6 space-y-4"
-          >
-            <div>
-              <label
-                htmlFor="player-token-input"
-                className="block font-mono text-[11px] uppercase tracking-wider text-slate-400"
-              >
-                Pegá el token de la pantalla
-              </label>
-              <input
-                id="player-token-input"
-                type="text"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="Token de 64 caracteres..."
-                className="mt-2 w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-4 py-3 font-mono text-xs text-white placeholder:text-slate-600 focus:border-indigo-400 focus:outline-none"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={!tokenInput.trim()}
-              className="w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 py-3 font-mono text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50"
-            >
-              Conectar Pantalla TV
-            </button>
-          </form>
-
-          <div className="mt-6 flex items-center justify-between border-t border-[#232b42] pt-5 text-xs">
-            <Link
-              href={`/panel/${slug}`}
-              className="text-slate-400 hover:text-white underline font-mono text-[11px]"
-            >
-              Abrir panel de control
-            </Link>
-            <button
-              type="button"
-              onClick={() => setIsDemo(true)}
-              className="text-cyan-400 hover:underline font-mono text-[11px] font-semibold"
-            >
-              Probar en modo pantalla demo
-            </button>
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -339,7 +324,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       ) : null}
 
       {/* ================= TOP BAR (NOCTURNE PRECISION HEADER) ================= */}
-      <header className="w-full px-8 py-3.5 flex justify-between items-center z-50 bg-[#0A0E17]/90 backdrop-blur-xl border-b border-[#232b42] shadow-xl">
+      <header className="w-full px-8 py-3 flex justify-between items-center z-50 bg-[#0A0E17]/95 backdrop-blur-xl border-b border-[#232b42] shadow-xl">
         {/* Brand / Logo & Venue Anchor */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
@@ -372,11 +357,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           <div className="flex items-center gap-2 bg-indigo-500/15 px-3 py-1 rounded-full border border-indigo-500/30 shadow-[0_0_14px_rgba(99,102,241,0.25)]">
             <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
             <span className="text-[#c0c1ff] font-mono text-xs font-semibold tracking-wide">
-              {isDemo ? "SESIÓN DEMO · EN VIVO" : "SESIÓN ACTIVA · EN VIVO"}
+              {token ? "CANAL HOST SINCRONIZADO" : "EN VIVO · REPRODUCIENDO"}
             </span>
           </div>
 
-          {/* Video / Vinyl Mode Toggle Pill in Header */}
+          {/* Video / Vinyl Mode Toggle Pill */}
           <button
             type="button"
             onClick={toggleVideoMode}
@@ -394,14 +379,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           </button>
         </div>
 
-        {/* Volume, Audio Unlock & Precision Clock */}
-        <div className="flex items-center gap-4">
+        {/* Volume, Pairing modal trigger & Precision Clock */}
+        <div className="flex items-center gap-3">
           {/* Unlock Autoplay Sound Button if needed */}
           {!audioUnlocked && (
             <button
               type="button"
               onClick={handleUnlockAudio}
-              className="animate-pulse bg-gradient-to-r from-cyan-500 to-indigo-500 text-black px-3 py-1.5 rounded-lg font-mono text-xs font-bold shadow-lg flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+              className="animate-pulse bg-gradient-to-r from-cyan-500 to-indigo-500 text-black px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold shadow-lg flex items-center gap-1.5 hover:opacity-90 transition-opacity"
             >
               <Volume2 className="size-3.5" />
               <span>Activar Sonido TV</span>
@@ -460,17 +445,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </span>
           </div>
 
-          {/* Connection Pill */}
-          <div className="flex items-center gap-2 bg-[#181b25] px-3 py-1.5 rounded-lg border border-[#232b42]">
-            <span className="material-symbols-outlined text-cyan-400 text-[18px]">cloud_done</span>
-            <span className="font-mono text-xs text-slate-300">
-              Host Sincronizado
-            </span>
-            <span className="size-1.5 rounded-full bg-cyan-400" />
-          </div>
+          {/* Device Pair Pill / Status */}
+          <button
+            type="button"
+            onClick={() => setPairModalOpen(true)}
+            className="flex items-center gap-1.5 bg-[#181b25] hover:bg-[#202534] px-3 py-1.5 rounded-lg border border-[#232b42] text-xs font-mono text-slate-300 hover:text-white transition-colors"
+            title="Vincular con token de pantalla"
+          >
+            <KeyRound className="size-3.5 text-indigo-400" />
+            <span>{token ? "Dispositivo OK" : "Vincular"}</span>
+          </button>
 
           {/* Clock */}
-          <div className="flex items-center gap-2 bg-[#1c1f29] px-3.5 py-1.5 rounded-lg border border-[#283250] shadow-inner font-mono">
+          <div className="flex items-center gap-2 bg-[#1c1f29] px-3 py-1.5 rounded-lg border border-[#283250] shadow-inner font-mono">
             <span className="material-symbols-outlined text-indigo-400 text-[18px]">schedule</span>
             <span className="text-white font-bold text-sm tracking-widest">
               {clock}
@@ -490,7 +477,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       </header>
 
       {/* ================= MAIN VIEWPORT (SPLIT SCREEN 62/38) ================= */}
-      <main className="w-full flex-1 px-8 py-5 grid grid-cols-12 gap-6 items-stretch max-h-[calc(100vh-120px)]">
+      <main className="w-full flex-1 px-8 py-4 grid grid-cols-12 gap-6 items-stretch max-h-[calc(100vh-115px)]">
         {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~62%) ---------------- */}
         <section className="col-span-7 flex flex-col justify-between rounded-2xl bg-[#181b25]/90 border border-[#232b42] p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
           {/* Ambient tech glows */}
@@ -538,12 +525,25 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 : "absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
-            <div id="yt-player-target" className="w-full h-full" />
+            <div id="yt-player-target" className="w-full h-full" style={{ width: "100%", height: "100%" }} />
             {videoMode && (
               <div className="absolute top-3 left-3 bg-[#0a0e17]/85 backdrop-blur-md px-3 py-1 rounded-md border border-[#283250] flex items-center gap-2 font-mono text-[11px] text-cyan-300 pointer-events-none shadow-lg">
                 <span className="size-2 rounded-full bg-cyan-400 animate-live-dot inline-block" />
                 <span>EN VIVO · YOUTUBE PLAYER 1080p</span>
               </div>
+            )}
+            {/* Click to unmute overlay */}
+            {!audioUnlocked && videoMode && (
+              <button
+                type="button"
+                onClick={handleUnlockAudio}
+                className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs cursor-pointer group-hover:bg-black/50 transition-colors"
+              >
+                <div className="px-5 py-3 rounded-2xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-mono text-xs font-bold shadow-2xl flex items-center gap-2 animate-bounce">
+                  <Volume2 className="size-5" />
+                  <span>CLIC PARA ACTIVAR AUDIO DEL SALÓN</span>
+                </div>
+              </button>
             )}
           </div>
 
@@ -593,13 +593,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <div className="flex-1 min-w-0 pr-4">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-xs mb-3">
                   <span className="size-1.5 rounded-full bg-cyan-400" />
-                  VOTADA POR EL SALÓN
+                  AMBIENTACIÓN DEL LOCAL
                 </div>
                 <h1 className="text-4xl lg:text-5xl font-extrabold text-white tracking-tight leading-[1.05] drop-shadow-sm truncate">
                   {nowPlaying?.title || "Esperando tema..."}
                 </h1>
                 <h2 className="text-xl font-medium text-slate-300 mt-2 truncate">
-                  {nowPlaying?.artist || "Playlist de fondo activa"}
+                  {nowPlaying?.artist || "Playlist activa"}
                 </h2>
                 <div className="flex items-center gap-4 mt-4 font-mono text-xs text-slate-400">
                   <span className="inline-flex items-center gap-1.5">
@@ -622,13 +622,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <div className="min-w-0 flex-1 pr-4">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-[11px] mb-1">
                   <span className="size-1.5 rounded-full bg-cyan-400" />
-                  VOTADA POR EL SALÓN
+                  AMBIENTACIÓN DEL LOCAL
                 </div>
                 <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-tight truncate">
                   {nowPlaying?.title || "Esperando tema..."}
                 </h1>
                 <h2 className="text-base font-medium text-slate-300 truncate mt-0.5">
-                  {nowPlaying?.artist || "Playlist de fondo activa"}
+                  {nowPlaying?.artist || "Playlist activa"}
                 </h2>
               </div>
 
@@ -660,7 +660,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               </div>
             </div>
 
-            {/* User Attribution Pill */}
+            {/* Attribution Pill */}
             <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#283250]">
               <div className="flex items-center gap-3">
                 <div className="size-8 rounded-lg bg-[#262a34] border border-[#283250] flex items-center justify-center">
@@ -668,21 +668,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 </div>
                 <div>
                   <p className="text-xs text-slate-200">
-                    Pedida por: <span className="text-white font-bold">Mesa #8</span> <span className="text-slate-400">(Gonza)</span>
+                    Playlist activa: <span className="text-white font-bold">{venueName}</span>
                   </p>
                   <p className="font-mono text-[10px] text-slate-400">
-                    Ingresó a la cola por votación popular
+                    Música continua transmitida en vivo a través de YouTube HD
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-3 py-1 rounded-full border border-indigo-500/30 font-mono text-xs font-bold">
-                  <span className="material-symbols-outlined text-[16px]">thumb_up</span>
-                  <span>{nowPlaying?.voteCount ?? 14} VOTOS TOTALES</span>
-                </div>
-                <div className="bg-[#262a34] text-cyan-300 font-mono text-xs px-3 py-1 rounded-full border border-[#283250]">
-                  🔥 Racha de Mesa (+6)
+                  <span className="material-symbols-outlined text-[16px]">graphic_eq</span>
+                  <span>EN SALA</span>
                 </div>
               </div>
             </div>
@@ -690,7 +687,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </section>
 
         {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~38%) ---------------- */}
-        <section className="col-span-5 flex flex-col justify-between gap-5">
+        <section className="col-span-5 flex flex-col justify-between gap-4">
           {/* TOP SECTION: CRISP MODERN QR ENGAGEMENT CARD */}
           <div className="rounded-2xl bg-[#181b25]/95 border border-[#232b42] p-5 shadow-2xl flex items-center gap-5 relative overflow-hidden backdrop-blur-xl">
             <div className="absolute -right-12 -top-12 size-44 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -804,8 +801,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <span>·</span>
             <span>Cada consumición suma créditos de votos</span>
             <span>·</span>
-            <span>Cooldown inteligente: prohibido repetir temas en menos de 45 minutos</span>
-            <span>·</span>
             <span>Jukebox impulsado por PonelePlay</span>
           </span>
           <span className="flex items-center gap-2">
@@ -815,12 +810,71 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <span>·</span>
             <span>Cada consumición suma créditos de votos</span>
             <span>·</span>
-            <span>Cooldown inteligente: prohibido repetir temas en menos de 45 minutos</span>
-            <span>·</span>
             <span>Jukebox impulsado por PonelePlay</span>
           </span>
         </div>
       </footer>
+
+      {/* Device Pairing Modal (Non-blocking) */}
+      {pairModalOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[#232b42] bg-[#181b25] p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-[#232b42]">
+              <div className="flex items-center gap-2.5">
+                <KeyRound className="size-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">Vincular Pantalla TV</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPairModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <p className="mt-3 text-xs text-slate-300">
+              Podés emitir un token de pantalla desde el panel de control del local para sincronizar esta TV con el turno en vivo.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (tokenInput.trim()) {
+                  setToken(tokenInput.trim());
+                  localStorage.setItem(`poneleplay.player.${slug}`, tokenInput.trim());
+                  setPairModalOpen(false);
+                }
+              }}
+              className="mt-4 space-y-3"
+            >
+              <input
+                type="text"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                placeholder="Pegá el token de 64 caracteres..."
+                className="w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-3.5 py-2.5 font-mono text-xs text-white placeholder:text-slate-600 focus:border-indigo-400 focus:outline-none"
+              />
+
+              <div className="flex items-center justify-between pt-2">
+                <Link
+                  href={`/panel/${slug}`}
+                  className="font-mono text-[11px] text-slate-400 hover:text-white underline"
+                >
+                  Abrir panel de control
+                </Link>
+                <button
+                  type="submit"
+                  disabled={!tokenInput.trim()}
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 font-mono text-xs font-bold text-white disabled:opacity-50"
+                >
+                  Guardar y Vincular
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* QR Large Overlay Modal */}
       {qrModal && (

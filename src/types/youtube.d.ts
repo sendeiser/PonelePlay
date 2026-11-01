@@ -17,6 +17,7 @@ declare global {
             modestbranding?: 0 | 1;
             rel?: 0 | 1;
             origin?: string;
+            playsinline?: 0 | 1;
           };
           events?: {
             onReady?: (event: { target: YTPlayerInstance }) => void;

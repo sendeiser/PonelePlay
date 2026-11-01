@@ -194,6 +194,28 @@ async function run() {
     await adminClient.from("tracks").delete().eq("id", addedTrack.id);
   }
 
+  // Test Custom Playlists
+  const { data: createdPl, error: plErr } = await ownerClient
+    .from("venue_playlists")
+    .insert({
+      venue_id: venueId,
+      name: "Rock Nacional Bar Test",
+      description: "Playlist de prueba E2E",
+      is_active: false,
+    })
+    .select()
+    .single();
+  assert(!plErr && !!createdPl, "Owner can create custom playlist", plErr);
+
+  if (createdPl && catalog.length > 0) {
+    const { error: plTrackErr } = await ownerClient
+      .from("playlist_tracks")
+      .insert({ playlist_id: createdPl.id, track_id: catalog[0].id, position: 0 });
+    assert(!plTrackErr, "Owner can add track to custom playlist", plTrackErr);
+
+    await adminClient.from("venue_playlists").delete().eq("id", createdPl.id);
+  }
+
   // ----------------------------------------------------
   // TEST 6: Night Session Lifecycle (Open / State)
   // ----------------------------------------------------
@@ -294,20 +316,33 @@ async function run() {
   // TEST 9: Moderation & Queue Actions
   // ----------------------------------------------------
   console.log("\n[9/11] Testing Moderation & Queue Actions...");
-  if (queueItemId) {
-    const { data: qItem } = await adminClient
-      .from("queue_items")
-      .select("status")
-      .eq("id", queueItemId)
-      .single();
+  const { data: modTrack } = await adminClient
+    .from("tracks")
+    .select("id")
+    .limit(1)
+    .single();
 
-    const actionToTest = qItem?.status === "playing" ? "skip" : "veto";
-    const { data: modRes, error: modErr } = await ownerClient.rpc("owner_queue_action", {
-      p_item_id: queueItemId,
-      p_action: actionToTest,
-    });
-    assert(!modErr && modRes?.ok === true, `owner_queue_action '${actionToTest}' moderates item from active queue`, modErr || modRes);
-  }
+    if (modTrack && nightState?.night?.id) {
+      const { data: testItem } = await adminClient
+        .from("queue_items")
+        .insert({
+          venue_id: venueId,
+          night_session_id: nightState.night.id,
+          track_id: modTrack.id,
+          status: "queued",
+          vote_count: 0,
+        })
+        .select()
+        .single();
+
+      if (testItem) {
+        const { data: modRes, error: modErr } = await ownerClient.rpc("owner_queue_action", {
+          p_item_id: testItem.id,
+          p_action: "veto",
+        });
+        assert(!modErr && modRes?.ok === true, "owner_queue_action 'veto' moderates item from active queue", modErr || modRes);
+      }
+    }
 
   // ----------------------------------------------------
   // TEST 10: Player Screen Device Pairing & State

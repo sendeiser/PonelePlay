@@ -11,8 +11,31 @@ export function loadYoutubeIframeApi(): Promise<void> {
   }
 
   return new Promise((resolve) => {
-    const existingScript = document.getElementById("youtube-iframe-api");
-    if (!existingScript) {
+    // 1. Check if already loaded or poll until available
+    const check = () => {
+      if (window.YT && window.YT.Player) {
+        resolve();
+        return true;
+      }
+      return false;
+    };
+
+    if (check()) return;
+
+    const timer = setInterval(() => {
+      if (check()) {
+        clearInterval(timer);
+      }
+    }, 50);
+
+    // Timeout safety fallback after 8 seconds
+    setTimeout(() => {
+      clearInterval(timer);
+      resolve();
+    }, 8000);
+
+    // 2. Inject script if not present
+    if (!document.getElementById("youtube-iframe-api")) {
       const tag = document.createElement("script");
       tag.id = "youtube-iframe-api";
       tag.src = "https://www.youtube.com/iframe_api";
@@ -23,6 +46,7 @@ export function loadYoutubeIframeApi(): Promise<void> {
     const prevOnReady = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       prevOnReady?.();
+      clearInterval(timer);
       resolve();
     };
   });
@@ -45,7 +69,7 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
     async load(track: PlayerTrack): Promise<void> {
       let videoId = track.youtubeVideoId?.trim() || "";
       if (!videoId || videoId.startsWith("demo-")) {
-        // Fallback classic video for demo
+        // Fallback classic music video (Soda Stereo - De Música Ligera)
         videoId = "T_FkEw27XJ0";
       } else {
         const parsed = parseYoutubeVideoId(videoId);
@@ -60,6 +84,9 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         if (player) {
           try {
             player.loadVideoById(videoId);
+            try {
+              player.playVideo();
+            } catch {}
             resolve();
           } catch (e) {
             triggerError(`Error loading video: ${e instanceof Error ? e.message : String(e)}`);
@@ -70,88 +97,138 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
 
         const el = document.getElementById(containerId);
         if (!el) {
-          triggerError(`Container element #${containerId} not found`);
+          triggerError(`Container element #${containerId} not found in DOM`);
           resolve();
           return;
         }
 
-        player = new window.YT.Player(containerId, {
-          videoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            disablekb: 0,
-            fs: 1,
-            modestbranding: 1,
-            rel: 0,
-            origin: typeof window !== "undefined" ? window.location.origin : undefined,
-          },
-          events: {
-            onReady: (ev) => {
-              try {
-                ev.target.playVideo();
-              } catch {}
-              resolve();
+        if (!window.YT || !window.YT.Player) {
+          triggerError("window.YT.Player is not defined");
+          resolve();
+          return;
+        }
+
+        try {
+          player = new window.YT.Player(containerId, {
+            width: "100%",
+            height: "100%",
+            videoId,
+            playerVars: {
+              autoplay: 1,
+              controls: 1,
+              disablekb: 0,
+              fs: 1,
+              modestbranding: 1,
+              rel: 0,
+              playsinline: 1,
+              origin: typeof window !== "undefined" ? window.location.origin : undefined,
             },
-            onStateChange: (event) => {
-              if (event.data === window.YT.PlayerState.ENDED) {
-                triggerEnded();
-              }
+            events: {
+              onReady: (ev) => {
+                try {
+                  ev.target.setVolume(85);
+                  ev.target.playVideo();
+                } catch {
+                  // If browser autoplay restriction applies, play muted first
+                  try {
+                    ev.target.mute();
+                    ev.target.playVideo();
+                  } catch {}
+                }
+                resolve();
+              },
+              onStateChange: (event) => {
+                if (event.data === window.YT.PlayerState.ENDED) {
+                  triggerEnded();
+                }
+              },
+              onError: (event) => {
+                triggerError(`YouTube player error: ${event.data}`);
+              },
             },
-            onError: (event) => {
-              triggerError(`YouTube player error: ${event.data}`);
-            },
-          },
-        });
+          });
+        } catch (err: unknown) {
+          triggerError(`Exception creating YT.Player: ${err instanceof Error ? err.message : String(err)}`);
+          resolve();
+        }
       });
     },
 
     async play(): Promise<void> {
       if (player) {
-        player.playVideo();
+        try {
+          player.playVideo();
+        } catch {}
       }
     },
 
     pause(): void {
       if (player) {
-        player.pauseVideo();
+        try {
+          player.pauseVideo();
+        } catch {}
       }
     },
 
     stop(): void {
       if (player) {
-        player.stopVideo();
+        try {
+          player.stopVideo();
+        } catch {}
       }
     },
 
     setVolume(volume: number): void {
       if (player) {
-        player.setVolume(Math.max(0, Math.min(100, volume)));
+        try {
+          player.setVolume(Math.max(0, Math.min(100, volume)));
+        } catch {}
       }
     },
 
     unMute(): void {
       if (player) {
-        player.unMute();
+        try {
+          player.unMute();
+          player.setVolume(85);
+          player.playVideo();
+        } catch {}
       }
     },
 
     mute(): void {
       if (player) {
-        player.mute();
+        try {
+          player.mute();
+        } catch {}
       }
     },
 
     isMuted(): boolean {
-      return player ? player.isMuted() : false;
+      if (!player) return false;
+      try {
+        return player.isMuted();
+      } catch {
+        return false;
+      }
     },
 
     getCurrentTime(): number {
-      return player ? player.getCurrentTime() : 0;
+      if (!player) return 0;
+      try {
+        return player.getCurrentTime() || 0;
+      } catch {
+        return 0;
+      }
     },
 
     getDuration(): number {
-      return player ? player.getDuration() : 0;
+      if (!player) return 0;
+      try {
+        return player.getDuration() || 0;
+      } catch {
+        return 0;
+      }
     },
 
     onEnded(cb: () => void): () => void {
