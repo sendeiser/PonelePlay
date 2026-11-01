@@ -184,8 +184,8 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     const next = !isTvFullscreen;
     setIsTvFullscreen(next);
     try {
-      const { toggleFullscreenPlayback } = await import("@/lib/api/master-control");
-      await toggleFullscreenPlayback(slug);
+      const { setFullscreenPlayback } = await import("@/lib/api/master-control");
+      await setFullscreenPlayback(slug, next);
     } catch {
       setIsTvFullscreen(!next);
     }

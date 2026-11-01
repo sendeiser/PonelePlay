@@ -281,12 +281,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     };
   }, [slug]);
 
+  const nativeFsActiveRef = useRef(false);
+
   // Fullscreen state listener (window or dedicated video container)
   useEffect(() => {
     const onFsChange = () => {
       const isFs = Boolean(document.fullscreenElement);
       setIsFullscreen(isFs);
-      if (!isFs && isVideoFullscreenRef.current) {
+      if (isFs) {
+        nativeFsActiveRef.current = true;
+      } else if (nativeFsActiveRef.current) {
+        // User exited native browser fullscreen via Esc
+        nativeFsActiveRef.current = false;
         setIsVideoFullscreen(false);
         isVideoFullscreenRef.current = false;
       }
@@ -294,14 +300,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
-
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      document.exitFullscreen().catch(() => {});
-    }
-  }
 
   const toggleVideoFullscreen = useCallback(() => {
     setIsVideoFullscreen((prev) => {
@@ -318,6 +316,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       return next;
     });
   }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    toggleVideoFullscreen();
+  }, [toggleVideoFullscreen]);
 
   function toggleVideoMode() {
     setVideoMode((prev) => {
@@ -374,11 +376,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
       const key = event.key.toLowerCase();
       if (key === "f") {
-        if (videoMode) {
-          toggleVideoFullscreen();
-        } else {
-          toggleFullscreen();
-        }
+        toggleVideoFullscreen();
       }
       if (key === "v") {
         toggleVideoMode();
@@ -798,12 +796,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 isVideoFullscreenRef.current = next;
                 if (next) {
                   setVideoMode(true);
-                  setHudMessage("🖥️ Pantalla Completa Activada desde Panel");
-                  if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch(() => {});
-                  }
+                  setHudMessage("🖥️ Pantalla Completa Activada");
                 } else {
-                  setHudMessage("🖥️ Modo Normal Restaurado desde Panel");
+                  setHudMessage("🖥️ Modo Normal Restaurado");
                   if (document.fullscreenElement) {
                     document.exitFullscreen().catch(() => {});
                   }
@@ -817,12 +812,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               isVideoFullscreenRef.current = enableFs;
               if (enableFs) {
                 setVideoMode(true);
-                setHudMessage("🖥️ Pantalla Completa Activada desde Panel");
-                if (!document.fullscreenElement) {
-                  document.documentElement.requestFullscreen().catch(() => {});
-                }
+                setHudMessage("🖥️ Pantalla Completa Activada");
               } else {
-                setHudMessage("🖥️ Modo Normal Restaurado desde Panel");
+                setHudMessage("🖥️ Modo Normal Restaurado");
                 if (document.fullscreenElement) {
                   document.exitFullscreen().catch(() => {});
                 }
@@ -882,20 +874,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               void engine.load(st.current_track);
               engine.seekTo?.(0);
               void engine.play();
-            } else if (isNewCommand && (st.last_command === "toggle_fullscreen" || st.last_command === "set_fullscreen")) {
-              setIsVideoFullscreen((prev) => {
-                const next = st.last_command === "set_fullscreen" ? true : !prev;
-                isVideoFullscreenRef.current = next;
-                if (next) {
-                  setVideoMode(true);
-                  if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch(() => {});
-                  }
-                } else if (document.fullscreenElement) {
-                  document.exitFullscreen().catch(() => {});
-                }
-                return next;
-              });
             }
           },
         )

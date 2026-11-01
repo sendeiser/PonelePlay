@@ -258,8 +258,8 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
     setIsTvFullscreen(next);
     showToast(next ? "🖥️ Pantalla Completa TV Activada" : "🖥️ Pantalla Normal TV Restaurada");
     try {
-      const { toggleFullscreenPlayback } = await import("@/lib/api/master-control");
-      await toggleFullscreenPlayback(slug);
+      const { setFullscreenPlayback } = await import("@/lib/api/master-control");
+      await setFullscreenPlayback(slug, next);
     } catch {
       setIsTvFullscreen(!next);
     }
