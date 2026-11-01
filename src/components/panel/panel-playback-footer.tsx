@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  ExternalLink,
   Maximize2,
   Mic,
   Music2,
@@ -47,6 +48,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
+  const [isTvFullscreen, setIsTvFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
@@ -107,6 +109,8 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
             else if (cmd === "unmute") setIsMuted(false);
             else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
             else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
+            else if (cmd === "toggle_fullscreen") setIsTvFullscreen((prev) => !prev);
+            else if (cmd === "set_fullscreen") setIsTvFullscreen(Boolean(p.isFullscreen));
             else if (cmd === "seek" && typeof p.seconds === "number") {
               setElapsed(Math.floor(p.seconds));
             } else if (cmd === "play_now" && p.track) {
@@ -120,9 +124,17 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
         .on(
           "broadcast",
           { event: "tv_playback_progress" },
-          (msg: { payload?: { currentTime?: number; duration?: number; isPaused?: boolean; trackId?: string } }) => {
+          (msg: {
+            payload?: {
+              currentTime?: number;
+              duration?: number;
+              isPaused?: boolean;
+              trackId?: string;
+              isVideoFullscreen?: boolean;
+            };
+          }) => {
             if (!active || !msg.payload) return;
-            const { currentTime, duration: d, isPaused: p } = msg.payload;
+            const { currentTime, duration: d, isPaused: p, isVideoFullscreen: fs } = msg.payload;
             if (typeof currentTime === "number" && !isNaN(currentTime)) {
               setElapsed(Math.floor(currentTime));
             }
@@ -131,6 +143,9 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
             }
             if (typeof p === "boolean") {
               setIsPaused(p);
+            }
+            if (typeof fs === "boolean") {
+              setIsTvFullscreen(fs);
             }
           },
         )
@@ -235,6 +250,18 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
       await setKmRemote(slug, next);
     } catch {
       setKaraokeMode(!next);
+    }
+  };
+
+  const handleToggleTvFullscreen = async () => {
+    const next = !isTvFullscreen;
+    setIsTvFullscreen(next);
+    showToast(next ? "🖥️ Pantalla Completa TV Activada" : "🖥️ Pantalla Normal TV Restaurada");
+    try {
+      const { toggleFullscreenPlayback } = await import("@/lib/api/master-control");
+      await toggleFullscreenPlayback(slug);
+    } catch {
+      setIsTvFullscreen(!next);
     }
   };
 
@@ -444,6 +471,21 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
               </span>
             </div>
 
+            {/* TV Fullscreen Remote Toggle Button */}
+            <button
+              type="button"
+              onClick={() => void handleToggleTvFullscreen()}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all active:scale-95 ${
+                isTvFullscreen
+                  ? "bg-gradient-to-r from-cyan-500/25 to-indigo-500/25 text-cyan-300 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.35)] animate-pulse"
+                  : "bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-cyan-400 border-[#232b42]"
+              }`}
+              title={isTvFullscreen ? "Desactivar pantalla completa en la TV" : "Activar pantalla completa en la TV del salón"}
+            >
+              <Maximize2 className="size-3.5 text-cyan-400" />
+              <span>{isTvFullscreen ? "TV Full ON" : "TV Full"}</span>
+            </button>
+
             {/* TV Devices Manager Modal Trigger */}
             <button
               type="button"
@@ -462,7 +504,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
               className="size-8 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-400 hover:text-white transition-colors"
               title="Abrir pantalla TV en pestaña nueva"
             >
-              <Maximize2 className="size-3.5" />
+              <ExternalLink className="size-3.5" />
             </Link>
           </div>
         </div>

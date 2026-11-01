@@ -57,12 +57,15 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
+  const [isTvFullscreen, setIsTvFullscreen] = useState(false);
   const [playerResetMsg, setPlayerResetMsg] = useState<string | null>(null);
   const [manualModalOpen, setManualModalOpen] = useState(false);
 
-  // Sync initial playback state from backend
+  // Sync initial playback state from backend and listen to Realtime
   useEffect(() => {
     let active = true;
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+
     void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
       fetchPlaybackState(slug)
         .then((st) => {
@@ -74,8 +77,62 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         })
         .catch(() => {});
     });
+
+    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+      if (!active) return;
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+      try {
+        const supabase = createBrowserSupabase();
+        channel = supabase
+          .channel(`dashboard-playback:${slug}`)
+          .on(
+            "broadcast",
+            { event: "playback_command" },
+            (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
+              if (!active) return;
+              const cmd = msg.payload?.command;
+              const p = msg.payload?.payload || {};
+              if (cmd === "pause") setIsPaused(true);
+              else if (cmd === "resume") setIsPaused(false);
+              else if (cmd === "toggle_pause") setIsPaused((prev) => !prev);
+              else if (cmd === "set_volume") {
+                setVolume(Number(p.volume ?? 85));
+                setIsMuted(false);
+              } else if (cmd === "mute") setIsMuted(true);
+              else if (cmd === "unmute") setIsMuted(false);
+              else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
+              else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
+              else if (cmd === "toggle_fullscreen") setIsTvFullscreen((prev) => !prev);
+              else if (cmd === "set_fullscreen") setIsTvFullscreen(Boolean(p.isFullscreen));
+            },
+          )
+          .on(
+            "broadcast",
+            { event: "tv_playback_progress" },
+            (msg: { payload?: { isVideoFullscreen?: boolean; isPaused?: boolean } }) => {
+              if (!active || !msg.payload) return;
+              if (typeof msg.payload.isVideoFullscreen === "boolean") {
+                setIsTvFullscreen(msg.payload.isVideoFullscreen);
+              }
+              if (typeof msg.payload.isPaused === "boolean") {
+                setIsPaused(msg.payload.isPaused);
+              }
+            },
+          )
+          .subscribe();
+      } catch {
+        // Non-blocking fallback in test or offline environments
+      }
+    });
+
     return () => {
       active = false;
+      if (channel) {
+        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+          const supabase = createBrowserSupabase();
+          void supabase.removeChannel(channel!);
+        });
+      }
     };
   }, [slug]);
 
@@ -122,6 +179,17 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       // Non-blocking fallback
     }
   }, [karaokeMode, slug]);
+
+  const handleToggleTvFullscreen = useCallback(async () => {
+    const next = !isTvFullscreen;
+    setIsTvFullscreen(next);
+    try {
+      const { toggleFullscreenPlayback } = await import("@/lib/api/master-control");
+      await toggleFullscreenPlayback(slug);
+    } catch {
+      setIsTvFullscreen(!next);
+    }
+  }, [isTvFullscreen, slug]);
 
   const handleSkip = useCallback(async () => {
     setActionLoading(true);
@@ -600,6 +668,21 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                 <span>Saltar Tema (Skip)</span>
               </button>
             </div>
+
+            {/* Remote TV Fullscreen Toggle Button */}
+            <button
+              type="button"
+              onClick={() => void handleToggleTvFullscreen()}
+              className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-mono font-bold border transition-all active:scale-95 ${
+                isTvFullscreen
+                  ? "bg-gradient-to-r from-cyan-500/25 to-indigo-500/25 text-cyan-300 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.35)] animate-pulse"
+                  : "bg-[#181b25] hover:bg-[#202534] text-slate-300 hover:text-cyan-400 border-[#1E2333]"
+              }`}
+              title={isTvFullscreen ? "Desactivar pantalla completa en la TV" : "Activar pantalla completa en la TV del salón"}
+            >
+              <span className="material-symbols-outlined text-base text-cyan-400">fullscreen</span>
+              <span>{isTvFullscreen ? "Pantalla Completa TV: ACTIVADA" : "Activar Pantalla Completa en TV"}</span>
+            </button>
 
             {/* Volume Slider / Salida de Emergencia */}
             <div className="recessed-dark p-3 rounded-lg flex flex-col gap-2">

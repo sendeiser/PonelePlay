@@ -27,7 +27,9 @@ export type PlaybackCommand =
   | "enqueue_top"
   | "reload"
   | "set_karaoke_mode"
-  | "seek";
+  | "seek"
+  | "toggle_fullscreen"
+  | "set_fullscreen";
 
 export async function fetchPlaybackState(slug: string): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
@@ -141,6 +143,17 @@ export async function seekPlayback(
   seconds: number,
 ): Promise<PlaybackState> {
   return sendPlaybackCommand(slug, "seek", { seconds });
+}
+
+export async function toggleFullscreenPlayback(slug: string): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "toggle_fullscreen");
+}
+
+export async function setFullscreenPlayback(
+  slug: string,
+  isFullscreen: boolean,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "set_fullscreen", { isFullscreen });
 }
 
 export async function playTrackNow(

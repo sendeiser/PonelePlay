@@ -110,6 +110,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
+  const isVideoFullscreenRef = useRef(isVideoFullscreen);
+  isVideoFullscreenRef.current = isVideoFullscreen;
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const handleSeekRef = useRef<(sec: number) => void>(() => {});
   const elapsedRef = useRef(0);
@@ -284,10 +286,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     const onFsChange = () => {
       const isFs = Boolean(document.fullscreenElement);
       setIsFullscreen(isFs);
-      setIsVideoFullscreen(
+      const isVideoFs =
         Boolean(videoContainerRef.current) &&
-          document.fullscreenElement === videoContainerRef.current,
-      );
+        document.fullscreenElement === videoContainerRef.current;
+      setIsVideoFullscreen(isVideoFs);
+      isVideoFullscreenRef.current = isVideoFs;
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
@@ -302,11 +305,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }
 
   const toggleVideoFullscreen = useCallback(() => {
-    if (document.fullscreenElement === videoContainerRef.current) {
-      document.exitFullscreen().catch(() => {});
-    } else if (videoContainerRef.current) {
-      videoContainerRef.current.requestFullscreen().catch(() => {});
-    }
+    setIsVideoFullscreen((prev) => {
+      const next = !prev;
+      isVideoFullscreenRef.current = next;
+      if (next) {
+        videoContainerRef.current?.requestFullscreen().catch(() => {});
+      } else if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      return next;
+    });
   }, []);
 
   function toggleVideoMode() {
@@ -782,6 +790,38 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 setHudMessage("🎧 Modo Normal Restaurado");
               }
               setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "toggle_fullscreen") {
+              setIsVideoFullscreen((prev) => {
+                const next = !prev;
+                isVideoFullscreenRef.current = next;
+                if (next) {
+                  setVideoMode(true);
+                  setHudMessage("🖥️ Pantalla Completa Activada desde Panel");
+                  videoContainerRef.current?.requestFullscreen().catch(() => {});
+                } else {
+                  setHudMessage("🖥️ Modo Normal Restaurado desde Panel");
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(() => {});
+                  }
+                }
+                setTimeout(() => setHudMessage(null), 3500);
+                return next;
+              });
+            } else if (cmd === "set_fullscreen") {
+              const enableFs = Boolean(p.isFullscreen);
+              setIsVideoFullscreen(enableFs);
+              isVideoFullscreenRef.current = enableFs;
+              if (enableFs) {
+                setVideoMode(true);
+                setHudMessage("🖥️ Pantalla Completa Activada desde Panel");
+                videoContainerRef.current?.requestFullscreen().catch(() => {});
+              } else {
+                setHudMessage("🖥️ Modo Normal Restaurado desde Panel");
+                if (document.fullscreenElement) {
+                  document.exitFullscreen().catch(() => {});
+                }
+              }
+              setTimeout(() => setHudMessage(null), 3500);
             }
           },
         )
@@ -836,6 +876,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               void engine.load(st.current_track);
               engine.seekTo?.(0);
               void engine.play();
+            } else if (isNewCommand && st.last_command === "toggle_fullscreen") {
+              setIsVideoFullscreen((prev) => {
+                const next = !prev;
+                isVideoFullscreenRef.current = next;
+                if (next) {
+                  setVideoMode(true);
+                  videoContainerRef.current?.requestFullscreen().catch(() => {});
+                } else if (document.fullscreenElement) {
+                  document.exitFullscreen().catch(() => {});
+                }
+                return next;
+              });
             }
           },
         )
@@ -855,6 +907,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             isPaused: !isPlayingRef.current,
             trackId: track.trackId,
             track,
+            isVideoFullscreen: isVideoFullscreenRef.current,
           },
         });
       }
@@ -1099,13 +1152,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           </div>
 
           {/* ================= STABLE YOUTUBE CONTAINER ================= */}
+          {/* When isVideoFullscreen is TRUE: Clean Fullscreen Video without any playback controls */}
           {/* When videoMode is TRUE: Centered 16:9 Video Canvas */}
           {/* When videoMode is FALSE: Off-screen continuous audio playback */}
           <div
             ref={videoContainerRef}
             className={
               isVideoFullscreen
-                ? "fixed inset-0 z-50 w-screen h-screen bg-black flex flex-col justify-between overflow-hidden"
+                ? "fixed inset-0 z-[9999] w-screen h-screen bg-black flex items-center justify-center overflow-hidden"
                 : videoMode
                   ? "relative w-full aspect-video max-h-[520px] lg:max-h-[580px] xl:max-h-[640px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
                   : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
@@ -1118,7 +1172,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   ref={iframeRef}
                   src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
                   title={nowPlaying?.title || "TV Player"}
-                  className="w-full h-full border-0 pointer-events-none select-none"
+                  className="w-full h-full border-0 pointer-events-none select-none object-cover"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   onLoad={() => {
@@ -1131,7 +1185,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <div
                 className="absolute inset-0 z-10 cursor-default"
                 onDoubleClick={toggleVideoFullscreen}
-                title="Doble clic para pantalla completa de video"
+                title="PonelePlay TV Salón"
               />
 
               {videoMode && !isVideoFullscreen && (
@@ -1141,7 +1195,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 </div>
               )}
 
-              {/* Dedicated video fullscreen button top-right on video */}
+              {/* Dedicated video fullscreen button top-right on video (only visible when NOT fullscreen) */}
               {videoMode && !isVideoFullscreen && (
                 <button
                   type="button"
@@ -1167,130 +1221,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 </button>
               )}
             </div>
-
-            {/* FULLSCREEN HUD: When video is fullscreen, show floating song info and controls */}
-            {isVideoFullscreen && (
-              <div className="absolute inset-0 z-20 flex flex-col justify-between p-6 pointer-events-none bg-gradient-to-b from-black/80 via-transparent to-black/90">
-                {/* Header in Fullscreen */}
-                <div className="flex items-center justify-between pointer-events-auto">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-indigo-500/30 text-white border border-indigo-400/50 px-3 py-1 rounded-md font-mono text-xs font-bold flex items-center gap-2 backdrop-blur-md">
-                      <span className="size-2 rounded-full bg-cyan-400 animate-ping" />
-                      <span>{venueName.toUpperCase()} · PANTALLA COMPLETA</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={toggleVideoFullscreen}
-                    className="size-10 rounded-xl bg-black/60 hover:bg-black/80 border border-white/20 text-white flex items-center justify-center backdrop-blur-md transition-all active:scale-90"
-                    title="Salir de pantalla completa (Esc o F)"
-                  >
-                    <Minimize2 className="size-5" />
-                  </button>
-                </div>
-
-                {/* Bottom HUD in Fullscreen */}
-                <div className="pointer-events-auto max-w-4xl mx-auto w-full bg-black/75 backdrop-blur-xl border border-white/15 p-4 rounded-2xl shadow-2xl">
-                  {/* Track Info */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="min-w-0 pr-4">
-                      <h2 className="text-xl font-bold text-white truncate drop-shadow-md">
-                        {nowPlaying?.title || "PonelePlay"}
-                      </h2>
-                      <p className="text-xs text-slate-300 font-medium truncate">
-                        {nowPlaying?.artist || venueName}
-                      </p>
-                    </div>
-                    <div className="font-mono text-xs text-slate-300">
-                      <span className="text-cyan-400 font-bold">{formatDuration(elapsed)}</span> /{" "}
-                      <span className="text-slate-400">{formatDuration(duration)}</span>
-                    </div>
-                  </div>
-
-                  {/* Scrubber */}
-                  <div
-                    onClick={handleSeekClick}
-                    className="group/fs-scrub relative w-full h-5 flex items-center cursor-pointer select-none py-1 mb-2"
-                  >
-                    <div className="w-full h-2 group-hover/fs-scrub:h-3 bg-white/20 rounded-full overflow-hidden relative transition-all">
-                      <div
-                        className="h-full bg-gradient-to-r from-indigo-500 via-cyan-400 to-indigo-400 rounded-full relative"
-                        style={{ width: `${progressPercent}%` }}
-                      >
-                        <div className="absolute right-0 top-1/2 -translate-y-1/2 size-3.5 bg-white rounded-full shadow-lg" />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Controls */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={handleRestartOrPrev}
-                        className="size-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
-                        title="Reiniciar tema (R)"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">replay</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSeekDelta(-10)}
-                        className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs flex items-center gap-1 transition-all"
-                        title="-10s"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">replay_10</span>
-                        <span>-10s</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsPlaying((p) => {
-                            const n = !p;
-                            if (n) void engine.play?.();
-                            else engine.pause?.();
-                            return n;
-                          });
-                        }}
-                        className="size-10 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white flex items-center justify-center shadow-lg transition-all"
-                      >
-                        <span className="material-symbols-outlined text-[24px]">
-                          {isPlaying ? "pause" : "play_arrow"}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSeekDelta(10)}
-                        className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-mono text-xs flex items-center gap-1 transition-all"
-                        title="+10s"
-                      >
-                        <span>+10s</span>
-                        <span className="material-symbols-outlined text-[16px]">forward_10</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleSkipNext()}
-                        className="size-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
-                        title="Saltear al siguiente (S)"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">skip_next</span>
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={toggleVideoFullscreen}
-                        className="size-9 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all"
-                        title="Salir de pantalla completa (Esc o F)"
-                      >
-                        <Minimize2 className="size-4" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* ================= VINYL MODE VIEW (WHEN VIDEO IS OFF) ================= */}
