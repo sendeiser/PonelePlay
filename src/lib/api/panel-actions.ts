@@ -85,6 +85,21 @@ export async function setProposalsEnabled(
   }
 }
 
+function mapModerationError(code: string): string {
+  switch (code) {
+    case "night_closed":
+      return "La noche está cerrada";
+    case "not_found":
+      return "No se encontró la canción en la cola";
+    case "not_queued":
+      return "Solo se pueden vetar temas que estén en cola de espera";
+    case "forbidden":
+      return "No tenés permisos para realizar esta acción";
+    default:
+      return "Error al moderar la cola de reproducción";
+  }
+}
+
 export async function skipCurrent(
   queueItemId: string,
   token?: string,
@@ -106,13 +121,18 @@ export async function skipCurrent(
   }
 
   const supabase = createBrowserSupabase();
-  const { error } = await supabase
-    .from("queue_items")
-    .update({ status: "skipped" as const, ended_at: new Date().toISOString() })
-    .eq("id", queueItemId);
+  const { data, error } = await supabase.rpc("owner_queue_action" as never, {
+    p_item_id: queueItemId,
+    p_action: "skip",
+  } as never);
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  const res = data as { ok?: boolean; error?: string } | null;
+  if (res && !res.ok && res.error) {
+    throw new Error(mapModerationError(res.error));
   }
 }
 
@@ -137,12 +157,17 @@ export async function vetoItem(
   }
 
   const supabase = createBrowserSupabase();
-  const { error } = await supabase
-    .from("queue_items")
-    .update({ status: "vetoed" as const, ended_at: new Date().toISOString() })
-    .eq("id", queueItemId);
+  const { data, error } = await supabase.rpc("owner_queue_action" as never, {
+    p_item_id: queueItemId,
+    p_action: "veto",
+  } as never);
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  const res = data as { ok?: boolean; error?: string } | null;
+  if (res && !res.ok && res.error) {
+    throw new Error(mapModerationError(res.error));
   }
 }
