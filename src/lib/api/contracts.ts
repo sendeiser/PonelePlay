@@ -8,6 +8,7 @@ export const queueItemViewSchema = z.object({
   source: z.enum(["youtube", "upload", "spotify"]),
   durationSeconds: z.number().nullable(),
   thumbnailUrl: z.string().nullable(),
+  youtubeVideoId: z.string().nullable().optional(),
   voteCount: z.number().int().nonnegative(),
   createdAt: z.string(),
   status: z.enum(["queued", "playing"]),

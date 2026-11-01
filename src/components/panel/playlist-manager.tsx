@@ -7,8 +7,10 @@ import {
   ChevronDown,
   ChevronRight,
   ListMusic,
+  ListPlus,
   Loader2,
   Music2,
+  Play,
   Plus,
   Radio,
   Trash2,
@@ -20,6 +22,10 @@ import {
   fetchPlaylistTracks,
   removeTrackFromPlaylist,
   setActivePlaylistAsFallback,
+  playPlaylistNow,
+  enqueuePlaylistTracks,
+  playTrackFromPlaylistNow,
+  enqueueTrackFromPlaylist,
   type VenuePlaylist,
 } from "@/lib/api/playlists";
 import type { TrackRow } from "@/lib/api/catalog";
@@ -27,6 +33,7 @@ import { YouTubeSearchModal } from "./youtube-search-modal";
 
 interface PlaylistManagerProps {
   venueId: string;
+  slug?: string;
   onActivatedFallback?: () => void;
 }
 
@@ -39,6 +46,7 @@ function formatDuration(seconds: number | null): string {
 
 export function PlaylistManager({
   venueId,
+  slug,
   onActivatedFallback,
 }: PlaylistManagerProps) {
   const [playlists, setPlaylists] = useState<VenuePlaylist[]>([]);
@@ -154,6 +162,57 @@ export function PlaylistManager({
       setError(
         err instanceof Error ? err.message : "Error al activar playlist",
       );
+    }
+  }
+
+  async function handlePlayPlaylist(pl: VenuePlaylist) {
+    const targetSlug = slug || "billar-aurora";
+    try {
+      const res = await playPlaylistNow(venueId, targetSlug, pl.id);
+      setPlaylists((prev) =>
+        prev.map((p) => ({ ...p, isActive: p.id === pl.id })),
+      );
+      setFeedback(`▶️ ¡Reproduciendo playlist «${pl.name}» en la TV! (${res.firstTrackTitle})`);
+      onActivatedFallback?.();
+      setTimeout(() => setFeedback(null), 4500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al reproducir playlist");
+    }
+  }
+
+  async function handleEnqueuePlaylist(pl: VenuePlaylist) {
+    const targetSlug = slug || "billar-aurora";
+    try {
+      const count = await enqueuePlaylistTracks(targetSlug, pl.id);
+      setFeedback(`⬆️ Se agregaron ${count} canciones de «${pl.name}» a la cola en vivo.`);
+      onActivatedFallback?.();
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al encolar playlist");
+    }
+  }
+
+  async function handlePlayTrackSingle(t: TrackRow) {
+    const targetSlug = slug || "billar-aurora";
+    try {
+      await playTrackFromPlaylistNow(targetSlug, t);
+      setFeedback(`▶️ Reproduciendo ahora en TV: «${t.title}»`);
+      onActivatedFallback?.();
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al reproducir tema");
+    }
+  }
+
+  async function handleEnqueueTrackSingle(t: TrackRow) {
+    const targetSlug = slug || "billar-aurora";
+    try {
+      await enqueueTrackFromPlaylist(targetSlug, t);
+      setFeedback(`⬆️ «${t.title}» agregada como siguiente en la cola.`);
+      onActivatedFallback?.();
+      setTimeout(() => setFeedback(null), 4000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al encolar tema");
     }
   }
 
@@ -312,7 +371,27 @@ export function PlaylistManager({
                   </div>
 
                   {/* Actions for this playlist */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handlePlayPlaylist(pl)}
+                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+                      title="Reproducir esta playlist inmediatamente en la pantalla TV"
+                    >
+                      <Play className="size-3.5 fill-white" />
+                      <span>Reproducir Playlist</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleEnqueuePlaylist(pl)}
+                      className="px-3 py-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] border border-[#2a3450] text-slate-300 hover:text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      title="Agregar todas las canciones a la cola en vivo de la noche"
+                    >
+                      <ListPlus className="size-3.5 text-indigo-400" />
+                      <span>Encolar Todo</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => openSearchForPlaylist(pl.id)}
@@ -331,12 +410,12 @@ export function PlaylistManager({
                         title="Activar como música de fondo continua en la TV"
                       >
                         <Radio className="size-3.5 text-cyan-400" />
-                        <span>Activar en TV</span>
+                        <span>Activar de Fondo</span>
                       </button>
                     ) : (
                       <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold flex items-center gap-1">
                         <Check className="size-3.5" />
-                        <span>Sonando de Fondo</span>
+                        <span>Activa en TV</span>
                       </div>
                     )}
 
@@ -421,15 +500,35 @@ export function PlaylistManager({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                              <span className="font-mono text-xs text-slate-400">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs text-slate-400 mr-1">
                                 {formatDuration(t.durationSeconds)}
                               </span>
 
                               <button
                                 type="button"
+                                onClick={() => void handlePlayTrackSingle(t)}
+                                className="p-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all flex items-center gap-1 font-mono text-[11px]"
+                                title="Reproducir este tema ahora en la TV"
+                              >
+                                <Play className="size-3 fill-current" />
+                                <span className="hidden sm:inline">Reproducir</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => void handleEnqueueTrackSingle(t)}
+                                className="p-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] text-slate-300 hover:text-cyan-400 border border-[#2a3450] transition-colors flex items-center gap-1 font-mono text-[11px]"
+                                title="Poner como siguiente en la cola en vivo"
+                              >
+                                <Plus className="size-3" />
+                                <span className="hidden sm:inline">Encolar</span>
+                              </button>
+
+                              <button
+                                type="button"
                                 onClick={() => void handleRemoveTrack(pl.id, t.id)}
-                                className="text-slate-500 hover:text-rose-400 transition-colors p-1"
+                                className="text-slate-500 hover:text-rose-400 transition-colors p-1.5 ml-1"
                                 title="Quitar de playlist"
                               >
                                 <Trash2 className="size-3.5" />

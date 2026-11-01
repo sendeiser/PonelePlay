@@ -221,3 +221,4 @@ end;
 $$;
 
 grant execute on function public.list_venue_player_devices(text) to authenticated, anon, service_role;
+

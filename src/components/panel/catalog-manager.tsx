@@ -245,6 +245,7 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
       {tab === "playlists" && venueId && (
         <PlaylistManager
           venueId={venueId}
+          slug={slug}
           onActivatedFallback={() => void loadData()}
         />
       )}

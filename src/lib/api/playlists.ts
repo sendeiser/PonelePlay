@@ -228,6 +228,95 @@ export async function setActivePlaylistAsFallback(
   }
 }
 
+export async function playPlaylistNow(
+  venueId: string,
+  slug: string,
+  playlistId: string,
+): Promise<{ firstTrackTitle: string; totalTracks: number }> {
+  // 1. Set this playlist as the active fallback playlist
+  await setActivePlaylistAsFallback(venueId, playlistId);
+
+  // 2. Fetch tracks
+  const tracks = await fetchPlaylistTracks(playlistId);
+  if (tracks.length === 0) {
+    throw new Error("La playlist seleccionada no contiene canciones.");
+  }
+
+  // 3. Immediately play track 1 on TV
+  const { playTrackNow, enqueueTrackTop } = await import("@/lib/api/master-control");
+  await playTrackNow(slug, {
+    title: tracks[0].title,
+    artist: tracks[0].artist,
+    youtubeVideoId: tracks[0].youtubeVideoId || "T_FkEw27XJ0",
+    durationSeconds: tracks[0].durationSeconds ?? 210,
+    thumbnailUrl: tracks[0].thumbnailUrl,
+  });
+
+  // 4. Enqueue subsequent tracks into the live queue so they appear in the queue list
+  for (let i = 1; i < tracks.length; i++) {
+    await enqueueTrackTop(slug, {
+      title: tracks[i].title,
+      artist: tracks[i].artist,
+      youtubeVideoId: tracks[i].youtubeVideoId || "T_FkEw27XJ0",
+      durationSeconds: tracks[i].durationSeconds ?? 210,
+      thumbnailUrl: tracks[i].thumbnailUrl,
+    });
+  }
+
+  return { firstTrackTitle: tracks[0].title, totalTracks: tracks.length };
+}
+
+export async function enqueuePlaylistTracks(
+  slug: string,
+  playlistId: string,
+): Promise<number> {
+  const tracks = await fetchPlaylistTracks(playlistId);
+  if (tracks.length === 0) {
+    throw new Error("La playlist no contiene canciones para encolar.");
+  }
+
+  const { enqueueTrackTop } = await import("@/lib/api/master-control");
+  for (const t of tracks) {
+    await enqueueTrackTop(slug, {
+      title: t.title,
+      artist: t.artist,
+      youtubeVideoId: t.youtubeVideoId || "T_FkEw27XJ0",
+      durationSeconds: t.durationSeconds ?? 210,
+      thumbnailUrl: t.thumbnailUrl,
+    });
+  }
+
+  return tracks.length;
+}
+
+export async function playTrackFromPlaylistNow(
+  slug: string,
+  track: TrackRow,
+): Promise<void> {
+  const { playTrackNow } = await import("@/lib/api/master-control");
+  await playTrackNow(slug, {
+    title: track.title,
+    artist: track.artist,
+    youtubeVideoId: track.youtubeVideoId || "T_FkEw27XJ0",
+    durationSeconds: track.durationSeconds ?? 210,
+    thumbnailUrl: track.thumbnailUrl,
+  });
+}
+
+export async function enqueueTrackFromPlaylist(
+  slug: string,
+  track: TrackRow,
+): Promise<void> {
+  const { enqueueTrackTop } = await import("@/lib/api/master-control");
+  await enqueueTrackTop(slug, {
+    title: track.title,
+    artist: track.artist,
+    youtubeVideoId: track.youtubeVideoId || "T_FkEw27XJ0",
+    durationSeconds: track.durationSeconds ?? 210,
+    thumbnailUrl: track.thumbnailUrl,
+  });
+}
+
 export async function addYouTubeTrackToVenue(
   venueId: string,
   trackInfo: {

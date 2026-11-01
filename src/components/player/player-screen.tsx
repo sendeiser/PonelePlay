@@ -13,6 +13,8 @@ import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
 import { TvPairingModal } from "@/components/player/tv-pairing-modal";
+import { createNightStateSource } from "@/lib/api/night-state";
+import { useNightState } from "@/hooks/use-night-state";
 
 interface PlayerScreenProps {
   slug: string;
@@ -31,6 +33,44 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [pairModalOpen, setPairModalOpen] = useState(false);
   const [playerState, setPlayerState] = useState<PlayerStateResponse | null>(null);
   const [liveFallbackTracks, setLiveFallbackTracks] = useState<PlayerTrack[]>([]);
+
+  // Continuous Night State Realtime Sync (Live Queue & Now Playing)
+  const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
+  const { state: nightState } = useNightState(nightSource, { pollMs: 3000 });
+
+  const liveNightQueue: PlayerTrack[] = useMemo(() => {
+    if (nightState?.queue && nightState.queue.length > 0) {
+      return nightState.queue.map((item) => ({
+        itemId: item.id,
+        trackId: item.trackId,
+        title: item.title,
+        artist: item.artist,
+        source: item.source,
+        durationSeconds: item.durationSeconds ?? 210,
+        youtubeVideoId: item.youtubeVideoId || undefined,
+        thumbnailUrl: item.thumbnailUrl ?? null,
+        voteCount: item.voteCount,
+      }));
+    }
+    return [];
+  }, [nightState]);
+
+  const liveNightNowPlaying: PlayerTrack | null = useMemo(() => {
+    if (nightState?.nowPlaying) {
+      return {
+        itemId: nightState.nowPlaying.id,
+        trackId: nightState.nowPlaying.trackId,
+        title: nightState.nowPlaying.title,
+        artist: nightState.nowPlaying.artist,
+        source: nightState.nowPlaying.source,
+        durationSeconds: nightState.nowPlaying.durationSeconds ?? 210,
+        youtubeVideoId: nightState.nowPlaying.youtubeVideoId || undefined,
+        thumbnailUrl: nightState.nowPlaying.thumbnailUrl ?? null,
+        voteCount: nightState.nowPlaying.voteCount,
+      };
+    }
+    return null;
+  }, [nightState]);
 
   const [clock, setClock] = useState("23:48");
   const [qr, setQr] = useState<string | null>(null);
@@ -88,9 +128,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }, [searchParams, slug]);
 
-  // If no token, fetch venue fallback tracks directly from Supabase
+  // Fetch venue fallback tracks directly from Supabase & listen for playlist updates
   useEffect(() => {
-    if (token) return;
+    let active = true;
 
     async function fetchVenueTracks() {
       try {
@@ -105,7 +145,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         if (vData && typeof vData === "object" && "id" in vData) {
           const venueId = (vData as { id: string }).id;
           const fbTracks = await fetchFallback(venueId);
-          if (fbTracks.length > 0) {
+          if (active && fbTracks.length > 0) {
             setLiveFallbackTracks(
               fbTracks.map((tr) => ({
                 itemId: `fb-${tr.id}`,
@@ -127,7 +167,33 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
 
     void fetchVenueTracks();
-  }, [slug, token]);
+
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+      if (!active) return;
+      const supabase = createBrowserSupabase();
+      channel = supabase
+        .channel(`tv-fallback-sync:${slug}`)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "fallback_tracks" },
+          () => {
+            void fetchVenueTracks();
+          },
+        )
+        .subscribe();
+    });
+
+    return () => {
+      active = false;
+      if (channel) {
+        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+          const supabase = createBrowserSupabase();
+          void supabase.removeChannel(channel!);
+        });
+      }
+    };
+  }, [slug]);
 
   // Live clock
   useEffect(() => {
@@ -398,7 +464,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setHudMessage("⏭️ Salteando Tema...");
               setTimeout(() => setHudMessage(null), 3500);
               setManualNowPlaying(null);
-              if (playerState?.queue && playerState.queue.length > 0) {
+              if (liveNightQueue.length > 0) {
+                setManualNowPlaying(liveNightQueue[0]);
+              } else if (playerState?.queue && playerState.queue.length > 0) {
                 setManualNowPlaying(playerState.queue[0]);
               } else if (liveFallbackTracks.length > 1) {
                 setLiveFallbackTracks((prev) => prev.slice(1));
@@ -465,12 +533,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         });
       }
     };
-  }, [slug, engine, playerState, liveFallbackTracks]);
+  }, [slug, engine, playerState, liveFallbackTracks, liveNightQueue]);
 
-  // Now playing: prioritizing manualNowPlaying -> playerState.nowPlaying -> live fallback -> demo
+  // Now playing: prioritizing manualNowPlaying -> liveNightNowPlaying -> playerState.nowPlaying -> liveNightQueue[0] -> fallback -> demo
   const nowPlaying: PlayerTrack | null = useMemo(() => {
     if (manualNowPlaying) return manualNowPlaying;
+    if (liveNightNowPlaying) return liveNightNowPlaying;
     if (playerState?.nowPlaying) return playerState.nowPlaying;
+    if (liveNightQueue.length > 0) return liveNightQueue[0];
     if (playerState?.queue && playerState.queue.length > 0) return playerState.queue[0];
     if (playerState?.fallback && playerState.fallback.length > 0) return playerState.fallback[0];
     if (liveFallbackTracks.length > 0) return liveFallbackTracks[0];
@@ -486,7 +556,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       thumbnailUrl: null,
       voteCount: demoNowPlaying.votes,
     };
-  }, [manualNowPlaying, playerState, liveFallbackTracks]);
+  }, [manualNowPlaying, liveNightNowPlaying, playerState, liveNightQueue, liveFallbackTracks]);
 
   // Load and play track as soon as nowPlaying is determined
   useEffect(() => {
@@ -498,6 +568,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, [nowPlaying, engine]);
 
   const queue: PlayerTrack[] = useMemo(() => {
+    if (liveNightQueue.length > 0) {
+      // If liveNightNowPlaying is playing the first track, or nowPlaying matches the first queue track, show rest
+      if (
+        (liveNightNowPlaying && liveNightNowPlaying.itemId === liveNightQueue[0]?.itemId) ||
+        (nowPlaying && nowPlaying.itemId === liveNightQueue[0]?.itemId)
+      ) {
+        return liveNightQueue.slice(1);
+      }
+      return liveNightQueue;
+    }
+
     if (playerState?.queue && playerState.queue.length > 0) return playerState.queue;
     if (liveFallbackTracks.length > 1) return liveFallbackTracks.slice(1);
 
@@ -512,9 +593,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       thumbnailUrl: null,
       voteCount: item.votes,
     }));
-  }, [playerState, liveFallbackTracks]);
+  }, [liveNightQueue, liveNightNowPlaying, nowPlaying, playerState, liveFallbackTracks]);
 
-  const venueName = playerState?.venue.name || "Lounge Central · Bar & Music";
+  const venueName =
+    nightState?.venue.name ||
+    playerState?.venue.name ||
+    "Billar Aurora";
   const duration = nowPlaying?.durationSeconds ?? 332;
   const progressPercent = Math.min(100, Math.max(3, (elapsed / duration) * 100));
 
@@ -527,7 +611,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }
 
-  const handleSkipNext = useCallback(() => {
+  const handleSkipNext = useCallback(async () => {
+    try {
+      const { skipPlayback } = await import("@/lib/api/master-control");
+      await skipPlayback(slug);
+    } catch {
+      // Non-blocking fallback
+    }
+
     if (queue.length > 0) {
       const nextTrack = queue[0];
       setManualNowPlaying(nextTrack);
@@ -546,7 +637,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       setHudMessage("No hay más temas en la cola");
       setTimeout(() => setHudMessage(null), 2500);
     }
-  }, [queue, liveFallbackTracks, engine]);
+  }, [slug, queue, liveFallbackTracks, engine]);
 
   const handleRestartOrPrev = useCallback(() => {
     if (nowPlaying) {
