@@ -34,3 +34,4 @@ create policy playlist_tracks_all on public.playlist_tracks for all using (true)
 
 grant all on public.venue_playlists to authenticated, anon, service_role;
 grant all on public.playlist_tracks to authenticated, anon, service_role;
+

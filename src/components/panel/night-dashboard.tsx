@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BallChip } from "@/components/ball-chip";
 import { createNightStateSource } from "@/lib/api/night-state";
@@ -18,6 +19,7 @@ import { nightPhase } from "@/lib/domain/night";
 import { type PanelRole } from "@/lib/domain/permissions";
 import { PairPlayerDialog } from "./pair-player";
 import { ManualPlaybackModal } from "./manual-playback-modal";
+import { TvDevicesManagerModal } from "./tv-devices-manager-modal";
 
 interface NightDashboardProps {
   slug: string;
@@ -33,6 +35,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) {
+  const searchParams = useSearchParams();
   const source = useMemo(() => createNightStateSource(slug), [slug]);
   const { state, loading, refresh } = useNightState(source);
 
@@ -40,6 +43,12 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmVetoId, setConfirmVetoId] = useState<string | null>(null);
   const [pairDialogOpen, setPairDialogOpen] = useState(false);
+  const [tvManagerOpen, setTvManagerOpen] = useState(() => {
+    return Boolean(searchParams?.get("pair_code"));
+  });
+  const [initialPairCode, setInitialPairCode] = useState<string | null>(() => {
+    return searchParams?.get("pair_code") || null;
+  });
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -382,11 +391,20 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         <div className="flex items-center gap-3 text-slate-400">
           <button
             type="button"
-            onClick={() => setPairDialogOpen(true)}
-            className="hover:text-indigo-300 text-indigo-400 underline text-xs transition-colors flex items-center gap-1"
+            onClick={() => setTvManagerOpen(true)}
+            className="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white px-3 py-1.5 rounded-lg border border-indigo-500/40 text-xs font-mono font-bold transition-all shadow-sm"
           >
-            <span className="material-symbols-outlined text-sm">link</span>
-            <span>Vincular Pantalla TV (Token)</span>
+            <span className="material-symbols-outlined text-sm text-cyan-400">tv</span>
+            <span>Pantallas TV (PIN / QR)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPairDialogOpen(true)}
+            className="hover:text-slate-300 text-slate-400 text-xs transition-colors hidden sm:flex items-center gap-1"
+            title="Vincular mediante token manual"
+          >
+            <span className="material-symbols-outlined text-xs">key</span>
+            <span>Token</span>
           </button>
           <button
             type="button"
@@ -787,12 +805,23 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         onCancel={() => setConfirmVetoId(null)}
       />
 
-      {/* Pair Player Dialog */}
+      {/* Pair Player Dialog (Legacy Token) */}
       <PairPlayerDialog
         open={pairDialogOpen}
         venueId={state?.venue.id || ""}
         slug={slug}
         onClose={() => setPairDialogOpen(false)}
+      />
+
+      {/* Modern Smart TV Devices Manager (6-Digit Code / QR / Status) */}
+      <TvDevicesManagerModal
+        isOpen={tvManagerOpen}
+        onClose={() => {
+          setTvManagerOpen(false);
+          setInitialPairCode(null);
+        }}
+        slug={slug}
+        initialCode={initialPairCode}
       />
 
       {/* Manual Track Selection & Master Playback Modal */}

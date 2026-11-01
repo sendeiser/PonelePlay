@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { Maximize2, Minimize2, Music2, Volume2, VolumeX, X, KeyRound } from "lucide-react";
@@ -13,6 +12,8 @@ import type { PlaybackEngine } from "@/components/player/engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
+import { PlayerFooterBar } from "@/components/player/player-footer-bar";
+import { TvPairingModal } from "@/components/player/tv-pairing-modal";
 
 interface PlayerScreenProps {
   slug: string;
@@ -28,7 +29,6 @@ function formatDuration(seconds: number | null): string {
 export function PlayerScreen({ slug }: PlayerScreenProps) {
   const searchParams = useSearchParams();
   const [token, setToken] = useState<string | null>(null);
-  const [tokenInput, setTokenInput] = useState("");
   const [pairModalOpen, setPairModalOpen] = useState(false);
   const [playerState, setPlayerState] = useState<PlayerStateResponse | null>(null);
   const [liveFallbackTracks, setLiveFallbackTracks] = useState<PlayerTrack[]>([]);
@@ -133,13 +133,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.clearInterval(interval);
   }, []);
 
-  // Elapsed runner
+  // Elapsed runner syncing with engine or clock
   useEffect(() => {
     const timer = setInterval(() => {
-      setElapsed((prev) => (prev + 1) % 320);
+      if (engine.getCurrentTime) {
+        const ct = Math.floor(engine.getCurrentTime());
+        if (ct > 0) {
+          setElapsed(ct);
+          return;
+        }
+      }
+      if (isPlaying) {
+        setElapsed((prev) => prev + 1);
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [engine, isPlaying]);
 
   // QR Code generator
   useEffect(() => {
@@ -484,6 +493,36 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }
 
+  const handleSkipNext = useCallback(() => {
+    if (queue.length > 0) {
+      const nextTrack = queue[0];
+      setManualNowPlaying(nextTrack);
+      void engine.load(nextTrack).then(() => engine.play?.());
+      setElapsed(0);
+      setHudMessage(`⏭️ Siguiente: ${nextTrack.title}`);
+      setTimeout(() => setHudMessage(null), 3000);
+    } else if (liveFallbackTracks.length > 1) {
+      const nextTracks = liveFallbackTracks.slice(1);
+      setLiveFallbackTracks(nextTracks);
+      if (nextTracks[0]) {
+        void engine.load(nextTracks[0]).then(() => engine.play?.());
+        setElapsed(0);
+      }
+    } else {
+      setHudMessage("No hay más temas en la cola");
+      setTimeout(() => setHudMessage(null), 2500);
+    }
+  }, [queue, liveFallbackTracks, engine]);
+
+  const handleRestartOrPrev = useCallback(() => {
+    if (nowPlaying) {
+      void engine.load(nowPlaying).then(() => engine.play?.());
+      setElapsed(0);
+      setHudMessage(`⏮️ Reiniciando: ${nowPlaying.title}`);
+      setTimeout(() => setHudMessage(null), 2500);
+    }
+  }, [nowPlaying, engine]);
+
   return (
     <div className="tech-bg relative flex min-h-dvh flex-col justify-between overflow-hidden text-[#dfe2ef] select-none">
       {/* Realtime Master Control HUD Message Toast */}
@@ -713,8 +752,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           <div
             className={
               videoMode
-                ? "relative w-full aspect-video max-h-[380px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
-                : "absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none -z-50 overflow-hidden"
+                ? "relative w-full aspect-video max-h-[520px] lg:max-h-[580px] xl:max-h-[640px] rounded-2xl overflow-hidden border border-[#283250] shadow-2xl bg-black my-auto z-10 group"
+                : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
             }
           >
             <div id="yt-player-target" className="w-full h-full" style={{ width: "100%", height: "100%" }} />
@@ -983,90 +1022,60 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </section>
       </main>
 
-      {/* ================= BOTTOM MARQUEE BAR ================= */}
-      <footer className="w-full bg-[#0a0e17] border-t border-[#232b42] py-2 px-6 overflow-hidden z-40">
-        <div className="animate-marquee items-center gap-12 font-mono text-xs text-slate-400">
-          <span className="flex items-center gap-2">
-            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
-            <span>·</span>
-            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
-            <span>·</span>
-            <span>Cada consumición suma créditos de votos</span>
-            <span>·</span>
-            <span>Jukebox impulsado por PonelePlay</span>
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="text-cyan-400 font-bold">🎵 BIENVENIDO A {venueName.toUpperCase()}</span>
-            <span>·</span>
-            <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
-            <span>·</span>
-            <span>Cada consumición suma créditos de votos</span>
-            <span>·</span>
-            <span>Jukebox impulsado por PonelePlay</span>
-          </span>
-        </div>
-      </footer>
+      {/* ================= COMPREHENSIVE PLAYBACK FOOTER BAR ================= */}
+      <PlayerFooterBar
+        nowPlaying={nowPlaying}
+        isPlaying={isPlaying}
+        onTogglePlay={() => {
+          setIsPlaying((prev) => {
+            const next = !prev;
+            if (next) void engine.play?.();
+            else engine.pause?.();
+            setHudMessage(next ? "▶️ Música Reanudada" : "⏸️ Música Pausada");
+            setTimeout(() => setHudMessage(null), 2500);
+            return next;
+          });
+        }}
+        onSkipNext={handleSkipNext}
+        onRestartOrPrev={handleRestartOrPrev}
+        volume={volume}
+        isMuted={isMuted}
+        onVolumeChange={handleVolumeChange}
+        onToggleMute={() => {
+          setIsMuted((prev) => {
+            const next = !prev;
+            if (next) engine.mute?.();
+            else engine.unMute?.();
+            setHudMessage(next ? "🔇 Audio Silenciado" : "🔊 Audio Activo");
+            setTimeout(() => setHudMessage(null), 2500);
+            return next;
+          });
+        }}
+        audioUnlocked={audioUnlocked}
+        onUnlockAudio={handleUnlockAudio}
+        elapsed={elapsed}
+        duration={duration}
+        videoMode={videoMode}
+        onToggleVideoMode={toggleVideoMode}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
+        karaokeMode={karaokeMode || Boolean(nowPlaying?.isKaraoke)}
+        isPaired={Boolean(token)}
+        onOpenPairModal={() => setPairModalOpen(true)}
+      />
 
-      {/* Device Pairing Modal (Non-blocking) */}
-      {pairModalOpen && (
-        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-md rounded-2xl border border-[#232b42] bg-[#181b25] p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-[#232b42]">
-              <div className="flex items-center gap-2.5">
-                <KeyRound className="size-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Vincular Pantalla TV</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPairModalOpen(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            <p className="mt-3 text-xs text-slate-300">
-              Podés emitir un token de pantalla desde el panel de control del local para sincronizar esta TV con el turno en vivo.
-            </p>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (tokenInput.trim()) {
-                  setToken(tokenInput.trim());
-                  localStorage.setItem(`poneleplay.player.${slug}`, tokenInput.trim());
-                  setPairModalOpen(false);
-                }
-              }}
-              className="mt-4 space-y-3"
-            >
-              <input
-                type="text"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-                placeholder="Pegá el token de 64 caracteres..."
-                className="w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-3.5 py-2.5 font-mono text-xs text-white placeholder:text-slate-600 focus:border-indigo-400 focus:outline-none"
-              />
-
-              <div className="flex items-center justify-between pt-2">
-                <Link
-                  href={`/panel/${slug}`}
-                  className="font-mono text-[11px] text-slate-400 hover:text-white underline"
-                >
-                  Abrir panel de control
-                </Link>
-                <button
-                  type="submit"
-                  disabled={!tokenInput.trim()}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 font-mono text-xs font-bold text-white disabled:opacity-50"
-                >
-                  Guardar y Vincular
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Smart TV Pairing Modal (6-Digit PIN & Token Support) */}
+      <TvPairingModal
+        isOpen={pairModalOpen}
+        slug={slug}
+        onClose={() => setPairModalOpen(false)}
+        onPaired={(pairedToken) => {
+          setToken(pairedToken);
+          localStorage.setItem(`poneleplay.player.${slug}`, pairedToken);
+          setHudMessage("🎉 ¡Pantalla TV Vinculada con Éxito!");
+          setTimeout(() => setHudMessage(null), 4000);
+        }}
+      />
 
       {/* QR Large Overlay Modal */}
       {qrModal && (

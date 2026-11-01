@@ -57,6 +57,18 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
   let endedCallbacks: Array<() => void> = [];
   let errorCallbacks: Array<(reason: string) => void> = [];
 
+  function postToFallbackIframe(func: string, args: unknown[] = []) {
+    const directIframe = document.getElementById(`${containerId}-direct`) as HTMLIFrameElement | null;
+    if (directIframe?.contentWindow) {
+      try {
+        directIframe.contentWindow.postMessage(
+          JSON.stringify({ event: "command", func, args }),
+          "*"
+        );
+      } catch {}
+    }
+  }
+
   function triggerEnded() {
     endedCallbacks.forEach((cb) => cb());
   }
@@ -95,6 +107,14 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
           return;
         }
 
+        const directIframe = document.getElementById(`${containerId}-direct`) as HTMLIFrameElement | null;
+        if (directIframe) {
+          const originParam = typeof window !== "undefined" ? `&origin=${encodeURIComponent(window.location.origin)}` : "";
+          directIframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1${originParam}`;
+          resolve();
+          return;
+        }
+
         const el = document.getElementById(containerId);
         if (!el) {
           triggerError(`Container element #${containerId} not found in DOM`);
@@ -103,18 +123,26 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         }
 
         if (!window.YT || !window.YT.Player) {
-          triggerError("window.YT.Player is not defined");
+          triggerError("window.YT.Player is not defined or blocked by client");
+          // Fallback direct iframe to bypass adblocker script restrictions
+          try {
+            const originParam = typeof window !== "undefined" ? `&origin=${encodeURIComponent(window.location.origin)}` : "";
+            el.innerHTML = `<iframe id="${containerId}-direct" width="100%" height="100%" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1${originParam}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;"></iframe>`;
+          } catch {}
           resolve();
           return;
         }
 
         try {
           player = new window.YT.Player(containerId, {
+            host: "https://www.youtube-nocookie.com",
             width: "100%",
             height: "100%",
             videoId,
             playerVars: {
               autoplay: 1,
+              mute: 1,
+              enablejsapi: 1,
               controls: 1,
               disablekb: 0,
               fs: 1,
@@ -122,14 +150,13 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
               rel: 0,
               playsinline: 1,
               origin: typeof window !== "undefined" ? window.location.origin : undefined,
+              widget_referrer: typeof window !== "undefined" ? window.location.href : undefined,
             },
             events: {
               onReady: (ev) => {
                 try {
-                  ev.target.setVolume(85);
                   ev.target.playVideo();
                 } catch {
-                  // If browser autoplay restriction applies, play muted first
                   try {
                     ev.target.mute();
                     ev.target.playVideo();
@@ -143,12 +170,21 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
                 }
               },
               onError: (event) => {
-                triggerError(`YouTube player error: ${event.data}`);
+                const code = event.data;
+                triggerError(`YouTube player error: ${code}`);
+                // If copyright restricted from embedding (101 or 150) or invalid id (2), skip to next track
+                if (code === 150 || code === 101 || code === 2) {
+                  setTimeout(() => triggerEnded(), 1200);
+                }
               },
             },
           });
         } catch (err: unknown) {
           triggerError(`Exception creating YT.Player: ${err instanceof Error ? err.message : String(err)}`);
+          try {
+            const originParam = typeof window !== "undefined" ? `&origin=${encodeURIComponent(window.location.origin)}` : "";
+            el.innerHTML = `<iframe id="${containerId}-direct" width="100%" height="100%" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1${originParam}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:none;"></iframe>`;
+          } catch {}
           resolve();
         }
       });
@@ -159,6 +195,8 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         try {
           player.playVideo();
         } catch {}
+      } else {
+        postToFallbackIframe("playVideo");
       }
     },
 
@@ -167,6 +205,8 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         try {
           player.pauseVideo();
         } catch {}
+      } else {
+        postToFallbackIframe("pauseVideo");
       }
     },
 
@@ -175,6 +215,8 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         try {
           player.stopVideo();
         } catch {}
+      } else {
+        postToFallbackIframe("stopVideo");
       }
     },
 
@@ -183,6 +225,8 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         try {
           player.setVolume(Math.max(0, Math.min(100, volume)));
         } catch {}
+      } else {
+        postToFallbackIframe("setVolume", [Math.max(0, Math.min(100, volume))]);
       }
     },
 
@@ -193,6 +237,10 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
           player.setVolume(85);
           player.playVideo();
         } catch {}
+      } else {
+        postToFallbackIframe("unMute");
+        postToFallbackIframe("setVolume", [85]);
+        postToFallbackIframe("playVideo");
       }
     },
 
@@ -201,6 +249,8 @@ export function createYoutubeEngine(containerId: string): PlaybackEngine {
         try {
           player.mute();
         } catch {}
+      } else {
+        postToFallbackIframe("mute");
       }
     },
 
