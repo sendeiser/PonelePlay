@@ -51,6 +51,13 @@ export const nightSettingsSchema = z.object({
   maxCreditsPerCode: z.number().int().positive(),
 });
 
+export const nightPlayerSchema = z
+  .object({
+    lastSeenAt: z.string().nullable().optional(),
+  })
+  .nullable()
+  .optional();
+
 export const nightStateSchema = z.object({
   venue: nightVenueSchema,
   night: nightSessionSchema,
@@ -58,6 +65,7 @@ export const nightStateSchema = z.object({
   queue: z.array(queueItemViewSchema),
   me: nightMeSchema,
   settings: nightSettingsSchema,
+  player: nightPlayerSchema,
   serverTime: z.string(),
 });
 

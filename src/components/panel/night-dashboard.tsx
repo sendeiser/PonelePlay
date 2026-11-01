@@ -26,6 +26,7 @@ import {
 import { nightPhase } from "@/lib/domain/night";
 import { type PanelRole } from "@/lib/domain/permissions";
 import { PlayerStatus } from "./player-status";
+import { PairPlayerDialog } from "./pair-player";
 
 interface NightDashboardProps {
   slug: string;
@@ -40,6 +41,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [confirmClose, setConfirmClose] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmVetoId, setConfirmVetoId] = useState<string | null>(null);
+  const [pairDialogOpen, setPairDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -197,7 +199,10 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
       {/* Grid: Player & Controls summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <PlayerStatus />
+        <PlayerStatus
+          lastSeenAt={state?.player?.lastSeenAt}
+          onPair={() => setPairDialogOpen(true)}
+        />
 
         <div className="rounded-xl border border-cream/10 bg-[#07211b] p-3 flex items-center justify-between">
           <div>
@@ -361,6 +366,13 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
           if (confirmVetoId) void handleVeto(confirmVetoId);
         }}
         onCancel={() => setConfirmVetoId(null)}
+      />
+
+      <PairPlayerDialog
+        open={pairDialogOpen}
+        venueId={state?.venue.id ?? ""}
+        slug={slug}
+        onClose={() => setPairDialogOpen(false)}
       />
     </div>
   );
