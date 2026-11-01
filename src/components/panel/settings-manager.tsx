@@ -157,7 +157,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           {saved && (
             <span className="font-mono text-xs text-emerald-400 flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">check_circle</span>
@@ -167,7 +167,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           <button
             type="submit"
             disabled={saving}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95 transition-all disabled:opacity-50"
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95 transition-all disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-base">save</span>
             <span>{saving ? "Guardando..." : "Guardar Configuración"}</span>

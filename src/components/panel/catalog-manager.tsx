@@ -305,60 +305,102 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs font-mono">
-                <thead>
-                  <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
-                    <th className="py-2.5 px-3">Canción</th>
-                    <th className="py-2.5 px-3">Artista</th>
-                    <th className="py-2.5 px-3">Fuente</th>
-                    <th className="py-2.5 px-3">Duración</th>
-                    <th className="py-2.5 px-3">Estado</th>
-                    <th className="py-2.5 px-3 text-right">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#1E2333]/50">
-                  {filteredTracks.map((t) => (
-                    <tr key={t.id} className="hover:bg-[#181b25]/50 transition-colors">
-                      <td className="py-3 px-3 font-bold text-white">
-                        {t.title}
-                      </td>
-                      <td className="py-3 px-3 text-slate-400">
-                        {t.artist}
-                      </td>
-                      <td className="py-3 px-3">
+            <>
+              {/* Mobile Card List (sm:hidden) */}
+              <div className="sm:hidden space-y-2.5">
+                {filteredTracks.map((t) => (
+                  <div
+                    key={t.id}
+                    className="p-3 rounded-xl bg-[#141824] border border-[#232b42] flex items-center justify-between gap-3 font-mono"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-white text-xs truncate">{t.title}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{t.artist}</p>
+                      <div className="flex items-center gap-2 mt-1.5">
                         <SourceBadge source={t.source} />
-                      </td>
-                      <td className="py-3 px-3 text-slate-400">
-                        {formatDuration(t.durationSeconds)}
-                      </td>
-                      <td className="py-3 px-3">
+                        <span className="text-[10px] text-slate-500">
+                          {formatDuration(t.durationSeconds)}
+                        </span>
                         <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                          className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[9px] font-bold uppercase ${
                             t.status === "active"
-                              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                              : "bg-slate-800 text-slate-500 border border-slate-700"
+                              ? "bg-emerald-500/10 text-emerald-400"
+                              : "bg-slate-800 text-slate-500"
                           }`}
                         >
                           {t.status === "active" ? "Activo" : "Archivado"}
                         </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        {t.status === "active" && (
-                          <button
-                            type="button"
-                            onClick={() => void handleArchive(t.id)}
-                            className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-400 hover:text-red-400 text-[11px] transition-colors"
-                          >
-                            Archivar
-                          </button>
-                        )}
-                      </td>
+                      </div>
+                    </div>
+                    {t.status === "active" && (
+                      <button
+                        type="button"
+                        onClick={() => void handleArchive(t.id)}
+                        className="px-2.5 py-1.5 rounded-lg bg-[#181b25] border border-[#232b42] text-slate-400 active:text-red-400 text-xs shrink-0"
+                      >
+                        Archivar
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table (hidden sm:block) */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
+                      <th className="py-2.5 px-3">Canción</th>
+                      <th className="py-2.5 px-3">Artista</th>
+                      <th className="py-2.5 px-3">Fuente</th>
+                      <th className="py-2.5 px-3">Duración</th>
+                      <th className="py-2.5 px-3">Estado</th>
+                      <th className="py-2.5 px-3 text-right">Acción</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#1E2333]/50">
+                    {filteredTracks.map((t) => (
+                      <tr key={t.id} className="hover:bg-[#181b25]/50 transition-colors">
+                        <td className="py-3 px-3 font-bold text-white">
+                          {t.title}
+                        </td>
+                        <td className="py-3 px-3 text-slate-400">
+                          {t.artist}
+                        </td>
+                        <td className="py-3 px-3">
+                          <SourceBadge source={t.source} />
+                        </td>
+                        <td className="py-3 px-3 text-slate-400">
+                          {formatDuration(t.durationSeconds)}
+                        </td>
+                        <td className="py-3 px-3">
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                              t.status === "active"
+                                ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                                : "bg-slate-800 text-slate-500 border border-slate-700"
+                            }`}
+                          >
+                            {t.status === "active" ? "Activo" : "Archivado"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          {t.status === "active" && (
+                            <button
+                              type="button"
+                              onClick={() => void handleArchive(t.id)}
+                              className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-400 hover:text-red-400 text-[11px] transition-colors"
+                            >
+                              Archivar
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

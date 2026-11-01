@@ -232,81 +232,142 @@ export function StaffManager({ slug }: StaffManagerProps) {
             <p>No hay personal registrado todavía.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto mt-2">
-            <table className="w-full text-left text-xs font-mono">
-              <thead>
-                <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
-                  <th className="py-2.5 px-3">Miembro</th>
-                  <th className="py-2.5 px-3">PIN</th>
-                  <th className="py-2.5 px-3">Estado</th>
-                  <th className="py-2.5 px-3">Registrado</th>
-                  <th className="py-2.5 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E2333]/50">
-                {staffList.map((member) => (
-                  <tr key={member.id} className="hover:bg-[#181b25]/50 transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="size-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold">
-                          {member.name.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-bold text-white text-xs">{member.name}</p>
-                          <p className="text-[10px] text-slate-500">Mozo de barra / salón</p>
-                        </div>
+          <>
+            {/* Mobile Card List (sm:hidden) */}
+            <div className="sm:hidden space-y-3 mt-3">
+              {staffList.map((member) => (
+                <div
+                  key={member.id}
+                  className="p-3.5 rounded-xl bg-[#141824] border border-[#232b42] space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="size-9 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold text-xs">
+                        {member.name.slice(0, 2).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="py-3 px-3 text-slate-400">
-                      <span className="tracking-widest">••••</span>
-                    </td>
-                    <td className="py-3 px-3">
+                      <div>
+                        <p className="font-bold text-white text-xs">{member.name}</p>
+                        <p className="text-[10px] text-slate-400 font-mono">PIN: ••••</p>
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold font-mono uppercase ${
+                        member.active
+                          ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                          : "bg-slate-800 text-slate-500 border border-slate-700"
+                      }`}
+                    >
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                          member.active
-                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
-                            : "bg-slate-800 text-slate-500 border border-slate-700"
+                        className={`size-1.5 rounded-full ${
+                          member.active ? "bg-emerald-400" : "bg-slate-600"
                         }`}
-                      >
-                        <span
-                          className={`size-1.5 rounded-full ${
-                            member.active ? "bg-emerald-400" : "bg-slate-600"
-                          }`}
-                        />
-                        {member.active ? "Habilitado" : "Deshabilitado"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-slate-500">
-                      {new Date(member.createdAt).toLocaleDateString("es-AR")}
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setResetId(member.id)}
-                          className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-colors"
-                        >
-                          <span className="material-symbols-outlined text-xs">key</span>
-                          <span>Reset PIN</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleToggle(member.id, member.active)}
-                          className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-colors ${
-                            member.active
-                              ? "bg-red-950/40 text-red-300 border-red-500/30 hover:bg-red-950/70"
-                              : "bg-emerald-950/40 text-emerald-300 border-emerald-500/30 hover:bg-emerald-950/70"
-                          }`}
-                        >
-                          {member.active ? "Desactivar" : "Activar"}
-                        </button>
-                      </div>
-                    </td>
+                      />
+                      {member.active ? "Activo" : "Pausado"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-[#1E2333]/50">
+                    <button
+                      type="button"
+                      onClick={() => setResetId(member.id)}
+                      className="flex-1 py-2 px-3 rounded-lg bg-[#181b25] border border-[#232b42] text-slate-300 active:bg-slate-800 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-sm">key</span>
+                      <span>Cambiar PIN</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleToggle(member.id, member.active)}
+                      className={`flex-1 py-2 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center transition-colors ${
+                        member.active
+                          ? "bg-red-950/40 text-red-300 border-red-500/30 active:bg-red-900/60"
+                          : "bg-emerald-950/40 text-emerald-300 border-emerald-500/30 active:bg-emerald-900/60"
+                      }`}
+                    >
+                      {member.active ? "Desactivar" : "Activar"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table (hidden sm:block) */}
+            <div className="hidden sm:block overflow-x-auto mt-2">
+              <table className="w-full text-left text-xs font-mono">
+                <thead>
+                  <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
+                    <th className="py-2.5 px-3">Miembro</th>
+                    <th className="py-2.5 px-3">PIN</th>
+                    <th className="py-2.5 px-3">Estado</th>
+                    <th className="py-2.5 px-3">Registrado</th>
+                    <th className="py-2.5 px-3 text-right">Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-[#1E2333]/50">
+                  {staffList.map((member) => (
+                    <tr key={member.id} className="hover:bg-[#181b25]/50 transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="size-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-300 font-bold">
+                            {member.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-bold text-white text-xs">{member.name}</p>
+                            <p className="text-[10px] text-slate-500">Mozo de barra / salón</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-3 text-slate-400">
+                        <span className="tracking-widest">••••</span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                            member.active
+                              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                              : "bg-slate-800 text-slate-500 border border-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`size-1.5 rounded-full ${
+                              member.active ? "bg-emerald-400" : "bg-slate-600"
+                            }`}
+                          />
+                          {member.active ? "Habilitado" : "Deshabilitado"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-500">
+                        {new Date(member.createdAt).toLocaleDateString("es-AR")}
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setResetId(member.id)}
+                            className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                          >
+                            <span className="material-symbols-outlined text-xs">key</span>
+                            <span>Reset PIN</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleToggle(member.id, member.active)}
+                            className={`px-2.5 py-1 rounded-md border text-[11px] font-semibold transition-colors ${
+                              member.active
+                                ? "bg-red-950/40 text-red-300 border-red-500/30 hover:bg-red-950/70"
+                                : "bg-emerald-950/40 text-emerald-300 border-emerald-500/30 hover:bg-emerald-950/70"
+                            }`}
+                          >
+                            {member.active ? "Desactivar" : "Activar"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

@@ -380,7 +380,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         </div>
 
         {/* Operational Control Toggles & Close Shift Button */}
-        <div className="flex items-center gap-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6">
           {/* Switch Toggle: Aceptar Propuestas de Clientes */}
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <div className="relative">
@@ -410,7 +410,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
             </div>
           </label>
 
-          <div className="h-6 w-px bg-[#1E2333]" />
+          <div className="h-6 w-px bg-[#1E2333] hidden sm:block" />
 
           {/* Botón: Cerrar Noche / Abrir Noche */}
           {isOpen ? (

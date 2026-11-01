@@ -124,7 +124,7 @@ export function CodeGenerator({
             </div>
 
             {/* Quick Presets Button Grid */}
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
               {presets.map((amount) => (
                 <button
                   key={amount}
@@ -133,7 +133,7 @@ export function CodeGenerator({
                     setCredits(amount);
                     setCustomCredits("");
                   }}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all active:scale-95 ${
+                  className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border transition-all active:scale-95 ${
                     credits === amount && !customCredits
                       ? "bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30 font-bold"
                       : "bg-[#131722] text-slate-300 border-[#1E2333] hover:border-slate-600 hover:text-white"

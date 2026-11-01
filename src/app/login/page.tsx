@@ -298,7 +298,7 @@ function LoginForm() {
       </div>
 
       {/* RIGHT: Venue & Terminal Telemetry Card (5 cols) */}
-      <div className="lg:col-span-5 bg-[#131722] border-t lg:border-t-0 lg:border-l border-[#232b42] p-6 sm:p-8 flex flex-col justify-between">
+      <div className="hidden lg:flex lg:col-span-5 bg-[#131722] border-t lg:border-t-0 lg:border-l border-[#232b42] p-6 sm:p-8 flex-col justify-between">
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
