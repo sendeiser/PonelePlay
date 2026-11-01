@@ -1,36 +1,36 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PonelePlay 🎵
 
-## Getting Started
+Sistema interactivo de Jukebox social, votación en vivo de canciones y reproductor para pantallas de bares y locales nocturnos.
 
-First, run the development server:
+## Características
 
+- 📺 **TV Player en Salón:** Reproductor continuo en pantalla con modo inmersivo de video HD / vinilo, sincronización en tiempo real y bloqueo de clics internos.
+- 📱 **Experiencia del Cliente:** Votación en vivo, propuesta de canciones de YouTube, canje de fichas con créditos y barra de progreso sincronizada al segundo con el televisor del salón.
+- 🎛️ **Panel de Control (Master Remote):** Control remoto integral desde cabina o mozo (pausar, reanudar, silenciar, volumen, saltear, adelantar/retroceder, modo karaoke y activación de TV Fullscreen).
+- 🔐 **Vinculación TV Segura:** Emparejamiento por PIN de 6 dígitos o código QR con tokens persistentes.
+- ⚡ **Stack Tecnológico:** Impulsado por Next.js 15 (App Router), Supabase Realtime & PostgreSQL, TypeScript y Tailwind CSS.
+
+## Puesta en marcha
+
+1. Instalar dependencias:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Configurar variables de entorno (`.env.local`):
+```env
+NEXT_PUBLIC_SUPABASE_URL=tu_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_anon_key
+SUPABASE_SERVICE_ROLE_KEY=tu_service_role_key
+YOUTUBE_API_KEY=tu_youtube_api_key
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Iniciar el servidor de desarrollo:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. Ejecutar tests unitarios y de integración:
+```bash
+npm test
+```
