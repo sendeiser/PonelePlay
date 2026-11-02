@@ -265,3 +265,27 @@ export async function reorderFallback(
   }
 }
 
+
+export async function deleteTrack(trackId: string): Promise<void> {
+  const supabase = createBrowserSupabase();
+  const { data, error } = await supabase.rpc("owner_delete_track" as never, {
+    p_track_id: trackId,
+  } as never);
+
+  if (error) {
+    // Direct table delete fallback
+    const { error: directErr } = await supabase
+      .from("tracks")
+      .delete()
+      .eq("id", trackId);
+    if (directErr) {
+      throw new Error(directErr.message);
+    }
+    return;
+  }
+
+  const res = data as { ok?: boolean; error?: string };
+  if (res && res.ok === false) {
+    throw new Error(res.error || "Error al eliminar la canción");
+  }
+}

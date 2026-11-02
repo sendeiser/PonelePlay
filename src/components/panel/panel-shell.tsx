@@ -112,7 +112,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
         {/* Trailing Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
-            href={`/panel/${slug}/codigos`}
+            href={`/panel/${slug}/codigos?openModal=1`}
             prefetch={true}
             className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold active:scale-95 transition-all shadow-md shadow-indigo-600/30"
           >

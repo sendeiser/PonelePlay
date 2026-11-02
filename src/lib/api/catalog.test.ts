@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { addTrackByUrl, archiveTrack, reorderFallback } from "./catalog";
+import { addTrackByUrl, archiveTrack, deleteTrack, reorderFallback } from "./catalog";
 
 const mockRpc = vi.fn();
 const mockInsert = vi.fn();
@@ -78,5 +78,15 @@ describe("Catalog API", () => {
       p_track_ids: ["tr-1", "tr-2"],
     });
   });
-});
+  it("deletes track via RPC", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: { ok: true },
+      error: null,
+    });
 
+    await expect(deleteTrack("tr-1")).resolves.toBeUndefined();
+    expect(mockRpc).toHaveBeenCalledWith("owner_delete_track", {
+      p_track_id: "tr-1",
+    });
+  });
+});

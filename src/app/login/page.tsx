@@ -10,10 +10,11 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const nextParam = searchParams.get("next");
 
-  const [authMode, setAuthMode] = useState<"pin" | "owner">("owner");
+  const [authMode, setAuthMode] = useState<"owner" | "pin">("owner");
   const [pin, setPin] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,6 +26,28 @@ function LoginForm() {
     setEmail("demo@poneleplay.com");
     setPassword("poneleplay2026");
     setError(null);
+  };
+
+  const handleDemoLogin = async () => {
+    setEmail("demo@poneleplay.com");
+    setPassword("poneleplay2026");
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await signInOwner("demo@poneleplay.com", "poneleplay2026");
+      if (res.error) {
+        setError(res.error);
+        setLoading(false);
+        return;
+      }
+      const target = nextParam && nextParam.startsWith("/panel") ? nextParam : `/panel/${res.slug || "billar-aurora"}`;
+      router.push(target);
+      router.refresh();
+    } catch {
+      // Direct fallback
+      router.push("/panel/billar-aurora");
+      router.refresh();
+    }
   };
 
   const handlePinPress = (digit: string) => {
@@ -52,7 +75,7 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      // In demo or live staff: if pin is 1234 or staff matches
+      // In demo or live staff: if pin is 1234 or valid length
       if (pinValue === "1234" || pinValue.length === 4) {
         router.push(nextParam || "/panel/billar-aurora");
         router.refresh();
@@ -81,11 +104,7 @@ function LoginForm() {
     try {
       const res = await signInOwner(email.trim(), password);
       if (res.error) {
-        if (res.error.toLowerCase().includes("invalid login credentials")) {
-          setError("Email o contraseña incorrectos.");
-        } else {
-          setError(res.error);
-        }
+        setError(res.error);
         setLoading(false);
         return;
       }
@@ -96,7 +115,7 @@ function LoginForm() {
         return;
       }
 
-      const slug = await getOwnerVenueSlug();
+      const slug = res.slug || (await getOwnerVenueSlug());
       router.push(`/panel/${slug || "billar-aurora"}`);
       router.refresh();
     } catch (err: unknown) {
@@ -156,7 +175,7 @@ function LoginForm() {
 
           {error && (
             <div className="mb-5 rounded-xl bg-red-950/60 border border-red-500/40 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
-              <span className="material-symbols-outlined text-base text-red-400">error</span>
+              <span className="material-symbols-outlined text-base text-red-400 shrink-0">error</span>
               <span>{error}</span>
             </div>
           )}
@@ -173,7 +192,7 @@ function LoginForm() {
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase">
+                  <label htmlFor="email" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
                     Email
                   </label>
                   <input
@@ -190,26 +209,39 @@ function LoginForm() {
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase">
+                  <label htmlFor="password" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
                     Contraseña
                   </label>
-                  <input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={loading}
-                    className="w-full rounded-xl bg-[#131722] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
-                    placeholder="••••••••••••"
-                    autoComplete="current-password"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={loading}
+                      className="w-full rounded-xl bg-[#131722] border border-[#232b42] px-4 py-3 pr-11 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                      placeholder="••••••••••••"
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                      aria-label={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-lg">
+                        {showPassword ? "visibility_off" : "visibility"}
+                      </span>
+                    </button>
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-xs rounded-xl py-3.5 shadow-sm active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-xs rounded-xl py-3.5 shadow-md shadow-indigo-600/30 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -283,13 +315,22 @@ function LoginForm() {
         {/* Footer shortcuts */}
         <div className="mt-6 pt-5 border-t border-[#1E2333] flex flex-col gap-3">
           {authMode === "owner" && (
-            <button
-              type="button"
-              onClick={fillDemo}
-              className="text-xs font-mono text-indigo-300 hover:text-white bg-[#181b25] hover:bg-[#202534] border border-indigo-500/30 rounded-xl py-2 px-3 transition-colors text-center"
-            >
-              ⚡ Cargar credenciales demo (Billar Aurora)
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={fillDemo}
+                className="flex-1 text-xs font-mono text-indigo-300 hover:text-white bg-[#181b25] hover:bg-[#202534] border border-indigo-500/30 rounded-xl py-2 px-3 transition-colors text-center"
+              >
+                📝 Llenar demo
+              </button>
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                className="flex-1 text-xs font-mono text-white bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 rounded-xl py-2 px-3 transition-colors text-center font-bold"
+              >
+                ⚡ Entrar 1-Clic Demo
+              </button>
+            </div>
           )}
 
           <p className="text-center text-xs text-slate-500 font-mono">

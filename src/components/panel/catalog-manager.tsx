@@ -9,6 +9,7 @@ import { PlaylistManager } from "./playlist-manager";
 import { YouTubeSearchModal } from "./youtube-search-modal";
 import {
   archiveTrack,
+  deleteTrack,
   fetchCatalog,
   fetchFallback,
   type TrackRow,
@@ -38,6 +39,8 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ytModalOpen, setYtModalOpen] = useState(false);
+  const [deletingTrack, setDeletingTrack] = useState<TrackRow | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   // Resolve venueId if not provided
   useEffect(() => {
@@ -98,6 +101,22 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
       setError(
         err instanceof Error ? err.message : "Error al archivar la canción",
       );
+    }
+  }
+
+  
+  async function handleDelete(trackId: string) {
+    setActionLoading(true);
+    try {
+      await deleteTrack(trackId);
+      setTracks((prev) => prev.filter((t) => t.id !== trackId));
+      setDeletingTrack(null);
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error ? err.message : "Error al eliminar la canción",
+      );
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -459,6 +478,47 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
           onTrackAdded={() => void loadData()}
         />
       )}
+      {/* Delete Confirmation Modal */}
+      {deletingTrack && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#10141e] border border-[#232b42] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-white animate-in fade-in duration-150">
+            <div className="flex items-center gap-3 text-red-400">
+              <span className="material-symbols-outlined text-3xl">warning</span>
+              <div>
+                <h3 className="text-base font-bold font-mono">¿Eliminar canción del catálogo?</h3>
+                <span className="text-[10px] text-red-400/80 font-mono">Acción irreversible</span>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 font-mono leading-relaxed">
+              Se eliminará definitivamente «<strong>{deletingTrack.title}</strong>» de <span className="text-indigo-300">{deletingTrack.artist}</span> del catálogo y de todas las listas del bar.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1E2333]">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setDeletingTrack(null)}
+                className="px-4 py-2 rounded-xl border border-[#232b42] text-slate-300 hover:text-white font-mono text-xs hover:bg-[#181b25] transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => void handleDelete(deletingTrack.id)}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-mono text-xs font-bold shadow-lg shadow-red-600/30 flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {actionLoading ? (
+                  <span className="inline-block size-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                )}
+                <span>{actionLoading ? "Eliminando..." : "Sí, eliminar"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -452,3 +452,36 @@ begin
   );
 end;
 $$;
+
+
+-- Step 4: Allow owner to delete tracks cleanly without foreign key constraint violations
+create or replace function public.owner_delete_track(p_track_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions, pg_temp
+as $$
+declare
+  v_venue_id uuid;
+begin
+  select venue_id into v_venue_id from public.tracks where id = p_track_id;
+  if not found then
+    return jsonb_build_object('ok', false, 'error', 'track_not_found');
+  end if;
+
+  -- Delete from queue_items first if any exist
+  delete from public.queue_items where track_id = p_track_id;
+  -- Delete from fallback_tracks
+  delete from public.fallback_tracks where track_id = p_track_id;
+  -- Delete from playlist_tracks
+  delete from public.playlist_tracks where track_id = p_track_id;
+  -- Delete from votes
+  delete from public.votes where track_id = p_track_id;
+  -- Delete the track itself
+  delete from public.tracks where id = p_track_id;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+grant execute on function public.owner_delete_track(uuid) to authenticated, anon, service_role;
