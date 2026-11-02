@@ -121,16 +121,6 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
           </Link>
 
           <Link
-            href={`/player/${slug}`}
-            target="_blank"
-            className="flex items-center gap-1.5 bg-[#181b25] text-slate-300 hover:bg-[#202534] hover:text-white px-2.5 sm:px-3 py-1.5 rounded-lg font-mono text-xs border border-[#1E2333] transition-colors"
-            title="Abrir en pantalla gigante"
-          >
-            <span className="material-symbols-outlined text-sm text-cyan-400">tv</span>
-            <span className="hidden sm:inline">Pantalla TV ↗</span>
-          </Link>
-
-          <Link
             href={`/p/${slug}`}
             target="_blank"
             className="hidden sm:flex items-center gap-1.5 bg-[#181b25] text-slate-300 hover:bg-[#202534] hover:text-white px-3 py-1.5 rounded-lg font-mono text-xs border border-[#1E2333] transition-colors"

@@ -2,10 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
-import Link from "next/link";
 import {
-  ExternalLink,
-  Maximize2,
   Mic,
   Music2,
   Pause,
@@ -13,7 +10,6 @@ import {
   RotateCcw,
   Search,
   SkipForward,
-  Tv,
   Volume2,
   VolumeX,
   ArrowUp,
@@ -44,7 +40,6 @@ import {
   sendPlaybackCommand,
 } from "@/lib/api/master-control";
 import { ManualPlaybackModal } from "./manual-playback-modal";
-import { TvDevicesManagerModal } from "./tv-devices-manager-modal";
 
 interface PanelPlaybackFooterProps {
   slug: string;
@@ -67,13 +62,11 @@ export function PanelPlaybackFooter({
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
-  const [isTvFullscreen, setIsTvFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   // Modals
   const [manualModalOpen, setManualModalOpen] = useState(false);
-  const [tvManagerOpen, setTvManagerOpen] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   // Expandable Queue & Remote Deck Drawer
@@ -202,8 +195,6 @@ export function PanelPlaybackFooter({
             else if (cmd === "unmute") setIsMuted(false);
             else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
             else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
-            else if (cmd === "toggle_fullscreen") setIsTvFullscreen((prev) => !prev);
-            else if (cmd === "set_fullscreen") setIsTvFullscreen(Boolean(p.isFullscreen));
             else if (cmd === "seek" && typeof p.seconds === "number") {
               setElapsed(Math.floor(p.seconds));
             } else if (cmd === "play_now" && p.track) {
@@ -227,7 +218,7 @@ export function PanelPlaybackFooter({
             };
           }) => {
             if (!active || !msg.payload) return;
-            const { currentTime, duration: d, isPaused: p, isVideoFullscreen: fs } = msg.payload;
+            const { currentTime, duration: d, isPaused: p } = msg.payload;
             if (typeof currentTime === "number" && !isNaN(currentTime)) {
               setElapsed(Math.floor(currentTime));
             }
@@ -236,9 +227,6 @@ export function PanelPlaybackFooter({
             }
             if (typeof p === "boolean") {
               setIsPaused(p);
-            }
-            if (typeof fs === "boolean") {
-              setIsTvFullscreen(fs);
             }
           },
         )
@@ -343,18 +331,6 @@ export function PanelPlaybackFooter({
       await setKmRemote(slug, next);
     } catch {
       setKaraokeMode(!next);
-    }
-  };
-
-  const handleToggleTvFullscreen = async () => {
-    const next = !isTvFullscreen;
-    setIsTvFullscreen(next);
-    showToast(next ? "🖥️ Pantalla Completa TV Activada" : "🖥️ Pantalla Normal TV Restaurada");
-    try {
-      const { setFullscreenPlayback } = await import("@/lib/api/master-control");
-      await setFullscreenPlayback(slug, next);
-    } catch {
-      setIsTvFullscreen(!next);
     }
   };
 
@@ -499,91 +475,76 @@ export function PanelPlaybackFooter({
             >
               <SkipForward className="size-4" />
             </button>
-
-            {/* TV Fullscreen Toggle */}
-            <button
-              type="button"
-              onClick={() => void handleToggleTvFullscreen()}
-              className={`size-8 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
-                isTvFullscreen
-                  ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm"
-                  : "bg-[#131722] text-slate-400 border-[#232b42]"
-              }`}
-              title="Pantalla completa en TV"
-            >
-              <Maximize2 className="size-3.5" />
-            </button>
           </div>
         </div>
 
         {/* ==================== DESKTOP CONTROLS ROW (>= md) ==================== */}
-        <div className="hidden md:flex w-full items-center justify-between gap-4 px-2">
-          {/* LEFT: Currently Playing Track Details & Quick Manual Track Picker (Clickable to open drawer) */}
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="flex items-center gap-3 min-w-0 max-w-[32%] text-left p-1 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all cursor-pointer group"
-            title="Click para abrir la cola de reproducción y gestionar temas"
-          >
-            <div className="relative size-11 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] group-hover:border-indigo-500/50 shrink-0 shadow-md flex items-center justify-center transition-colors">
-              {currentTrack?.thumbnailUrl ? (
-                <Image
-                  src={currentTrack.thumbnailUrl}
-                  alt={currentTrack.title}
-                  width={44}
-                  height={44}
-                  className="w-full h-full object-cover"
-                  unoptimized
-                />
-              ) : (
-                <Music2 className="size-5 text-indigo-400" />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-white text-xs font-bold truncate leading-tight group-hover:text-cyan-300 transition-colors">
-                  {currentTrack?.title || "Sin música activa"}
-                </span>
-                {karaokeMode || currentTrack?.isKaraoke ? (
-                  <span className="shrink-0 bg-pink-500/20 text-pink-300 border border-pink-500/30 font-mono text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase">
-                    Karaoke
-                  </span>
-                ) : null}
+        <div className="hidden md:grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full px-4">
+          {/* LEFT: Currently Playing Track Details + Cola Trigger + Poner Tema */}
+          <div className="flex items-center gap-2.5 min-w-0 overflow-hidden justify-start">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="flex items-center gap-2.5 min-w-0 max-w-[200px] xl:max-w-[260px] text-left p-1 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all cursor-pointer group shrink-0"
+              title="Click para abrir la cola de reproducción y gestionar temas"
+            >
+              <div className="relative size-10 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] group-hover:border-indigo-500/50 shrink-0 shadow-md flex items-center justify-center transition-colors">
+                {currentTrack?.thumbnailUrl ? (
+                  <Image
+                    src={currentTrack.thumbnailUrl}
+                    alt={currentTrack.title}
+                    width={40}
+                    height={40}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <Music2 className="size-4 text-indigo-400" />
+                )}
               </div>
-              <p className="text-slate-400 text-[11px] truncate mt-0.5 group-hover:text-slate-300 transition-colors">
-                {currentTrack?.artist || "Billar & Bar Playlist"}
-              </p>
-            </div>
-          </button>
 
-          <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white text-xs font-bold truncate leading-tight group-hover:text-cyan-300 transition-colors">
+                    {currentTrack?.title || "Sin música activa"}
+                  </span>
+                  {karaokeMode || currentTrack?.isKaraoke ? (
+                    <span className="shrink-0 bg-pink-500/20 text-pink-300 border border-pink-500/30 font-mono text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase">
+                      Karaoke
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-slate-400 text-[10px] truncate mt-0.5 group-hover:text-slate-300 transition-colors">
+                  {currentTrack?.artist || "Billar & Bar Playlist"}
+                </p>
+              </div>
+            </button>
+
             {/* Quick Button: Abrir Cola */}
             <button
               type="button"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className="shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600/25 to-violet-600/25 hover:from-indigo-600/35 hover:to-violet-600/35 text-indigo-300 hover:text-white px-3 py-1.5 rounded-xl border border-indigo-500/40 font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+              className="shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600/25 to-violet-600/25 hover:from-indigo-600/35 hover:to-violet-600/35 text-indigo-300 hover:text-white px-2.5 py-1.5 rounded-xl border border-indigo-500/40 font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
               title="Abrir la cola de reproducción y gestionar temas"
             >
               <ListMusic className="size-3.5 text-cyan-400" />
-              <span>Cola de Salón ({activeQueue.length})</span>
-              <ChevronUp className="size-3.5 text-indigo-400" />
+              <span>Cola ({activeQueue.length})</span>
+              <ChevronUp className="size-3 text-indigo-400" />
             </button>
 
             {/* Quick Button: Elegir Canción (YouTube) */}
             <button
               type="button"
               onClick={() => setManualModalOpen(true)}
-              className="shrink-0 flex items-center gap-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white px-2.5 py-1 rounded-lg border border-indigo-500/30 font-mono text-[11px] font-semibold transition-all active:scale-95"
-              title="Buscar en YouTube y reproducir en TV"
+              className="shrink-0 size-8 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 flex items-center justify-center transition-all active:scale-95"
+              title="Buscar en YouTube y poner tema en TV"
             >
               <Search className="size-3.5 text-cyan-400" />
-              <span className="hidden xl:inline">Poner Canción</span>
             </button>
           </div>
 
           {/* CENTER: Main Playback Transport Buttons */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2 shrink-0 justify-self-center">
             {/* Prev / Restart */}
             <button
               type="button"
@@ -599,7 +560,7 @@ export function PanelPlaybackFooter({
               type="button"
               onClick={() => void handleSeekDelta(-10)}
               className="h-8 px-2 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 font-mono text-[11px] font-bold"
-              title="Retroceder 10 segundos en la TV"
+              title="Retroceder 10 segundos"
             >
               -10s
             </button>
@@ -609,7 +570,7 @@ export function PanelPlaybackFooter({
               type="button"
               onClick={() => void handleTogglePlay()}
               className="size-10 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
-              title={isPaused ? "Reanudar música en TV (Espacio)" : "Pausar música en TV (Espacio)"}
+              title={isPaused ? "Reanudar música (Espacio)" : "Pausar música (Espacio)"}
             >
               {isPaused ? <Play className="size-5 fill-white ml-0.5" /> : <Pause className="size-5 fill-white" />}
             </button>
@@ -619,7 +580,7 @@ export function PanelPlaybackFooter({
               type="button"
               onClick={() => void handleSeekDelta(10)}
               className="h-8 px-2 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 font-mono text-[11px] font-bold"
-              title="Adelantar 10 segundos en la TV"
+              title="Adelantar 10 segundos"
             >
               +10s
             </button>
@@ -635,13 +596,13 @@ export function PanelPlaybackFooter({
             </button>
           </div>
 
-          {/* RIGHT: Volume, Karaoke Toggle & TV Device Management */}
-          <div className="flex items-center gap-3">
+          {/* RIGHT: Volume & Karaoke Toggle (Clean audio controls, no TV clutter) */}
+          <div className="flex items-center justify-end gap-3 justify-self-end">
             {/* Karaoke Mode Toggle Button */}
             <button
               type="button"
               onClick={() => void handleToggleKaraoke()}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-mono text-[11px] font-bold transition-all ${
                 karaokeMode
                   ? "bg-gradient-to-r from-pink-500/25 to-purple-500/25 text-pink-300 border-pink-500/50 shadow-[0_0_12px_rgba(236,72,153,0.3)] animate-pulse"
                   : "bg-[#131722] text-slate-400 border-[#232b42] hover:text-white"
@@ -653,12 +614,12 @@ export function PanelPlaybackFooter({
             </button>
 
             {/* Volume Control */}
-            <div className="flex items-center gap-2 bg-[#131722] px-2.5 py-1 rounded-lg border border-[#232b42]">
+            <div className="flex items-center gap-2 bg-[#131722] px-2.5 py-1.5 rounded-lg border border-[#232b42]">
               <button
                 type="button"
                 onClick={() => void handleToggleMute()}
                 className="text-slate-400 hover:text-white transition-colors"
-                title="Silenciar / Activar sonido TV (M)"
+                title="Silenciar / Activar sonido (M)"
               >
                 {isMuted || volume === 0 ? (
                   <VolumeX className="size-4 text-rose-400" />
@@ -672,49 +633,13 @@ export function PanelPlaybackFooter({
                 max="100"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => void handleVolume(Number(e.target.value))}
-                className="w-16 accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer"
-                title={`Volumen TV: ${volume}%`}
+                className="w-18 accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer"
+                title={`Volumen: ${volume}%`}
               />
-              <span className="font-mono text-[11px] text-slate-300 w-7 text-right">
+              <span className="font-mono text-[11px] text-slate-300 w-8 text-right">
                 {isMuted ? "0%" : `${volume}%`}
               </span>
             </div>
-
-            {/* TV Fullscreen Remote Toggle Button */}
-            <button
-              type="button"
-              onClick={() => void handleToggleTvFullscreen()}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all active:scale-95 ${
-                isTvFullscreen
-                  ? "bg-gradient-to-r from-cyan-500/25 to-indigo-500/25 text-cyan-300 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.35)] animate-pulse"
-                  : "bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-cyan-400 border-[#232b42]"
-              }`}
-              title={isTvFullscreen ? "Desactivar pantalla completa en la TV" : "Activar pantalla completa en la TV del salón"}
-            >
-              <Maximize2 className="size-3.5 text-cyan-400" />
-              <span>{isTvFullscreen ? "TV Full ON" : "TV Full"}</span>
-            </button>
-
-            {/* TV Devices Manager Modal Trigger */}
-            <button
-              type="button"
-              onClick={() => setTvManagerOpen(true)}
-              className="flex items-center gap-1.5 bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white px-2.5 py-1 rounded-lg border border-[#232b42] font-mono text-[11px] transition-colors"
-              title="Administrar pantallas TV vinculadas"
-            >
-              <Tv className="size-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Pantallas TV</span>
-            </button>
-
-            {/* Open TV Screen in New Tab */}
-            <Link
-              href={`/player/${slug}`}
-              target="_blank"
-              className="size-8 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-400 hover:text-white transition-colors"
-              title="Abrir pantalla TV en pestaña nueva"
-            >
-              <ExternalLink className="size-3.5" />
-            </Link>
           </div>
         </div>
       </footer>
@@ -726,13 +651,6 @@ export function PanelPlaybackFooter({
         slug={slug}
         defaultKaraoke={karaokeMode}
         onActionComplete={() => void loadState()}
-      />
-
-      {/* TV Devices Manager Modal */}
-      <TvDevicesManagerModal
-        isOpen={tvManagerOpen}
-        onClose={() => setTvManagerOpen(false)}
-        slug={slug}
       />
 
       {/* ==================== EXPANDABLE QUEUE & REMOTE PLAYER DRAWER ==================== */}
