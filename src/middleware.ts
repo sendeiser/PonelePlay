@@ -3,6 +3,10 @@ import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { Database } from "./lib/database.types";
 
+const DEFAULT_SUPABASE_URL = "https://kbeljbnrnyxfjwmdpaew.supabase.co";
+const DEFAULT_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWxqYm5ybnl4Zmp3bWRwYWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NjQ4MDgsImV4cCI6MjEwOTA0MDgwOH0.ykyPCpxUy9_Dqyx5PdgsdK1gYjuat82v-zMTGDrjxJU";
+
 // In-memory cache for recently verified tokens to eliminate redundant auth network calls during page transitions
 const verifiedTokens = new Map<string, number>();
 
@@ -47,8 +51,8 @@ export async function middleware(request: NextRequest) {
 
     // 3. Verify session with Supabase
     const supabase = createServerClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "https://dummy-project.supabase.co",
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dummy-anon-key",
+      process.env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
       {
         cookies: {
           getAll: () => request.cookies.getAll(),
