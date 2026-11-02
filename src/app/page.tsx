@@ -16,6 +16,13 @@ export default function HomePage() {
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
           <Link
+            href="/como-funciona"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono font-semibold text-slate-300 hover:text-white hover:bg-[#181b25] border border-transparent hover:border-[#232b42] transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm text-cyan-400">help</span>
+            <span>¿Cómo funciona? & App TV</span>
+          </Link>
+          <Link
             href="/login"
             prefetch={true}
             className="px-3 sm:px-4 py-2 min-h-[40px] inline-flex items-center rounded-xl bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono font-bold text-white transition-colors"
@@ -47,8 +54,45 @@ export default function HomePage() {
           Escaneá el código QR desde tu mesa, canjeá los créditos de tu consumición y votá la próxima canción en pantalla gigante.
         </p>
 
+        {/* Smart TV Downloader Callout Banner */}
+        <div className="w-full max-w-4xl mt-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-950/70 via-[#131726]/80 to-purple-950/60 border border-indigo-500/30 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center gap-3.5 text-left w-full md:w-auto">
+            <div className="size-11 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+              <span className="material-symbols-outlined text-2xl">tv</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold text-white">App Oficial para Smart TV</span>
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono font-bold tracking-wider">
+                  Código Downloader: 4417435
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Instalá la app nativa en tu televisor o TV Box con la aplicación Downloader o por pendrive.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end">
+            <Link
+              href="/tv.apk"
+              download
+              className="px-3.5 py-2 rounded-xl bg-[#1E2333] hover:bg-[#283046] border border-[#2A3147] text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
+            >
+              <span className="material-symbols-outlined text-sm text-indigo-400">download</span>
+              <span>Descargar APK</span>
+            </Link>
+            <Link
+              href="/como-funciona#smart-tv"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-indigo-600/30 transition-all"
+            >
+              <span>Ver Guía TV</span>
+              <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            </Link>
+          </div>
+        </div>
+
         {/* 3 Entry Point Bento Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full mt-12 text-left">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full mt-8 text-left">
           {/* Card 1: Cliente Móvil */}
           <Link
             href="/p/billar-aurora"
@@ -65,7 +109,7 @@ export default function HomePage() {
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              Ver la cola en vivo, canjear vouchers de 8 caracteres y votar temas.
+              Ver la cola en vivo, canjear vouchers de 8 caracteres y votar temas en rondas dinámicas.
             </p>
           </Link>
 
@@ -85,11 +129,11 @@ export default function HomePage() {
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              Moderación en vivo, expedición de tickets térmicos y gestión de personal.
+              Reproducción de audio exclusiva, expedición de tickets en modal, moderación y control de rondas.
             </p>
           </Link>
 
-          {/* Card 3: Reproductor TV */}
+          {/* Card 3: Pantalla TV */}
           <Link
             href="/player/billar-aurora"
             prefetch={true}
@@ -99,21 +143,44 @@ export default function HomePage() {
               <span className="material-symbols-outlined text-2xl">tv</span>
             </div>
             <h2 className="text-lg font-bold text-white mb-1.5 flex items-center justify-between">
-              <span>Reproductor TV</span>
+              <span>Pantalla TV Salón</span>
               <span className="material-symbols-outlined text-sm text-slate-500 group-hover:text-purple-400 group-hover:translate-x-1 transition-all">
                 arrow_forward
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              Pantalla dividida de alta fidelidad con vinilo rotatorio y QR dinámico.
+              Cartelera visual pasiva con vinilo rotatorio, sincronizada mediante código PIN y QR para clientes.
             </p>
+          </Link>
+        </div>
+
+        {/* Quick Link to How it works */}
+        <div className="mt-8">
+          <Link
+            href="/como-funciona"
+            className="inline-flex items-center gap-2 text-xs font-mono text-indigo-400 hover:text-indigo-300 underline underline-offset-4 transition-colors"
+          >
+            <span>¿Nuevo en PonelePlay? Leé la guía completa de cómo funciona el sistema →</span>
           </Link>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="w-full text-center text-slate-500 font-mono text-xs py-6 border-t border-[#1E2333] bg-[#0A0E17]/60">
-        PonelePlay Precision System · Sistema Integral de Jukebox
+      <footer className="w-full text-center text-slate-500 font-mono text-xs py-6 border-t border-[#1E2333] bg-[#0A0E17]/60 flex flex-col sm:flex-row items-center justify-between px-6 gap-3">
+        <span>PonelePlay Precision System · Sistema Integral de Jukebox</span>
+        <div className="flex items-center gap-4 text-[11px]">
+          <Link href="/como-funciona" className="hover:text-slate-300 transition-colors">
+            Cómo Funciona & App TV
+          </Link>
+          <span className="text-slate-700">·</span>
+          <Link href="/tv.apk" download className="hover:text-slate-300 transition-colors">
+            Descargar APK (Downloader 4417435)
+          </Link>
+          <span className="text-slate-700">·</span>
+          <Link href="/login" className="hover:text-slate-300 transition-colors">
+            Staff
+          </Link>
+        </div>
       </footer>
     </main>
   );
