@@ -424,11 +424,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }
 
   const handleUnlockAudio = useCallback(() => {
-    engine.unMute?.();
-    engine.setVolume?.(85);
+    // TV screen is display-only: keep muted, ensure video playback
+    engine.mute?.();
+    engine.setVolume?.(0);
     void engine.play();
     setAudioUnlocked(true);
-    setIsMuted(false);
+    setIsMuted(true);
   }, [engine]);
 
   // Sync isPlaying with the player
@@ -440,17 +441,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }, [isPlaying, engine]);
 
-  // Sync volume and mute with the player (engine re-applies them on every new song)
+  // Ensure TV player stays muted at all times so primary audio comes exclusively from Admin Cabina
   useEffect(() => {
-    engine.setVolume?.(volume);
-    if (isMuted) {
-      engine.mute?.();
-    } else {
-      engine.unMute?.();
-    }
+    engine.setVolume?.(0);
+    engine.mute?.();
   }, [volume, isMuted, engine]);
 
-  // Global click anywhere to unlock audio & video immediately
+  // Global click anywhere to ensure video playback begins smoothly
   useEffect(() => {
     const onFirstClick = () => {
       if (!audioUnlocked) {
@@ -893,31 +890,52 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             }
           },
         )
+        .on(
+          "broadcast",
+          { event: "tv_playback_progress" },
+          (msg: {
+            payload?: {
+              currentTime?: number;
+              duration?: number;
+              isPaused?: boolean;
+              trackId?: string;
+              track?: PlayerTrack;
+              isFromAdminAudio?: boolean;
+            };
+          }) => {
+            if (!active || !msg.payload) return;
+            const { currentTime, duration: d, isPaused: p, track } = msg.payload;
+            if (typeof currentTime === "number" && !isNaN(currentTime)) {
+              setElapsed(Math.floor(currentTime));
+              elapsedRef.current = Math.floor(currentTime);
+              // Gently synchronize TV video position if drifting from Admin sound by > 2.5s
+              const tvTime = engine.getCurrentTime?.() ?? 0;
+              if (Math.abs(tvTime - currentTime) > 2.5) {
+                engine.seekTo?.(currentTime);
+              }
+            }
+            if (typeof d === "number" && !isNaN(d) && d > 0) {
+              setVideoDuration(Math.floor(d));
+              durationRef.current = Math.floor(d);
+            }
+            if (typeof p === "boolean") {
+              setIsPlaying(!p);
+              if (p) {
+                engine.pause?.();
+              } else {
+                void engine.play?.();
+              }
+            }
+            if (track && (!nowPlayingRef.current || nowPlayingRef.current.itemId !== track.itemId)) {
+              setManualNowPlaying(track);
+            }
+          },
+        )
         .subscribe();
     });
 
-    // 3. Broadcast live TV playback progress to Admin Panel every 1s over the SAME subscribed channel
-    const broadcastTimer = setInterval(() => {
-      const track = nowPlayingRef.current;
-      if (channel && track) {
-        void channel.send({
-          type: "broadcast",
-          event: "tv_playback_progress",
-          payload: {
-            currentTime: elapsedRef.current,
-            duration: durationRef.current,
-            isPaused: !isPlayingRef.current,
-            trackId: track.trackId,
-            track,
-            isVideoFullscreen: isVideoFullscreenRef.current,
-          },
-        });
-      }
-    }, 1000);
-
     return () => {
       active = false;
-      clearInterval(broadcastTimer);
       if (channel) {
         void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
           const supabase = createBrowserSupabase();
@@ -1139,13 +1157,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 <iframe
                   id="poneleplay-tv-iframe"
                   ref={iframeRef}
-                  src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+                  src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
                   title={nowPlaying?.title || "TV Player"}
                   className="w-full h-full border-0 pointer-events-none select-none object-cover"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   onLoad={() => {
                     engine.handshake();
+                    engine.mute?.();
                   }}
                 />
               )}
@@ -1251,7 +1270,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   <span>•</span>
                   <span className="inline-flex items-center gap-1">
                     <span className="material-symbols-outlined text-indigo-400 text-[16px]">graphic_eq</span>
-                    Stereo Master
+                    Audio Cabina Salón
                   </span>
                 </div>
               </div>
@@ -1315,7 +1334,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                     <span>Playlist: <strong className="text-white">{venueName}</strong></span>
                   </span>
                   <span className="text-slate-600">·</span>
-                  <span>Audio Estéreo Master</span>
+                  <span>Audio Cabina Principal</span>
                 </div>
 
                 <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-2 py-0.5 rounded-full border border-indigo-500/30 font-bold">

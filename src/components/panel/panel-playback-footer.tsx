@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import {
   Mic,
@@ -40,6 +40,7 @@ import {
   sendPlaybackCommand,
 } from "@/lib/api/master-control";
 import { ManualPlaybackModal } from "./manual-playback-modal";
+import { PanelAudioEngine, type PanelAudioEngineRef } from "./panel-audio-engine";
 
 interface PanelPlaybackFooterProps {
   slug: string;
@@ -73,9 +74,27 @@ export function PanelPlaybackFooter({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<"queue" | "candidates">("queue");
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const audioEngineRef = useRef<PanelAudioEngineRef>(null);
+  const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
   const { state: nightState, refresh: refreshNightState } = useNightState(nightSource);
+
+  useEffect(() => {
+    if (!currentTrack && nightState?.nowPlaying) {
+      setCurrentTrack({
+        itemId: nightState.nowPlaying.id,
+        trackId: nightState.nowPlaying.trackId,
+        title: nightState.nowPlaying.title,
+        artist: nightState.nowPlaying.artist,
+        source: nightState.nowPlaying.source,
+        durationSeconds: nightState.nowPlaying.durationSeconds ?? 210,
+        youtubeVideoId: nightState.nowPlaying.youtubeVideoId || undefined,
+        thumbnailUrl: nightState.nowPlaying.thumbnailUrl ?? null,
+        voteCount: nightState.nowPlaying.voteCount,
+      });
+    }
+  }, [currentTrack, nightState?.nowPlaying]);
 
   const { activeQueue, candidateProposals } = useMemo(() => {
     return partitionQueueAndProposals(nightState?.queue ?? [], nightState?.candidates ?? []);
@@ -268,6 +287,10 @@ export function PanelPlaybackFooter({
 
   // Handlers
   const handleTogglePlay = async () => {
+    if (!currentTrack && activeQueue.length > 0) {
+      void handlePlayQueueItemNow(activeQueue[0]);
+      return;
+    }
     const next = !isPaused;
     setIsPaused(next);
     showToast(next ? "⏸️ TV Pausada" : "▶️ TV en Reproducción");
@@ -340,6 +363,7 @@ export function PanelPlaybackFooter({
   const handleSeek = async (newSec: number) => {
     const clamped = Math.max(0, Math.min(duration, newSec));
     setElapsed(clamped);
+    audioEngineRef.current?.seekTo(clamped);
     showToast(`⏩ Posición: ${formatDuration(clamped)}`);
     try {
       await seekPlayback(slug, clamped);
@@ -613,6 +637,27 @@ export function PanelPlaybackFooter({
               <span>{karaokeMode ? "Karaoke ON" : "Karaoke"}</span>
             </button>
 
+            {/* Cabina Audio Output Badge & Autoplay Unlocker */}
+            {isAudioBlocked ? (
+              <button
+                type="button"
+                onClick={() => audioEngineRef.current?.unlockAudio()}
+                className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-2.5 py-1.5 rounded-lg font-mono text-[11px] font-bold active:scale-95 transition-all shadow-sm shrink-0"
+                title="Clic para habilitar sonido en la cabina del local"
+              >
+                <VolumeX className="size-3.5 text-amber-400 animate-pulse" />
+                <span>Habilitar Sonido</span>
+              </button>
+            ) : (
+              <div
+                className="hidden xl:flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2.5 py-1.5 rounded-lg font-mono text-[11px] font-bold shrink-0"
+                title="Sonido principal del salón activo desde esta cabina (Solo sonido, sin video)"
+              >
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Audio Cabina</span>
+              </div>
+            )}
+
             {/* Volume Control */}
             <div className="flex items-center gap-2 bg-[#131722] px-2.5 py-1.5 rounded-lg border border-[#232b42]">
               <button
@@ -643,6 +688,22 @@ export function PanelPlaybackFooter({
           </div>
         </div>
       </footer>
+
+      {/* Off-screen Admin Cabina Audio Playback Engine (Solo sonido, sin video) */}
+      <PanelAudioEngine
+        ref={audioEngineRef}
+        slug={slug}
+        currentTrack={currentTrack}
+        isPaused={isPaused}
+        volume={volume}
+        isMuted={isMuted}
+        onTrackEnded={() => void handleSkipNext()}
+        onProgress={(curr, dur) => {
+          setElapsed(curr);
+          if (dur) setVideoDuration(dur);
+        }}
+        onAudioBlockedChange={(blocked) => setIsAudioBlocked(blocked)}
+      />
 
       {/* Manual Track Selection Modal */}
       <ManualPlaybackModal
@@ -710,6 +771,16 @@ export function PanelPlaybackFooter({
 
             {/* Now Playing Banner in Drawer */}
             <div className="p-4 bg-[#101524] border-b border-[#1E2538]">
+              {isAudioBlocked && (
+                <button
+                  type="button"
+                  onClick={() => audioEngineRef.current?.unlockAudio()}
+                  className="w-full mb-3 flex items-center justify-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 py-2 px-3 rounded-xl font-mono text-xs font-bold active:scale-95 transition-all shadow-md"
+                >
+                  <VolumeX className="size-4 text-amber-400 animate-pulse" />
+                  <span>Toca aquí para habilitar el sonido en la cabina</span>
+                </button>
+              )}
               <div className="flex items-center gap-3">
                 <div className="size-12 rounded-xl bg-[#090D16] border border-[#232B42] shrink-0 overflow-hidden flex items-center justify-center relative shadow-md">
                   {currentTrack?.thumbnailUrl ? (
