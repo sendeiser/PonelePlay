@@ -22,6 +22,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
+  transpilePackages: ["lucide-react"],
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [

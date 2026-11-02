@@ -89,6 +89,13 @@ export function TvPairingModal({
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
       if (!active) return;
       const supabase = createBrowserSupabase();
+      const existingModal = supabase.getChannels().find(
+        (c) => c.topic === `playback-control:${slug}` || c.topic === `realtime:playback-control:${slug}`
+      );
+      if (existingModal) {
+        void supabase.removeChannel(existingModal);
+      }
+
       channel = supabase
         .channel(`playback-control:${slug}`)
         .on(

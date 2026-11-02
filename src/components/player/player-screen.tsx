@@ -212,6 +212,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
       if (!active) return;
       const supabase = createBrowserSupabase();
+      const existingFallback = supabase.getChannels().find(
+        (c) => c.topic === `tv-fallback-sync:${slug}` || c.topic === `realtime:tv-fallback-sync:${slug}`
+      );
+      if (existingFallback) {
+        void supabase.removeChannel(existingFallback);
+      }
+
       channel = supabase
         .channel(`tv-fallback-sync:${slug}`)
         .on(
@@ -694,6 +701,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
       if (!active) return;
       const supabase = createBrowserSupabase();
+
+      const existingControl = supabase.getChannels().find(
+        (c) => c.topic === `playback-control:${slug}` || c.topic === `realtime:playback-control:${slug}`
+      );
+      if (existingControl) {
+        void supabase.removeChannel(existingControl);
+      }
 
       channel = supabase
         .channel(`playback-control:${slug}`)

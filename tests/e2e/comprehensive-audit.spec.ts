@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const routes = [
-  { path: "/p/billar-aurora", name: "Client Guest (/p)" },
+  { path: "/c/billar-aurora", name: "Client Guest (/c)" },
   { path: "/panel/billar-aurora", name: "Admin Dashboard (/panel)", auth: true },
   { path: "/panel/billar-aurora/ajustes", name: "Panel Ajustes", auth: true },
   { path: "/panel/billar-aurora/codigos", name: "Panel Códigos", auth: true },
@@ -19,7 +19,7 @@ const viewports = [
 ];
 
 async function loginDemoIfAuth(page: import("@playwright/test").Page) {
-  await page.goto("http://localhost:3005/login", { waitUntil: "domcontentloaded" });
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(400);
 
   const emailInput = page.locator('input[type="email"]');
@@ -42,7 +42,7 @@ test.describe("Comprehensive UI/UX, Overflow & Accessibility Audit", () => {
           await loginDemoIfAuth(page);
         }
 
-        await page.goto(`http://localhost:3005${r.path}`, { waitUntil: "domcontentloaded" });
+        await page.goto(r.path, { waitUntil: "domcontentloaded" });
         await page.waitForTimeout(800);
 
         // Check horizontal overflow
@@ -88,7 +88,7 @@ test.describe("Comprehensive UI/UX, Overflow & Accessibility Audit", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await loginDemoIfAuth(page);
 
-    await page.goto("http://localhost:3005/panel/billar-aurora", { waitUntil: "domcontentloaded" });
+    await page.goto("/panel/billar-aurora", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(1000);
 
     // Look for playback footer
@@ -96,9 +96,9 @@ test.describe("Comprehensive UI/UX, Overflow & Accessibility Audit", () => {
     await expect(footer).toBeVisible();
 
     // Click track info button or queue pill
-    const openBtn = page.locator('button:has-text("Cola")').first();
+    const openBtn = page.locator('footer button[title*="cola" i]').first();
     await expect(openBtn).toBeVisible();
-    await openBtn.click();
+    await openBtn.click({ force: true });
     await page.waitForTimeout(600);
 
     // Drawer should be open and display queue tab

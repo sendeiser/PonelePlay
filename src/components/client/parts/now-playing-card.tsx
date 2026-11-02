@@ -40,6 +40,12 @@ export function NowPlayingCard({ item, slug }: NowPlayingCardProps) {
       if (!active) return;
       try {
         const supabase = createBrowserSupabase();
+        const existing = supabase.getChannels().find(
+          (c) => c.topic === `playback-control:${slug}` || c.topic === `realtime:playback-control:${slug}`
+        );
+        if (existing) {
+          void supabase.removeChannel(existing);
+        }
 
         channel = supabase
           .channel(`playback-control:${slug}`)

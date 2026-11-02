@@ -350,9 +350,9 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   return (
     <div className="space-y-6">
       {/* ==================== TOP OPERATIONAL STATUS BAR ==================== */}
-      <section className="card-panel rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+      <section className="card-panel rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 overflow-hidden">
         {/* Session Live Meta */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0 w-full lg:w-auto">
           <div className="flex flex-col">
             <h1 className="text-base font-bold text-white tracking-tight">
               Control de la Noche
@@ -378,7 +378,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
           <div className="h-4 w-px bg-[#1E2333] hidden sm:block" />
 
-          <div className="flex items-center gap-4 text-xs font-mono text-slate-300">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs font-mono text-slate-300">
             <div className="flex items-center gap-1.5">
               <span className="material-symbols-outlined text-slate-500 text-base">schedule</span>
               <span className="text-slate-400">Estado:</span>
@@ -386,13 +386,13 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                 {isOpen ? "Sesión Activa" : "Cerrado"}
               </span>
             </div>
-            <span className="text-slate-600">•</span>
+            <span className="text-slate-600 hidden sm:inline">•</span>
             <div className="flex items-center gap-1.5">
               <span className="material-symbols-outlined text-indigo-400 text-base">group</span>
               <span className="text-white font-semibold">{queue.length} temas</span>
               <span className="text-slate-400">en cola</span>
             </div>
-            <span className="text-slate-600">•</span>
+            <span className="text-slate-600 hidden sm:inline">•</span>
             <div className="flex items-center gap-1.5">
               <span className="material-symbols-outlined text-cyan-400 text-base">verified_user</span>
               <span className="text-white font-semibold uppercase">{role}</span>
@@ -459,8 +459,8 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       </section>
 
       {/* ==================== HARDWARE & CONNECTIVITY BANNER ==================== */}
-      <section className="recessed-dark rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between text-xs font-mono">
-        <div className="flex items-center gap-4">
+      <section className="recessed-dark rounded-xl px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 min-w-0">
           <div className="flex items-center gap-2 text-indigo-300">
             <span className="material-symbols-outlined text-base text-cyan-400">desktop_windows</span>
             <span className="text-slate-300">Reproductor TV PC:</span>
@@ -476,7 +476,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               </span>
             )}
           </div>
-          <span className="text-slate-600">|</span>
+          <span className="text-slate-600 hidden sm:inline">|</span>
           <div className="flex items-center gap-2 text-slate-400">
             <span className="material-symbols-outlined text-base text-indigo-400">volume_up</span>
             <span>Canal Audio Principal Salón</span>
