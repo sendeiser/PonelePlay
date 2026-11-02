@@ -552,10 +552,10 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               </div>
               <div className="flex items-center gap-1.5 font-mono text-xs text-indigo-300 bg-[#0a0e17]/80 px-2.5 py-1 rounded-lg border border-[#1E2333]">
                 <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  {nowPlaying && nowPlaying.voteCount >= 9999 ? "stars" : "thumb_up"}
+                  {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0) ? "stars" : "thumb_up"}
                 </span>
                 <span>
-                  {nowPlaying && nowPlaying.voteCount >= 9999
+                  {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0)
                     ? "Selección Bar"
                     : `${nowPlaying?.voteCount ?? 0} votos`}
                 </span>
@@ -872,10 +872,10 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                       </p>
                       <div className="flex items-center gap-2 mt-1 font-mono text-[10px] text-slate-400">
                         <span className="text-indigo-400 font-semibold">
-                          {item.voteCount >= 9999 ? "⭐ Selección Cabina" : `${item.voteCount} votos`}
+                          {item.voteCount >= 9999 || item.voteCount === 0 ? "⭐ Selección Cabina" : `${item.voteCount} votos`}
                         </span>
                         <span className="text-slate-600">•</span>
-                        <span>{item.voteCount >= 9999 ? "Puesto por Operador" : "Mesa en vivo"}</span>
+                        <span>{item.voteCount >= 9999 || item.voteCount === 0 ? "Puesto por Operador" : "Mesa en vivo"}</span>
                       </div>
                     </div>
                   </div>

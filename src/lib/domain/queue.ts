@@ -55,6 +55,6 @@ export function partitionQueueAndProposals<
 
 export function formatVotesBadge(voteCount: number): string {
   if (voteCount >= 9999) return "⭐ Selección Bar";
-  if (voteCount === 0) return "En reproducción";
+  if (voteCount === 0) return "⭐ Selección Bar";
   return `${voteCount} ${voteCount === 1 ? "voto" : "votos"}`;
 }

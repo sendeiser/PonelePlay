@@ -1273,10 +1273,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1 bg-indigo-500/15 text-[#c0c1ff] px-2.5 py-1 rounded-full border border-indigo-500/30 font-mono text-[11px] font-bold">
                   <span className="material-symbols-outlined text-[14px]">
-                    {nowPlaying && nowPlaying.voteCount >= 9999 ? "stars" : "thumb_up"}
+                    {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0) ? "stars" : "thumb_up"}
                   </span>
                   <span>
-                    {nowPlaying && nowPlaying.voteCount >= 9999
+                    {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0)
                       ? "SELECCIÓN BAR"
                       : `${nowPlaying?.voteCount ?? 0} VOTOS`}
                   </span>
@@ -1405,7 +1405,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
-                          {item.voteCount >= 9999
+                          {(item.voteCount >= 9999 || item.voteCount === 0)
                             ? "⭐ Selección Bar"
                             : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
                         </span>

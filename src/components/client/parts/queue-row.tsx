@@ -66,10 +66,10 @@ export const QueueRow = memo(function QueueRow({ item, rank, onVote, disabled }:
           </p>
           <div className="flex items-center gap-2 mt-1 font-mono text-[11px] text-slate-400">
             <span className="text-indigo-400 font-semibold">
-              {item.voteCount >= 9999 ? "⭐ Selección Bar" : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
+              {(item.voteCount >= 9999 || item.voteCount === 0) ? "⭐ Selección Bar" : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
             </span>
             <span className="text-slate-600">•</span>
-            <span>Mesa en vivo</span>
+            <span>{item.voteCount >= 9999 || item.voteCount === 0 ? "Puesto por la casa" : "Mesa en vivo"}</span>
           </div>
         </div>
       </div>
