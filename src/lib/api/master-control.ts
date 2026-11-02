@@ -29,7 +29,9 @@ export type PlaybackCommand =
   | "set_karaoke_mode"
   | "seek"
   | "toggle_fullscreen"
-  | "set_fullscreen";
+  | "set_fullscreen"
+  | "toggle_video_mode"
+  | "set_video_mode";
 
 export async function fetchPlaybackState(slug: string): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
@@ -234,3 +236,11 @@ export async function enqueueTrackTop(
   });
 }
 
+
+export async function toggleVideoModePlayback(slug: string): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "toggle_video_mode");
+}
+
+export async function setVideoModePlayback(slug: string, enabled: boolean): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "set_video_mode", { enabled });
+}

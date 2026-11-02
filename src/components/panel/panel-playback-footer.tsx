@@ -622,6 +622,24 @@ export function PanelPlaybackFooter({
 
           {/* RIGHT: Volume & Karaoke Toggle (Clean audio controls, no TV clutter) */}
           <div className="flex items-center justify-end gap-3 justify-self-end">
+            {/* TV Screen Mode Remote Switcher */}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await sendPlaybackCommand(slug, "toggle_video_mode");
+                  showToast("📺 Modo de Pantalla TV alternado");
+                } catch {
+                  showToast("Error al cambiar modo de TV");
+                }
+              }}
+              className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-[#232b42] bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+              title="Alternar vista en la TV: Video vs Énfasis en Playlist y Votación"
+            >
+              <span className="material-symbols-outlined text-[13px] text-cyan-400">tv</span>
+              <span>Modo TV</span>
+            </button>
+
             {/* Karaoke Mode Toggle Button */}
             <button
               type="button"

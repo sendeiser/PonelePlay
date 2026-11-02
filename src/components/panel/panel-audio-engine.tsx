@@ -397,7 +397,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
 
           // Broadcast to TV screen via Supabase Realtime so TV visual display stays in sync
-          if (channelRef.current && currentTrackRef.current) {
+          if (channelRef.current && typeof channelRef.current.send === "function" && currentTrackRef.current) {
             void channelRef.current.send({
               type: "broadcast",
               event: "tv_playback_progress",

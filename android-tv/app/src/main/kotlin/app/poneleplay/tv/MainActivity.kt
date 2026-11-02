@@ -94,7 +94,27 @@ class MainActivity : ComponentActivity() {
             showSettingsState.value = !showSettingsState.value
             return true
         }
+
+        // TV Remote Color buttons, Info, Audio, or Mode key toggles between Video mode & Playlist/Votos mode
+        if (keyCode == KeyEvent.KEYCODE_PROG_GREEN ||
+            keyCode == KeyEvent.KEYCODE_BUTTON_Y ||
+            keyCode == KeyEvent.KEYCODE_INFO ||
+            keyCode == KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK ||
+            keyCode == KeyEvent.KEYCODE_V ||
+            keyCode == KeyEvent.KEYCODE_M
+        ) {
+            webViewInstance?.evaluateJavascript("window.toggleTvScreenMode && window.toggleTvScreenMode()", null)
+            return true
+        }
+
         return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_MODERATE) {
+            webViewInstance?.freeMemory()
+        }
     }
 
     override fun onDestroy() {
@@ -277,6 +297,7 @@ fun TVPlayerApp(
                         useWideViewPort = true
                         loadWithOverviewMode = true
                         cacheMode = WebSettings.LOAD_DEFAULT
+                        offscreenPreRaster = false // Saves GPU texture memory on TV boxes
                         textZoom = displayZoom
                         userAgentString =
                             "Mozilla/5.0 (Linux; Android 14; PonelePlayTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"

@@ -109,6 +109,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   );
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as unknown as { toggleTvScreenMode?: () => void }).toggleTvScreenMode = () => {
+        toggleVideoMode();
+      };
+    }
+  }, []);
+
+  useEffect(() => {
     setMounted(true);
     if (typeof window !== "undefined") {
       setOrigin(window.location.origin);
@@ -467,9 +475,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (key === "f" || key === "enter") {
         toggleVideoFullscreen();
       }
-      if (key === "v") {
+      if (key === "v" || key === "m" || key === "p") {
         toggleVideoMode();
-        setLiveToast({ icon: "smart_display", message: videoMode ? "Vista: Vinilo" : "Vista: Video HD" });
+        setLiveToast({
+          icon: videoMode ? "queue_music" : "smart_display",
+          message: videoMode ? "Modo: Énfasis en Playlist & Propuestas" : "Modo: Video Salón HD",
+        });
         setTimeout(() => setLiveToast(null), 3000);
       }
       if (key === "h" || key === "?") {
@@ -819,6 +830,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 setTimeout(() => setHudMessage(null), 3500);
                 return next;
               });
+            } else if (cmd === "toggle_video_mode") {
+              toggleVideoMode();
+            } else if (cmd === "set_video_mode") {
+              const enable = Boolean(p.enabled);
+              setVideoMode(enable);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("poneleplay.player.videoMode", String(enable));
+              }
+              setLiveToast({
+                icon: enable ? "smart_display" : "queue_music",
+                message: enable ? "Modo: Video Salón HD" : "Modo: Énfasis en Playlist & Propuestas",
+              });
+              setTimeout(() => setLiveToast(null), 3000);
             } else if (cmd === "set_fullscreen") {
               const enableFs = Boolean(p.isFullscreen);
               setIsVideoFullscreen(enableFs);
@@ -1050,6 +1074,24 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <span className={`w-0.5 rounded-full bg-indigo-300 ${isPlaying ? "animate-pulse delay-100 h-full" : "h-2"}`} />
             </div>
 
+            {/* Mode Switcher Pill Button (TV Remote & Click) */}
+            <button
+              type="button"
+              onClick={toggleVideoMode}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-md active:scale-95 ${
+                videoMode
+                  ? "bg-indigo-600/25 text-indigo-300 border-indigo-500/40 hover:bg-indigo-600/35 hover:text-white"
+                  : "bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/35 hover:text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]"
+              }`}
+              title="Alternar entre Modo Video y Modo Énfasis en Playlist & Votos (Tecla V o control remoto)"
+            >
+              <span className="material-symbols-outlined text-[15px] text-cyan-400">
+                {videoMode ? "smart_display" : "queue_music"}
+              </span>
+              <span>{videoMode ? "Modo: Video + Playlist" : "Énfasis: Playlist & Votos"}</span>
+              <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">(V)</span>
+            </button>
+
             {/* Clock */}
             <div className="flex items-center gap-1 bg-[#0d1017] px-2 py-0.5 rounded-md border border-[#1e2333] font-mono text-[11px] text-white font-bold tracking-wider">
               <span className="material-symbols-outlined text-indigo-400 text-[13px]">schedule</span>
@@ -1088,6 +1130,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         }
       >
         {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~58% OR FULLSCREEN 100%) ---------------- */}
+        {(isVideoFullscreen || videoMode) && (
         <section
           className={
             isVideoFullscreen
@@ -1153,7 +1196,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             }
           >
             <div className="w-full h-full relative">
-              {mounted && (
+              {mounted && (videoMode || isVideoFullscreen) && (
                 <iframe
                   id="poneleplay-tv-iframe"
                   ref={iframeRef}
@@ -1345,9 +1388,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           )}
         </section>
+      )}
 
         {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~42%) (HIDDEN IN FULLSCREEN) ---------------- */}
-        {!isVideoFullscreen && (
+        {!isVideoFullscreen && videoMode && (
           <section className="col-span-5 flex flex-col justify-between gap-2.5 min-h-0">
             {/* TOP SECTION: CRISP MODERN QR ENGAGEMENT CARD */}
             <div className="rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg flex items-center gap-3 relative overflow-hidden shrink-0">
@@ -1550,6 +1594,319 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           </section>
         )}
+
+        {/* ========================================================================= */}
+        {/* MODE 2: ENFASIS EN PLAYLIST Y PROPUESTAS (AUDIO SALON + MAXIMA PARTICIPACION) */}
+        {/* ========================================================================= */}
+        {!isVideoFullscreen && !videoMode && (
+          <>
+            {/* COL 1: HERO NOW PLAYING & QR CARD (4 COLS) */}
+            <section className="col-span-4 flex flex-col justify-between gap-2.5 min-h-0">
+              {/* Upper: Now Playing Hero Card with Vinyl + Scrubber */}
+              <div className="rounded-xl bg-[#141824] border border-[#232b42] p-4 shadow-lg flex flex-col justify-between flex-1 min-h-0 overflow-hidden">
+                {/* Top Header */}
+                <div className="flex items-center justify-between shrink-0 mb-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 font-mono text-[10px] font-bold">
+                    <span className="size-1.5 rounded-full bg-cyan-400 animate-live-dot" />
+                    <span>SONANDO EN SALÓN</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-indigo-300 font-mono text-[10px]">
+                    <span className="material-symbols-outlined text-[13px] text-cyan-400">speaker</span>
+                    <span>Audio Cabina</span>
+                  </div>
+                </div>
+
+                {/* Central Vinyl & Album Artwork Showcase */}
+                <div className="flex flex-col items-center justify-center my-auto py-2 text-center">
+                  <div className="relative size-36 sm:size-44 mb-3 flex items-center justify-center">
+                    {/* Spinning Vinyl */}
+                    <div className="absolute -right-3 size-36 sm:size-44 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 animate-spin-vinyl">
+                      <div className="size-24 sm:size-28 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                        <div className="size-14 sm:size-16 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
+                          <div className="size-2 rounded-full bg-[#0a0e17]" />
+                        </div>
+                      </div>
+                    </div>
+                    {/* Cover art */}
+                    <div className="relative size-36 sm:size-44 rounded-2xl overflow-hidden border-2 border-[#283250] shadow-2xl z-10 bg-[#0a0e17] flex items-center justify-center shrink-0">
+                      {nowPlaying?.thumbnailUrl ? (
+                        <Image
+                          src={nowPlaying.thumbnailUrl}
+                          alt={nowPlaying.title}
+                          width={176}
+                          height={176}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <Music2 className="size-12 text-indigo-400" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Equalizer Waveform Bars */}
+                  <div className="flex items-center justify-center gap-1 h-5 mb-2">
+                    <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
+                    <span className="w-1 h-5 bg-indigo-400 rounded-full animate-bounce" />
+                    <span className="w-1 h-4 bg-cyan-300 rounded-full animate-pulse" />
+                    <span className="w-1 h-5 bg-purple-400 rounded-full animate-bounce" />
+                    <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
+                  </div>
+
+                  <h1 className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-snug line-clamp-2 max-w-full px-2">
+                    {decodeHtml(nowPlaying?.title || "Esperando tema...")}
+                  </h1>
+                  <h2 className="text-xs sm:text-sm font-medium text-slate-300 truncate max-w-full mt-1">
+                    {nowPlaying?.artist || "Playlist activa"}
+                  </h2>
+
+                  <div className="mt-2.5 inline-flex items-center gap-1.5 bg-indigo-500/15 text-indigo-300 px-3 py-1 rounded-full font-mono text-[10px] font-bold border border-indigo-500/25">
+                    <span className="material-symbols-outlined text-[13px] text-amber-400">stars</span>
+                    <span>
+                      {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0)
+                        ? "Selección Bar"
+                        : `${nowPlaying?.voteCount ?? 0} votos`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Scrubber & Timeline */}
+                <div className="mt-2 pt-2 border-t border-[#1e2333] shrink-0">
+                  <div className="w-full flex items-center justify-between font-mono text-[10px] text-slate-300 mb-1">
+                    <span className="text-cyan-400 font-semibold">{formatDuration(elapsed)}</span>
+                    <span className="text-slate-500 text-[9px] uppercase tracking-wider">AUDIO CABINA MASTER</span>
+                    <span className="text-slate-400 font-semibold">{formatDuration(duration)}</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-[#161a26] rounded-full overflow-hidden border border-[#232b42]">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-purple-500 rounded-full transition-all duration-150"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Lower: Large High-Contrast QR Card */}
+              <div className="rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg flex items-center gap-3 relative overflow-hidden shrink-0">
+                <div
+                  onClick={() => setQrModal(true)}
+                  className="relative size-24 rounded-lg bg-white p-1.5 shrink-0 border border-cyan-400/50 shadow-md cursor-pointer hover:scale-105 transition-transform"
+                  title="Click para agrandar QR"
+                >
+                  {qr ? (
+                    <Image
+                      src={qr}
+                      alt="QR para votar"
+                      width={96}
+                      height={96}
+                      className="w-full h-full object-contain"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-slate-200 animate-pulse rounded" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-mono text-[9px] text-cyan-400 uppercase tracking-widest font-bold block mb-0.5">
+                    ELEGÍ DESDE TU MESA
+                  </span>
+                  <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight leading-snug truncate">
+                    Escaneá con tu celular
+                  </h3>
+                  <p className="font-mono text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-2">
+                    Pedí créditos al mozo para votar o subir canciones a la playlist.
+                  </p>
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0a0e17] border border-[#232b42] font-mono text-[10px] text-slate-300">
+                    <span className="material-symbols-outlined text-[12px] text-indigo-400">link</span>
+                    <span className="truncate">poneleplay.app/p/{slug}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* COL 2: PLAYLIST CONFIRMADA EN COLA (4 COLS) */}
+            <section className="col-span-4 rounded-xl bg-[#141824] border border-[#232b42] p-3.5 shadow-lg flex flex-col justify-between overflow-hidden min-h-0">
+              <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2.5 border-b border-[#232b42] shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="size-7 rounded-lg bg-indigo-600/25 border border-indigo-500/40 text-indigo-300 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-[16px] text-cyan-400">queue_music</span>
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                        Playlist Confirmada
+                      </h3>
+                      <p className="font-mono text-[10px] text-slate-400">
+                        {queue.length} {queue.length === 1 ? "tema en espera" : "temas a continuación"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-[10px] text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-full font-bold">
+                    Orden de Reproducción
+                  </span>
+                </div>
+
+                {/* Queue Items List (Up to 5) */}
+                <div className="mt-2.5 space-y-2 overflow-hidden flex-1 min-h-0">
+                  {queue.slice(0, 5).map((item, index) => (
+                    <div
+                      key={item.itemId}
+                      className="p-2.5 rounded-xl bg-[#10141f] border border-[#1d2232] flex items-center justify-between gap-3 shadow-sm hover:border-[#2a344e] transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <BallChip n={index + 1} size="md" />
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-xs font-bold text-white truncate">
+                            {decodeHtml(item.title)}
+                          </h4>
+                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                            {item.artist}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                          {(item.voteCount >= 9999 || item.voteCount === 0)
+                            ? "⭐ Selección Bar"
+                            : `${item.voteCount} votos`}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500">
+                          {formatDuration(item.durationSeconds ?? 210)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+
+                  {queue.length === 0 && (
+                    <div className="py-12 text-center text-xs text-slate-500 font-mono space-y-1">
+                      <span className="material-symbols-outlined text-3xl text-slate-600 block mb-1">music_off</span>
+                      <p>No hay canciones en la cola confirmada.</p>
+                      <p className="text-[10px] text-slate-600">¡Votá canciones en la columna derecha para ingresarlas!</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer Info */}
+              <div className="pt-2 border-t border-[#232b42] flex items-center justify-between font-mono text-[10px] text-slate-400 shrink-0 mt-2">
+                <span className="flex items-center gap-1 text-slate-300">
+                  <span className="size-1.5 rounded-full bg-emerald-400 inline-block" />
+                  <span>Cola en Vivo</span>
+                </span>
+                <span className="text-cyan-400 font-semibold">Salón {venueName}</span>
+              </div>
+            </section>
+
+            {/* COL 3: PROPUESTAS EN VOTACIÓN EN VIVO (4 COLS) */}
+            <section className="col-span-4 rounded-xl bg-[#141824] border border-[#232b42] p-3.5 shadow-lg flex flex-col justify-between overflow-hidden min-h-0">
+              <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-2.5 border-b border-[#232b42] shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div className="size-7 rounded-lg bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center justify-center">
+                      <Flame className="size-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight">
+                        Votación en Vivo
+                      </h3>
+                      <p className="font-mono text-[10px] text-slate-400">
+                        {nightState?.candidates?.length ?? 0} temas compitiendo
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-[10px] text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold animate-pulse">
+                    Mesas Votando
+                  </span>
+                </div>
+
+                {/* Live Voting Round Banner */}
+                {nightState?.votingRound?.enabled && (
+                  <div className="mt-2.5 p-2 rounded-lg bg-gradient-to-r from-amber-500/20 via-rose-500/20 to-indigo-500/20 border border-amber-500/40 flex items-center justify-between font-mono text-[11px] shrink-0 shadow-sm">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="material-symbols-outlined text-amber-400 text-sm animate-pulse">timer</span>
+                      <span className="font-bold text-white shrink-0">Ronda #{nightState.votingRound.roundNumber}</span>
+                      <span className="text-slate-400 text-[10px] truncate">· La + votada entra</span>
+                    </div>
+                    <span className="font-bold px-2 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-500/50 text-[11px] shrink-0">
+                      {formatDuration(roundSecondsLeft)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Candidate Proposals List (Up to 4) */}
+                <div className="mt-2.5 space-y-2 overflow-hidden flex-1 min-h-0">
+                  {nightState?.candidates && nightState.candidates.length > 0 ? (
+                    nightState.candidates.slice(0, 4).map((cand, index) => {
+                      const needed = Math.max(0, 5 - cand.voteCount);
+                      const percent = Math.min(100, (cand.voteCount / 5) * 100);
+                      return (
+                        <div
+                          key={cand.id}
+                          className="p-2.5 rounded-xl bg-[#10141f] border border-[#252030] space-y-1.5 shadow-sm hover:border-[#382d48] transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-2 min-w-0">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="text-xs font-bold text-white truncate">
+                                  {decodeHtml(cand.title)}
+                                </h4>
+                                {index === 0 && (
+                                  <span className="shrink-0 text-[9px] font-mono font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded">
+                                    🏆 Líder
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                                {cand.artist}
+                              </p>
+                            </div>
+
+                            <span className="font-mono text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                              <Flame className="size-3 text-amber-400" />
+                              <span>{cand.voteCount}/5 votos</span>
+                            </span>
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="w-full bg-[#181d2a] h-1.5 rounded-full overflow-hidden border border-[#232b42]">
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 via-rose-500 to-indigo-500 rounded-full transition-all duration-300"
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                            <span className="text-amber-400 font-semibold">
+                              {needed === 1 ? "¡Falta solo 1 voto para ingresar!" : `Faltan ${needed} votos para sonar`}
+                            </span>
+                            <span className="text-slate-500">Mesa popular</span>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-10 text-center text-xs text-slate-500 font-mono space-y-1">
+                      <Flame className="size-7 text-slate-600 mx-auto mb-1 opacity-50" />
+                      <p>No hay propuestas en votación en este momento.</p>
+                      <p className="text-[10px] text-slate-600">¡Escaneá el QR y proponé tu canción favorita!</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Footer Info */}
+              <div className="pt-2 border-t border-[#232b42] flex items-center justify-between font-mono text-[10px] text-slate-400 shrink-0 mt-2">
+                <span className="text-slate-400">Meta: 5 votos para entrada directa</span>
+                <span className="text-amber-400 font-semibold">Votá desde tu mesa</span>
+              </div>
+            </section>
+          </>
+        )}
+
       </main>
 
       {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER) ================= */}
