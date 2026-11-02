@@ -160,6 +160,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     const saved = localStorage.getItem(`poneleplay.player.${slug}`);
     if (saved) {
       setToken(saved);
+    } else {
+      const t = setTimeout(() => {
+        setPairModalOpen(true);
+      }, 1200);
+      return () => clearTimeout(t);
     }
   }, [searchParams, slug]);
 
@@ -978,11 +983,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <button
               type="button"
               onClick={() => setPairModalOpen(true)}
-              className="flex items-center gap-1 bg-[#0d1017] hover:bg-[#181b25] px-2 py-0.5 rounded-md border border-[#1e2333] text-[10px] font-mono text-slate-300 hover:text-white transition-colors"
-              title="Vincular con PIN"
+              className={
+                token
+                  ? "flex items-center gap-1.5 bg-emerald-950/60 hover:bg-emerald-900/60 px-2.5 py-1 rounded-md border border-emerald-500/40 text-[11px] font-mono text-emerald-300 font-bold transition-all"
+                  : "flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:brightness-125 px-2.5 py-1 rounded-md border border-amber-400/60 text-[11px] font-mono text-amber-300 font-bold animate-pulse shadow-md transition-all"
+              }
+              title={token ? "Pantalla vinculada con el salón" : "Vincular pantalla con código PIN"}
             >
-              <KeyRound className="size-2.5 text-indigo-400" />
-              <span>{token ? "Vinculado" : "Vincular"}</span>
+              <KeyRound className={`size-3 ${token ? "text-emerald-400" : "text-amber-400"}`} />
+              <span>{token ? "TV Vinculada" : "📺 Vincular TV (Código)"}</span>
             </button>
 
             {/* Clock */}
@@ -1220,8 +1229,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
               <div className="flex items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1 bg-indigo-500/15 text-[#c0c1ff] px-2.5 py-1 rounded-full border border-indigo-500/30 font-mono text-[11px] font-bold">
-                  <span className="material-symbols-outlined text-[14px]">thumb_up</span>
-                  <span>{nowPlaying?.voteCount ?? 0} VOTOS</span>
+                  <span className="material-symbols-outlined text-[14px]">
+                    {nowPlaying && nowPlaying.voteCount >= 9999 ? "stars" : "thumb_up"}
+                  </span>
+                  <span>
+                    {nowPlaying && nowPlaying.voteCount >= 9999
+                      ? "SELECCIÓN BAR"
+                      : `${nowPlaying?.voteCount ?? 0} VOTOS`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1347,7 +1362,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
-                          {item.voteCount} {item.voteCount === 1 ? "voto" : "votos"}
+                          {item.voteCount >= 9999
+                            ? "⭐ Selección Bar"
+                            : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
                         </span>
                       </div>
                     </div>

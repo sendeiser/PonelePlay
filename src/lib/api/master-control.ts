@@ -208,7 +208,7 @@ export async function playTrackNow(
       ...track,
       itemId: `manual-${Date.now()}`,
       source: "youtube",
-      voteCount: 99999,
+      voteCount: 0,
     },
   });
 }
@@ -229,7 +229,7 @@ export async function enqueueTrackTop(
       ...track,
       itemId: `vip-${Date.now()}`,
       source: "youtube",
-      voteCount: 99999,
+      voteCount: 5,
     },
   });
 }

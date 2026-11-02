@@ -5,6 +5,7 @@ import Image from "next/image";
 import QRCode from "qrcode";
 import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 import { fetchNightSummary, venueQrUrl, type NightSummary } from "@/lib/api/owner-ops";
+import { PrintQrModal } from "./print-qr-modal";
 
 interface SettingsManagerProps {
   slug: string;
@@ -27,6 +28,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [printQrOpen, setPrintQrOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clientUrl =
@@ -271,13 +273,24 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
                 {clientUrl}
               </p>
 
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="mt-3 px-3 py-1.5 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono text-indigo-300 hover:text-white transition-colors"
-              >
-                {copied ? "¡URL Copiada!" : "Copiar Enlace"}
-              </button>
+              <div className="mt-3 flex items-center gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="flex-1 px-3 py-2 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono text-indigo-300 hover:text-white transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">content_copy</span>
+                  {copied ? "¡Copiado!" : "Copiar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPrintQrOpen(true)}
+                  className="flex-1 px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:brightness-110 text-white text-xs font-bold font-mono transition-all shadow-md shadow-indigo-900/30 flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">print</span>
+                  Imprimir / PDF
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -406,6 +419,12 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           </div>
         </section>
       )}
+      <PrintQrModal
+        isOpen={printQrOpen}
+        onClose={() => setPrintQrOpen(false)}
+        slug={slug}
+        venueName={venueName || "Billar Aurora"}
+      />
     </form>
   );
 }

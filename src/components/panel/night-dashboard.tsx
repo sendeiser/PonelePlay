@@ -21,6 +21,7 @@ import { type PanelRole } from "@/lib/domain/permissions";
 import { PairPlayerDialog } from "./pair-player";
 import { ManualPlaybackModal } from "./manual-playback-modal";
 import { TvDevicesManagerModal } from "./tv-devices-manager-modal";
+import { PrintQrModal } from "./print-qr-modal";
 
 interface NightDashboardProps {
   slug: string;
@@ -61,6 +62,8 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [isTvFullscreen, setIsTvFullscreen] = useState(false);
   const [playerResetMsg, setPlayerResetMsg] = useState<string | null>(null);
   const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [printQrModalOpen, setPrintQrModalOpen] = useState(false);
+  const [lastTvProgressAt, setLastTvProgressAt] = useState<number>(0);
 
   // Sync initial playback state from backend and listen to Realtime
   useEffect(() => {
@@ -121,6 +124,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
             { event: "tv_playback_progress" },
             (msg: { payload?: { isVideoFullscreen?: boolean; isPaused?: boolean } }) => {
               if (!active || !msg.payload) return;
+              setLastTvProgressAt(Date.now());
               if (typeof msg.payload.isVideoFullscreen === "boolean") {
                 setIsTvFullscreen(msg.payload.isVideoFullscreen);
               }
@@ -331,7 +335,8 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   );
   const queue = activeQueue;
   const nowPlaying = state?.nowPlaying ?? null;
-  const isPlayerConnected = Boolean(state?.player?.lastSeenAt);
+  const isPlayerConnected =
+    Boolean(state?.player?.lastSeenAt) || (lastTvProgressAt > 0 && Date.now() - lastTvProgressAt < 6000);
 
   if (loading && !state) {
     return (
@@ -460,9 +465,15 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
             <span className="material-symbols-outlined text-base text-cyan-400">desktop_windows</span>
             <span className="text-slate-300">Reproductor TV PC:</span>
             {isPlayerConnected ? (
-              <span className="text-emerald-400 font-bold">Conectado (Sync Activo)</span>
+              <span className="text-emerald-400 font-bold flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Conectado (Sync Activo)</span>
+              </span>
             ) : (
-              <span className="text-amber-400 font-bold">Esperando vinculación</span>
+              <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-amber-400" />
+                <span>Esperando vinculación</span>
+              </span>
             )}
           </div>
           <span className="text-slate-600">|</span>
@@ -473,6 +484,16 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         </div>
 
         <div className="flex items-center gap-3 text-slate-400">
+          <button
+            type="button"
+            onClick={() => setPrintQrModalOpen(true)}
+            className="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white px-3 py-1.5 rounded-lg border border-indigo-500/40 text-xs font-mono font-bold transition-all shadow-sm"
+            title="Imprimir cartel con código QR para las mesas o barra"
+          >
+            <span className="material-symbols-outlined text-sm text-cyan-400">qr_code_scanner</span>
+            <span>Imprimir QR Mesas (PDF)</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setTvManagerOpen(true)}
@@ -531,9 +552,13 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               </div>
               <div className="flex items-center gap-1.5 font-mono text-xs text-indigo-300 bg-[#0a0e17]/80 px-2.5 py-1 rounded-lg border border-[#1E2333]">
                 <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  thumb_up
+                  {nowPlaying && nowPlaying.voteCount >= 9999 ? "stars" : "thumb_up"}
                 </span>
-                <span>{nowPlaying?.voteCount ?? 0} votos</span>
+                <span>
+                  {nowPlaying && nowPlaying.voteCount >= 9999
+                    ? "Selección Bar"
+                    : `${nowPlaying?.voteCount ?? 0} votos`}
+                </span>
               </div>
             </div>
 
@@ -846,9 +871,11 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                         {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
                       </p>
                       <div className="flex items-center gap-2 mt-1 font-mono text-[10px] text-slate-400">
-                        <span className="text-indigo-400 font-semibold">{item.voteCount} votos</span>
+                        <span className="text-indigo-400 font-semibold">
+                          {item.voteCount >= 9999 ? "⭐ Selección Cabina" : `${item.voteCount} votos`}
+                        </span>
                         <span className="text-slate-600">•</span>
-                        <span>Mesa en vivo</span>
+                        <span>{item.voteCount >= 9999 ? "Puesto por Operador" : "Mesa en vivo"}</span>
                       </div>
                     </div>
                   </div>
@@ -985,6 +1012,14 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         }}
         slug={slug}
         initialCode={initialPairCode}
+      />
+
+      {/* Printable QR / Table Tent PDF Modal */}
+      <PrintQrModal
+        isOpen={printQrModalOpen}
+        onClose={() => setPrintQrModalOpen(false)}
+        slug={slug}
+        venueName={state?.venue.name}
       />
 
       {/* Manual Track Selection & Master Playback Modal */}

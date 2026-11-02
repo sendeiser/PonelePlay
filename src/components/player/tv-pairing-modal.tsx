@@ -210,8 +210,13 @@ export function TvPairingModal({
             </div>
           ) : activeTab === "code" ? (
             <div className="flex flex-col items-center text-center space-y-6">
-              <p className="text-xs text-slate-300 font-mono">
-                Ingresá este código en el panel del administrador o escaneá el QR con tu celular:
+              <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-xs font-mono text-indigo-300">
+                <span>Local / Bar:</span>
+                <span className="font-bold text-cyan-300 uppercase tracking-wide">{slug}</span>
+              </div>
+
+              <p className="text-xs text-slate-300 font-mono max-w-sm">
+                En el panel de control del bar, abrí «Pantallas TV» e ingresá este código PIN para autorizar esta pantalla:
               </p>
 
               {loading ? (

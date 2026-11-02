@@ -182,7 +182,7 @@ export function NowPlayingCard({ item, slug }: NowPlayingCardProps) {
             local_fire_department
           </span>
           <span className="font-mono text-xs text-indigo-200 font-bold">
-            {item.voteCount} {item.voteCount === 1 ? "voto" : "votos"}
+            {item.voteCount >= 9999 ? "⭐ Selección Bar" : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
           </span>
         </div>
       </div>

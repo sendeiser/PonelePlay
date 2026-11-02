@@ -52,3 +52,9 @@ export function partitionQueueAndProposals<
     candidateProposals: sortQueue(cand),
   };
 }
+
+export function formatVotesBadge(voteCount: number): string {
+  if (voteCount >= 9999) return "⭐ Selección Bar";
+  if (voteCount === 0) return "En reproducción";
+  return `${voteCount} ${voteCount === 1 ? "voto" : "votos"}`;
+}

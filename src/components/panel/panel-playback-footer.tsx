@@ -919,7 +919,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
                             </p>
                             <span className="inline-flex items-center gap-1 font-mono text-[10px] text-indigo-400 font-semibold mt-1">
                               <Flame className="size-3 text-amber-400" />
-                              {item.voteCount} votos
+                              {item.voteCount >= 9999 ? "⭐ Selección Bar" : `${item.voteCount} votos`}
                             </span>
                           </div>
                         </div>
