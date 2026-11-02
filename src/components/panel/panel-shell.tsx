@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type PanelRole, panelNavFor } from "@/lib/domain/permissions";
@@ -24,12 +25,46 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
   const pathname = usePathname();
   const nav = panelNavFor(role, slug);
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("poneleplay.panel.sidebarCollapsed");
+      if (saved !== null) {
+        setIsSidebarCollapsed(saved === "true");
+      }
+    }
+  }, []);
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("poneleplay.panel.sidebarCollapsed", String(next));
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#0f131c] text-[#dfe2ef] flex flex-col">
       {/* ==================== TOP NAVIGATION BAR ==================== */}
       <header className="bg-[#0f131c]/95 backdrop-blur-md border-b border-[#1E2333] flex justify-between items-center w-full px-3.5 sm:px-6 h-16 sticky top-0 z-50 shadow-md pt-[env(safe-area-inset-top,0px)]">
-        {/* Brand Info */}
+        {/* Brand Info & Sidebar Toggle */}
         <div className="flex items-center gap-3">
+          {/* Desktop Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="hidden md:flex size-8 rounded-lg bg-[#181b25] hover:bg-[#202534] border border-[#283250] text-slate-300 hover:text-white items-center justify-center transition-all active:scale-95"
+            title={isSidebarCollapsed ? "Expandir menú lateral" : "Contraer menú lateral"}
+            aria-label={isSidebarCollapsed ? "Expandir menú lateral" : "Contraer menú lateral"}
+          >
+            <span className="material-symbols-outlined text-lg">
+              {isSidebarCollapsed ? "menu_open" : "menu"}
+            </span>
+          </button>
+
           <div className="flex items-center gap-2.5">
             <span className="size-8 rounded-lg bg-indigo-600 border border-indigo-400/30 flex items-center justify-center text-white shadow-md shrink-0">
               <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
@@ -114,26 +149,55 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       {/* Main Container with Sidebar */}
       <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden min-h-0">
         {/* ==================== DESKTOP SIDE NAVIGATION BAR ==================== */}
-        <aside className="hidden md:flex w-64 bg-[#0a0e17] border-r border-[#1E2333] flex-col justify-between p-4 z-40 shadow-xl shrink-0">
+        <aside
+          className={`hidden md:flex ${
+            isSidebarCollapsed ? "w-20" : "w-64"
+          } bg-[#0a0e17] border-r border-[#1E2333] flex-col justify-between p-3 sm:p-4 z-40 shadow-xl shrink-0 transition-all duration-300`}
+        >
           <div className="flex flex-col gap-4">
             {/* Side Header Branding */}
-            <div className="px-2 py-1 flex items-center justify-between border-b border-[#1E2333] pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="size-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 shadow-sm shrink-0 flex items-center justify-center">
+            <div
+              className={`px-1 py-1 flex items-center ${
+                isSidebarCollapsed ? "justify-center" : "justify-between"
+              } border-b border-[#1E2333] pb-3`}
+            >
+              {!isSidebarCollapsed ? (
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 shadow-sm shrink-0 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-cyan-400 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      play_arrow
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold text-white text-sm tracking-tight leading-none">
+                      Ponele<span className="text-cyan-400 font-bold">Play</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mt-0.5">
+                      Control Central
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="size-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 shadow-sm shrink-0 flex items-center justify-center"
+                  title="PonelePlay Control Central"
+                >
                   <span className="material-symbols-outlined text-cyan-400 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
                     play_arrow
                   </span>
                 </div>
-                <div className="flex flex-col">
-                  <span className="font-bold text-white text-sm tracking-tight leading-none">
-                    Ponele<span className="text-cyan-400 font-bold">Play</span>
-                  </span>
-                  <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mt-0.5">
-                    Control Central
-                  </span>
-                </div>
-              </div>
-              <span className="material-symbols-outlined text-slate-500 text-sm">tune</span>
+              )}
+
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className={`text-slate-500 hover:text-white transition-colors ${
+                  isSidebarCollapsed ? "hidden" : "block"
+                }`}
+                title="Contraer menú lateral"
+              >
+                <span className="material-symbols-outlined text-sm">tune</span>
+              </button>
             </div>
 
             {/* Navigation Links */}
@@ -147,7 +211,10 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                     key={item.href}
                     href={item.href}
                     prefetch={true}
-                    className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 font-medium transition-all text-xs font-mono border ${
+                    title={item.label}
+                    className={`flex items-center ${
+                      isSidebarCollapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3.5 py-2.5"
+                    } rounded-lg font-medium transition-all text-xs font-mono border ${
                       isActive
                         ? "bg-indigo-600/20 text-white font-semibold border-indigo-500/40 shadow-sm"
                         : "text-slate-400 hover:bg-[#181b25] hover:text-white border-transparent"
@@ -161,7 +228,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                     >
                       {icon}
                     </span>
-                    <span>{item.label}</span>
+                    {!isSidebarCollapsed && <span>{item.label}</span>}
                   </Link>
                 );
               })}
@@ -172,36 +239,46 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
               <Link
                 href={`/player/${slug}`}
                 target="_blank"
-                className="w-full flex items-center justify-center gap-2 bg-[#131722] hover:bg-[#1a2030] text-indigo-300 hover:text-white px-3 py-2.5 rounded-lg font-mono text-xs transition-colors border border-indigo-500/25 shadow-sm"
+                title="Modo Kiosco TV"
+                className={`w-full flex items-center ${
+                  isSidebarCollapsed ? "justify-center px-0 py-2.5" : "justify-center gap-2 px-3 py-2.5"
+                } bg-[#131722] hover:bg-[#1a2030] text-indigo-300 hover:text-white rounded-lg font-mono text-xs transition-colors border border-indigo-500/25 shadow-sm`}
               >
                 <span className="material-symbols-outlined text-base">tv</span>
-                <span>Modo Kiosco TV</span>
+                {!isSidebarCollapsed && <span>Modo Kiosco TV</span>}
               </Link>
             </div>
           </div>
 
           {/* Bottom Staff / Logout */}
           <div className="pt-4 border-t border-[#1E2333] flex flex-col gap-2">
-            <div className="flex items-center gap-2.5 px-2 py-1">
-              <div className="size-8 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold font-mono text-xs">
+            <div
+              className={`flex items-center ${
+                isSidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"
+              } py-1`}
+              title={role === "owner" ? "Administrador" : "Personal de Barra"}
+            >
+              <div className="size-8 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold font-mono text-xs shrink-0">
                 {role === "owner" ? "OP" : "ST"}
               </div>
-              <div className="flex flex-col min-w-0">
-                <span className="text-xs font-bold text-white truncate">
-                  {role === "owner" ? "Administrador" : "Personal de Barra"}
-                </span>
-                <span className="text-[10px] font-mono text-slate-500 uppercase">
-                  {slug}
-                </span>
-              </div>
+              {!isSidebarCollapsed && (
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-white truncate">
+                    {role === "owner" ? "Administrador" : "Personal de Barra"}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500 uppercase">
+                    {slug}
+                  </span>
+                </div>
+              )}
             </div>
 
-            <LogoutButton />
+            <LogoutButton isCollapsed={isSidebarCollapsed} />
           </div>
         </aside>
 
-        {/* Main View Area with mobile bottom safe area */}
-        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 md:overflow-y-auto bg-[#0a0e17]/60 pb-56 md:pb-28">
+        {/* Main View Area with comfortable bottom padding above fixed playback footer */}
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 md:overflow-y-auto bg-[#0a0e17]/60 pb-56 md:pb-36">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>
@@ -209,7 +286,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       </div>
 
       {/* Sticky Bottom Master Remote Playback Control Footer */}
-      <PanelPlaybackFooter slug={slug} />
+      <PanelPlaybackFooter slug={slug} isSidebarCollapsed={isSidebarCollapsed} />
 
       {/* ==================== MOBILE DEDICATED BOTTOM NAVIGATION BAR ==================== */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0c101c]/95 backdrop-blur-md border-t border-[#1E2333] flex items-center justify-around px-1 min-h-[64px] pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">

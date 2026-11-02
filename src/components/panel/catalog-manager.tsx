@@ -112,7 +112,7 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
   const totalMinutes = tracks.reduce((acc, t) => acc + (t.durationSeconds ?? 0), 0) / 60;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-36 md:pb-48">
       {/* SECTION HEADER & METRIC TILES */}
       <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-4 border-b border-[#1E2333]">
         <div>

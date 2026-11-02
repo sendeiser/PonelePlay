@@ -79,17 +79,25 @@ export async function confirmTvPairingCode(
 
   // Broadcast to TV in realtime
   try {
-    const channel = supabase.channel(`playback-control:${slug}`);
-    void channel.send({
-      type: "broadcast",
-      event: "tv_paired",
-      payload: {
-        code,
-        token: res.token,
-        deviceId: res.deviceId,
-        name: res.name,
-      },
-    });
+    const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
+    const existing = channels.find(
+      (c: { topic?: string }) =>
+        c.topic === `playback-control:${slug}` ||
+        c.topic === `realtime:playback-control:${slug}`,
+    );
+    const channel = existing ?? supabase.channel(`playback-control:${slug}`);
+    if (channel && typeof channel.send === "function") {
+      void channel.send({
+        type: "broadcast",
+        event: "tv_paired",
+        payload: {
+          code,
+          token: res.token,
+          deviceId: res.deviceId,
+          name: res.name,
+        },
+      });
+    }
   } catch {
     // Non-blocking fallback
   }

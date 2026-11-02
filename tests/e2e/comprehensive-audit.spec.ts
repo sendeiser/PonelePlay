@@ -89,11 +89,12 @@ test.describe("Comprehensive UI/UX, Overflow & Accessibility Audit", () => {
     await loginDemoIfAuth(page);
 
     await page.goto("/panel/billar-aurora", { waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(1000);
+    await page.waitForURL("**/panel/billar-aurora**", { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(1500);
 
     // Look for playback footer
     const footer = page.locator("footer").first();
-    await expect(footer).toBeVisible();
+    await expect(footer).toBeVisible({ timeout: 10000 });
 
     // Click track info button or queue pill
     const openBtn = page.locator('footer button[title*="cola" i]').first();

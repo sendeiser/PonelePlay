@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Maximize2, Minimize2, Music2, Volume2, X, KeyRound } from "lucide-react";
+import { Maximize2, Minimize2, Music2, Volume2, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import {
@@ -16,6 +16,7 @@ import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
 import { TvPairingModal } from "@/components/player/tv-pairing-modal";
+import { TvStandbyScreen } from "@/components/player/tv-standby-screen";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 
@@ -148,28 +149,37 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => clearInterval(timer);
   }, [engine]);
 
+  const [checkedStorage, setCheckedStorage] = useState(false);
+
   // Check token from search params or localStorage
   useEffect(() => {
     const fromParam = searchParams.get("token");
     if (fromParam) {
       setToken(fromParam);
       localStorage.setItem(`poneleplay.player.${slug}`, fromParam);
+      setCheckedStorage(true);
       return;
     }
 
     const saved = localStorage.getItem(`poneleplay.player.${slug}`);
     if (saved) {
       setToken(saved);
-    } else {
-      const t = setTimeout(() => {
-        setPairModalOpen(true);
-      }, 1200);
-      return () => clearTimeout(t);
     }
+    setCheckedStorage(true);
   }, [searchParams, slug]);
+
+  const handleUnpair = useCallback(() => {
+    if (window.confirm("¿Deseás desvincular esta pantalla TV del salón?")) {
+      setToken(null);
+      localStorage.removeItem(`poneleplay.player.${slug}`);
+      engine.pause?.();
+      setIsPlaying(false);
+    }
+  }, [slug, engine]);
 
   // Fetch venue fallback tracks directly from Supabase & listen for playlist updates
   useEffect(() => {
+    if (!token) return;
     let active = true;
 
     async function fetchVenueTracks() {
@@ -240,7 +250,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         });
       }
     };
-  }, [slug]);
+  }, [slug, token]);
 
   // Live clock
   useEffect(() => {
@@ -448,6 +458,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   // Unified track list (live night queue -> runtime queue -> venue fallback -> demo)
   const allTracks: PlayerTrack[] = useMemo(() => {
+    if (!token) return [];
     if (liveNightQueue.length > 0) {
       if (
         liveNightNowPlaying &&
@@ -496,15 +507,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         voteCount: item.votes,
       })),
     ];
-  }, [liveNightQueue, liveNightNowPlaying, playerState, liveFallbackTracks]);
+  }, [token, liveNightQueue, liveNightNowPlaying, playerState, liveFallbackTracks]);
 
   // Now playing: prioritizing manualNowPlaying -> liveNightNowPlaying -> playerState.nowPlaying -> allTracks[0]
   const nowPlaying: PlayerTrack | null = useMemo(() => {
+    if (!token) return null;
     if (manualNowPlaying) return manualNowPlaying;
     if (liveNightNowPlaying) return liveNightNowPlaying;
     if (playerState?.nowPlaying) return playerState.nowPlaying;
     return allTracks[0] ?? null;
-  }, [manualNowPlaying, liveNightNowPlaying, playerState, allTracks]);
+  }, [token, manualNowPlaying, liveNightNowPlaying, playerState, allTracks]);
 
   // Rotated queue: tracks coming after nowPlaying so every Skip genuinely advances to the next track
   const queue: PlayerTrack[] = useMemo(() => {
@@ -521,10 +533,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   // Load new track into the single YouTube iframe whenever nowPlaying changes
   useEffect(() => {
-    if (nowPlaying && mounted) {
+    if (token && nowPlaying && mounted) {
       void engine.load(nowPlaying);
     }
-  }, [nowPlaying, mounted, engine]);
+  }, [token, nowPlaying, mounted, engine]);
 
   const venueName =
     nightState?.venue.name ||
@@ -916,6 +928,24 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     };
   }, [slug, engine]);
 
+  // TV Standby Guard: NO audio, NO video until paired!
+  if (mounted && checkedStorage && !token) {
+    return (
+      <TvStandbyScreen
+        slug={slug}
+        venueName={venueName}
+        clock={clock}
+        isFullscreen={isFullscreen}
+        toggleFullscreen={toggleFullscreen}
+        onPaired={(pairedToken) => {
+          setToken(pairedToken);
+          localStorage.setItem(`poneleplay.player.${slug}`, pairedToken);
+          setPairModalOpen(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div
       className={
@@ -993,20 +1023,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               </button>
             )}
 
-            {/* Pairing Status */}
-            <button
-              type="button"
-              onClick={() => setPairModalOpen(true)}
-              className={
-                token
-                  ? "flex items-center gap-1.5 bg-emerald-950/60 hover:bg-emerald-900/60 px-2.5 py-1 rounded-md border border-emerald-500/40 text-[11px] font-mono text-emerald-300 font-bold transition-all"
-                  : "flex items-center gap-1.5 bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:brightness-125 px-2.5 py-1 rounded-md border border-amber-400/60 text-[11px] font-mono text-amber-300 font-bold animate-pulse shadow-md transition-all"
-              }
-              title={token ? "Pantalla vinculada con el salón" : "Vincular pantalla con código PIN"}
-            >
-              <KeyRound className={`size-3 ${token ? "text-emerald-400" : "text-amber-400"}`} />
-              <span>{token ? "TV Vinculada" : "📺 Vincular TV (Código)"}</span>
-            </button>
+            {/* Pairing Status & Disconnect Button */}
+            <div className="flex items-center gap-1.5 bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-500/40 text-[11px] font-mono text-emerald-300 font-bold">
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>TV Salón Conectada</span>
+              <button
+                type="button"
+                onClick={handleUnpair}
+                className="ml-1 text-[10px] text-slate-400 hover:text-rose-400 underline font-normal transition-colors"
+                title="Desvincular esta pantalla"
+              >
+                (Desvincular)
+              </button>
+            </div>
 
             {/* Clock */}
             <div className="flex items-center gap-1 bg-[#0d1017] px-2 py-0.5 rounded-md border border-[#1e2333] font-mono text-[11px] text-white font-bold tracking-wider">

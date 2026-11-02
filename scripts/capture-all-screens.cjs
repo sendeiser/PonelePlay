@@ -46,38 +46,17 @@ async function run() {
   await checkOverflow(mPage, 'Client Vivo Mobile');
   await mPage.screenshot({ path: path.join(outputDir, '02_client_vivo_mobile.png'), fullPage: false });
 
-  // Client Proponer tab
-  const propBtn = mPage.locator('button:has-text("Proponer")').first();
-  if (await propBtn.isVisible()) {
-    await propBtn.click({ force: true });
-    await mPage.waitForTimeout(400);
-    await checkOverflow(mPage, 'Client Proponer Mobile');
-    await mPage.screenshot({ path: path.join(outputDir, '03_client_proponer_mobile.png'), fullPage: false });
-  }
-
-  // Client Canjear tab
-  const canjBtn = mPage.locator('button:has-text("Canjear")').first();
-  if (await canjBtn.isVisible()) {
-    await canjBtn.click({ force: true });
-    await mPage.waitForTimeout(400);
-    await checkOverflow(mPage, 'Client Canjear Mobile');
-    await mPage.screenshot({ path: path.join(outputDir, '04_client_canjear_mobile.png'), fullPage: false });
-  }
-
-  // Client Mi Mesa tab
-  const mesaBtn = mPage.locator('button:has-text("Mi Mesa")').first();
-  if (await mesaBtn.isVisible()) {
-    await mesaBtn.click({ force: true });
-    await mPage.waitForTimeout(400);
-    await checkOverflow(mPage, 'Client Mi Mesa Mobile');
-    await mPage.screenshot({ path: path.join(outputDir, '05_client_mesa_mobile.png'), fullPage: false });
-  }
-
-  // TV Entry Mobile
+  // TV Quick Entry Mobile
   await mPage.goto(`${baseUrl}/tv`, { waitUntil: 'domcontentloaded' });
   await mPage.waitForTimeout(500);
   await checkOverflow(mPage, 'TV Quick Mobile');
   await mPage.screenshot({ path: path.join(outputDir, '06_tv_entry_mobile.png'), fullPage: false });
+
+  // TV Player Standby Screen Mobile (Waiting for PIN pairing, 0 sound, 0 autoplay)
+  await mPage.goto(`${baseUrl}/player/billar-aurora`, { waitUntil: 'domcontentloaded' });
+  await mPage.waitForTimeout(800);
+  await checkOverflow(mPage, 'TV Standby Mobile');
+  await mPage.screenshot({ path: path.join(outputDir, '06b_player_tv_standby_mobile.png'), fullPage: false });
 
   // Login Mobile
   await mPage.goto(`${baseUrl}/login`, { waitUntil: 'domcontentloaded' });
@@ -96,7 +75,7 @@ async function run() {
   await checkOverflow(mPage, 'Panel Dashboard Mobile');
   await mPage.screenshot({ path: path.join(outputDir, '08_panel_dashboard_mobile.png'), fullPage: false });
 
-  // Open Queue Drawer on Mobile (Track button in footer)
+  // Open Queue Drawer on Mobile
   const mobileDrawerTrigger = mPage.locator('footer button[title*="cola" i]').first();
   if (await mobileDrawerTrigger.isVisible()) {
     await mobileDrawerTrigger.click({ force: true });
@@ -151,20 +130,11 @@ async function run() {
   await checkOverflow(dPage, 'Client Vivo Desktop');
   await dPage.screenshot({ path: path.join(outputDir, '14_client_vivo_desktop.png'), fullPage: false });
 
-  // Client Proponer Desktop
-  const dPropBtn = dPage.locator('button:has-text("Proponer")').first();
-  if (await dPropBtn.isVisible()) {
-    await dPropBtn.click({ force: true });
-    await dPage.waitForTimeout(400);
-    await checkOverflow(dPage, 'Client Proponer Desktop');
-    await dPage.screenshot({ path: path.join(outputDir, '15_client_proponer_desktop.png'), fullPage: false });
-  }
-
-  // TV Player Screen Desktop
+  // TV Player Standby Screen Desktop (Waiting for PIN pairing with 6-digit PIN & QR)
   await dPage.goto(`${baseUrl}/player/billar-aurora`, { waitUntil: 'domcontentloaded' });
   await dPage.waitForTimeout(1000);
-  await checkOverflow(dPage, 'Player TV Desktop');
-  await dPage.screenshot({ path: path.join(outputDir, '16_player_tv_desktop.png'), fullPage: false });
+  await checkOverflow(dPage, 'TV Standby Desktop');
+  await dPage.screenshot({ path: path.join(outputDir, '16_player_tv_standby_desktop.png'), fullPage: false });
 
   // TV Quick Entry Desktop
   await dPage.goto(`${baseUrl}/tv`, { waitUntil: 'domcontentloaded' });
@@ -185,11 +155,24 @@ async function run() {
   await dPage.waitForURL('**/panel/**', { timeout: 10000 }).catch(() => {});
   await dPage.waitForTimeout(1000);
 
-  // Panel Dashboard Desktop
-  await checkOverflow(dPage, 'Panel Dashboard Desktop');
-  await dPage.screenshot({ path: path.join(outputDir, '19_panel_dashboard_desktop.png'), fullPage: false });
+  // Panel Dashboard Desktop (Expanded Sidebar)
+  await checkOverflow(dPage, 'Panel Dashboard Desktop Expanded');
+  await dPage.screenshot({ path: path.join(outputDir, '19_panel_dashboard_desktop_expanded.png'), fullPage: false });
 
-  // Click track or Cola button to open drawer on Desktop
+  // Toggle Collapse Sidebar on Desktop
+  const toggleBtn = dPage.locator('header button[title*="menú lateral" i]').first();
+  if (await toggleBtn.isVisible()) {
+    await toggleBtn.click();
+    await dPage.waitForTimeout(400);
+    await checkOverflow(dPage, 'Panel Dashboard Desktop Collapsed');
+    await dPage.screenshot({ path: path.join(outputDir, '19b_panel_dashboard_desktop_collapsed.png'), fullPage: false });
+
+    // Restore expanded sidebar
+    await toggleBtn.click();
+    await dPage.waitForTimeout(300);
+  }
+
+  // Click track to open drawer on Desktop
   const desktopDrawerTrigger = dPage.locator('footer button[title*="cola" i]').first();
   if (await desktopDrawerTrigger.isVisible()) {
     await desktopDrawerTrigger.click({ force: true });
@@ -211,11 +194,25 @@ async function run() {
   await checkOverflow(dPage, 'Panel Códigos Desktop');
   await dPage.screenshot({ path: path.join(outputDir, '21_panel_codigos_desktop.png'), fullPage: false });
 
-  // Panel Catálogo Desktop
+  // Panel Catálogo Desktop (Collapsible Playlists & Unobstructed Bottom)
   await dPage.goto(`${baseUrl}/panel/billar-aurora/catalogo`, { waitUntil: 'domcontentloaded' });
-  await dPage.waitForTimeout(600);
-  await checkOverflow(dPage, 'Panel Catálogo Desktop');
+  await dPage.waitForTimeout(800);
+  await checkOverflow(dPage, 'Panel Catálogo Desktop Expanded');
   await dPage.screenshot({ path: path.join(outputDir, '22_panel_catalogo_desktop.png'), fullPage: false });
+
+  // Click "Contraer todas"
+  const collapseAllBtn = dPage.locator('button:has-text("Contraer todas")').first();
+  if (await collapseAllBtn.isVisible()) {
+    await collapseAllBtn.click();
+    await dPage.waitForTimeout(400);
+    await checkOverflow(dPage, 'Panel Catálogo Desktop Collapsed');
+    await dPage.screenshot({ path: path.join(outputDir, '22b_panel_catalogo_collapsed.png'), fullPage: false });
+  }
+
+  // Scroll to bottom of catalog to verify last item is completely visible and unobstructed
+  await dPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await dPage.waitForTimeout(400);
+  await dPage.screenshot({ path: path.join(outputDir, '22c_panel_catalogo_bottom_unobstructed.png'), fullPage: false });
 
   // Panel Ajustes Desktop
   await dPage.goto(`${baseUrl}/panel/billar-aurora/ajustes`, { waitUntil: 'domcontentloaded' });

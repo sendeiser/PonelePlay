@@ -54,10 +54,29 @@ export function PlaylistManager({
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Selected / Expanded playlist
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Expanded playlists map (supports multi-toggle & collapse all)
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
+  const [hasInitializedExpanded, setHasInitializedExpanded] = useState(false);
   const [playlistTracks, setPlaylistTracks] = useState<Record<string, TrackRow[]>>({});
   const [loadingTracks, setLoadingTracks] = useState<string | null>(null);
+
+  const toggleExpand = (id: string) => {
+    setExpandedMap((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const collapseAll = () => setExpandedMap({});
+  const expandAll = () => {
+    const next: Record<string, boolean> = {};
+    playlists.forEach((p) => {
+      next[p.id] = true;
+    });
+    setExpandedMap(next);
+  };
+
+  const anyExpanded = Object.values(expandedMap).some(Boolean);
 
   // New Playlist Modal
   const [newModalOpen, setNewModalOpen] = useState(false);
@@ -75,8 +94,9 @@ export function PlaylistManager({
     try {
       const data = await fetchPlaylists(venueId);
       setPlaylists(data);
-      if (data.length > 0 && !expandedId) {
-        setExpandedId(data[0].id);
+      if (data.length > 0 && !hasInitializedExpanded) {
+        setHasInitializedExpanded(true);
+        setExpandedMap({ [data[0].id]: true });
       }
     } catch (err: unknown) {
       setError(
@@ -85,7 +105,7 @@ export function PlaylistManager({
     } finally {
       setLoading(false);
     }
-  }, [venueId, expandedId]);
+  }, [venueId, hasInitializedExpanded]);
 
   useEffect(() => {
     void loadPlaylists();
@@ -104,10 +124,12 @@ export function PlaylistManager({
   }, []);
 
   useEffect(() => {
-    if (expandedId && !playlistTracks[expandedId]) {
-      void loadTracks(expandedId);
-    }
-  }, [expandedId, playlistTracks, loadTracks]);
+    Object.keys(expandedMap).forEach((id) => {
+      if (expandedMap[id] && !playlistTracks[id]) {
+        void loadTracks(id);
+      }
+    });
+  }, [expandedMap, playlistTracks, loadTracks]);
 
   async function handleCreatePlaylist(e: React.FormEvent) {
     e.preventDefault();
@@ -118,7 +140,7 @@ export function PlaylistManager({
     try {
       const created = await createPlaylist(venueId, newName, newDesc);
       setPlaylists((prev) => [...prev, created]);
-      setExpandedId(created.id);
+      setExpandedMap((prev) => ({ ...prev, [created.id]: true }));
       setNewModalOpen(false);
       setNewName("");
       setNewDesc("");
@@ -139,7 +161,7 @@ export function PlaylistManager({
     try {
       await deletePlaylist(plId);
       setPlaylists((prev) => prev.filter((p) => p.id !== plId));
-      if (expandedId === plId) setExpandedId(null);
+      setExpandedMap((prev) => { const n = { ...prev }; delete n[plId]; return n; });
       setFeedback(`Playlist eliminada.`);
       setTimeout(() => setFeedback(null), 3000);
     } catch (err: unknown) {
@@ -258,7 +280,8 @@ export function PlaylistManager({
           <button
             type="button"
             onClick={() => {
-              setSearchTargetPlaylistId(expandedId || playlists[0]?.id || null);
+              const firstOpen = Object.keys(expandedMap).find((id) => expandedMap[id]);
+              setSearchTargetPlaylistId(firstOpen || playlists[0]?.id || null);
               setYtModalOpen(true);
             }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-mono text-xs font-bold shadow-md shadow-red-600/30 transition-all active:scale-95"
@@ -316,9 +339,35 @@ export function PlaylistManager({
           </button>
         </div>
       ) : (
+        <div className="space-y-4">
+          {/* Accordion Controls Bar */}
+          <div className="flex items-center justify-between pb-1 text-xs font-mono">
+          <span className="text-slate-400">
+            {playlists.length} {playlists.length === 1 ? "playlist creada" : "playlists creadas"}
+          </span>
+          <button
+            type="button"
+            onClick={anyExpanded ? collapseAll : expandAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#181d2c] hover:bg-[#222a3e] border border-[#232b42] text-slate-300 hover:text-white font-mono text-xs font-semibold transition-all active:scale-95 shadow-sm"
+            title={anyExpanded ? "Contraer todas las listas" : "Desplegar todas las listas"}
+          >
+            {anyExpanded ? (
+              <>
+                <ChevronDown className="size-3.5 text-indigo-400" />
+                <span>Contraer todas</span>
+              </>
+            ) : (
+              <>
+                <ChevronRight className="size-3.5 text-indigo-400" />
+                <span>Desplegar todas</span>
+              </>
+            )}
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 gap-4">
           {playlists.map((pl) => {
-            const isExpanded = expandedId === pl.id;
+            const isExpanded = Boolean(expandedMap[pl.id]);
             const tracks = playlistTracks[pl.id] || [];
             const isLoadingThis = loadingTracks === pl.id;
 
@@ -333,11 +382,11 @@ export function PlaylistManager({
               >
                 {/* Playlist Header Row */}
                 <div className="p-4 flex flex-wrap items-center justify-between gap-4">
-                  <div
-                    onClick={() => {
-                      setExpandedId(isExpanded ? null : pl.id);
-                    }}
-                    className="flex items-center gap-3 cursor-pointer select-none min-w-0 flex-1"
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(pl.id)}
+                    className="flex items-center gap-3 cursor-pointer select-none min-w-0 flex-1 text-left group"
+                    title={isExpanded ? "Contraer lista" : "Desplegar lista"}
                   >
                     <div className="size-10 rounded-xl bg-[#1c2234] border border-[#283250] flex items-center justify-center text-indigo-400 shrink-0">
                       <ListMusic className="size-5" />
@@ -363,12 +412,15 @@ export function PlaylistManager({
                       </p>
                     </div>
 
-                    {isExpanded ? (
-                      <ChevronDown className="size-4 text-slate-400" />
-                    ) : (
-                      <ChevronRight className="size-4 text-slate-400" />
-                    )}
-                  </div>
+                    <div className="px-2.5 py-1 rounded-lg bg-[#181d2c] border border-[#232b42] text-xs font-mono text-slate-300 flex items-center gap-1.5 shrink-0 group-hover:border-indigo-500/40 transition-colors">
+                      <span>{isExpanded ? "Contraer" : "Ver temas"}</span>
+                      {isExpanded ? (
+                        <ChevronDown className="size-3.5 text-indigo-400" />
+                      ) : (
+                        <ChevronRight className="size-3.5 text-indigo-400" />
+                      )}
+                    </div>
+                  </button>
 
                   {/* Actions for this playlist */}
                   <div className="flex flex-wrap items-center gap-2">
@@ -543,6 +595,7 @@ export function PlaylistManager({
               </div>
             );
           })}
+        </div>
         </div>
       )}
 
