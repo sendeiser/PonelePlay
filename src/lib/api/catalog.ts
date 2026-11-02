@@ -267,25 +267,45 @@ export async function reorderFallback(
 
 
 export async function deleteTrack(trackId: string): Promise<void> {
+  // 1. Try server API route first (which has admin service role privileges)
+  try {
+    const res = await fetch("/api/panel/tracks/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trackId }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok) return;
+    }
+  } catch {
+    // Fall back to direct supabase client if fetch is unavailable
+  }
+
+  // 2. Fallback: Try RPC or browser cascade delete
   const supabase = createBrowserSupabase();
   const { data, error } = await supabase.rpc("owner_delete_track" as never, {
     p_track_id: trackId,
   } as never);
 
-  if (error) {
-    // Direct table delete fallback
-    const { error: directErr } = await supabase
-      .from("tracks")
-      .delete()
-      .eq("id", trackId);
-    if (directErr) {
-      throw new Error(directErr.message);
-    }
-    return;
+  if (!error) {
+    const res = data as { ok?: boolean; error?: string };
+    if (res && res.ok !== false) return;
   }
 
-  const res = data as { ok?: boolean; error?: string };
-  if (res && res.ok === false) {
-    throw new Error(res.error || "Error al eliminar la canción");
+  // 3. Fallback: Direct table cascade delete
+  await supabase.from("queue_items").delete().eq("track_id", trackId);
+  await supabase.from("fallback_tracks").delete().eq("track_id", trackId);
+  await supabase.from("playlist_tracks").delete().eq("track_id", trackId);
+  await supabase.from("votes").delete().eq("track_id", trackId);
+
+  const { error: directErr } = await supabase
+    .from("tracks")
+    .delete()
+    .eq("id", trackId);
+
+  if (directErr) {
+    throw new Error(directErr.message);
   }
 }

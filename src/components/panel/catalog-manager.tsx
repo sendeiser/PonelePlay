@@ -351,15 +351,26 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
                         </span>
                       </div>
                     </div>
-                    {t.status === "active" && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {t.status === "active" && (
+                        <button
+                          type="button"
+                          onClick={() => void handleArchive(t.id)}
+                          className="px-2 py-1 rounded-lg bg-[#181b25] border border-[#232b42] text-slate-400 hover:text-slate-200 text-xs"
+                          title="Archivar canción"
+                        >
+                          Archivar
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => void handleArchive(t.id)}
-                        className="px-2.5 py-1.5 rounded-lg bg-[#181b25] border border-[#232b42] text-slate-400 active:text-red-400 text-xs shrink-0"
+                        onClick={() => setDeletingTrack(t)}
+                        className="p-1.5 rounded-lg bg-red-950/30 hover:bg-red-950/60 text-red-400 border border-red-500/30 text-xs flex items-center justify-center transition-colors active:scale-95"
+                        title="Eliminar canción del catálogo"
                       >
-                        Archivar
+                        <span className="material-symbols-outlined text-base">delete</span>
                       </button>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -404,15 +415,27 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right">
-                          {t.status === "active" && (
+                          <div className="flex items-center justify-end gap-2">
+                            {t.status === "active" && (
+                              <button
+                                type="button"
+                                onClick={() => void handleArchive(t.id)}
+                                className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-400 hover:text-slate-200 text-[11px] transition-colors"
+                                title="Archivar canción"
+                              >
+                                Archivar
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => void handleArchive(t.id)}
-                              className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-400 hover:text-red-400 text-[11px] transition-colors"
+                              onClick={() => setDeletingTrack(t)}
+                              className="px-2.5 py-1 rounded-md bg-red-950/30 hover:bg-red-900/50 text-red-400 hover:text-red-300 border border-red-500/30 text-[11px] font-mono font-semibold transition-all flex items-center gap-1 active:scale-95"
+                              title="Eliminar definitivamente del catálogo"
                             >
-                              Archivar
+                              <span className="material-symbols-outlined text-sm">delete</span>
+                              <span>Eliminar</span>
                             </button>
-                          )}
+                          </div>
                         </td>
                       </tr>
                     ))}
