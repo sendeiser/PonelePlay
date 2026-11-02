@@ -391,7 +391,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 md:pb-36">
       {/* ==================== TOP OPERATIONAL STATUS BAR ==================== */}
       <section className="card-panel rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 overflow-hidden">
         {/* Session Live Meta */}

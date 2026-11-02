@@ -268,9 +268,11 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
         </aside>
 
         {/* Main View Area with comfortable bottom padding above fixed playback footer */}
-        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 md:overflow-y-auto bg-[#0a0e17]/60 pb-56 md:pb-36">
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 md:overflow-y-auto bg-[#0a0e17]/60 pb-56 md:pb-48">
           <div className="max-w-7xl mx-auto">
             {children}
+            {/* Dedicated physical bottom clearance spacer so fixed bottom playback bar NEVER covers any content or list */}
+            <div className="h-32 md:h-44 w-full shrink-0 pointer-events-none" aria-hidden="true" />
           </div>
         </main>
       </div>
