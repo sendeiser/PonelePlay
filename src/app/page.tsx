@@ -9,23 +9,23 @@ export default function HomePage() {
       <div className="absolute -bottom-32 right-10 size-[30rem] bg-[radial-gradient(circle,rgba(6,182,212,0.10)_0%,transparent_70%)] rounded-full pointer-events-none" />
 
       {/* Header */}
-      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-[#1E2333] bg-[#0A0E17] z-10">
-        <div className="flex items-center gap-3">
-          <BrandMark className="size-9" />
-          <Wordmark className="text-xl" />
+      <header className="w-full px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between border-b border-[#1E2333] bg-[#0A0E17]/95 backdrop-blur-md z-10">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <BrandMark className="size-8 sm:size-9" />
+          <Wordmark className="text-lg sm:text-xl" />
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Link
             href="/login"
             prefetch={true}
-            className="px-4 py-2 rounded-xl bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono font-bold text-white transition-colors"
+            className="px-3 sm:px-4 py-2 min-h-[40px] inline-flex items-center rounded-xl bg-[#181b25] hover:bg-[#202534] border border-[#232b42] text-xs font-mono font-bold text-white transition-colors"
           >
-            Acceso Staff / Dueño
+            <span className="hidden xs:inline">Acceso </span>Staff
           </Link>
           <Link
             href="/signup"
             prefetch={true}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-xs font-mono font-bold text-white shadow-md shadow-indigo-600/30 transition-all"
+            className="px-3 sm:px-4 py-2 min-h-[40px] inline-flex items-center rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-xs font-mono font-bold text-white shadow-md shadow-indigo-600/30 transition-all"
           >
             Registrar Bar
           </Link>
@@ -33,13 +33,13 @@ export default function HomePage() {
       </header>
 
       {/* Hero Section */}
-      <section className="flex flex-col items-center justify-center text-center px-6 py-16 z-10 max-w-5xl mx-auto">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-[#c0c1ff] font-mono text-xs mb-6 shadow-[0_0_15px_rgba(99,102,241,0.25)]">
+      <section className="flex flex-col items-center justify-center text-center px-4 sm:px-6 py-12 sm:py-16 z-10 max-w-5xl mx-auto">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-[#c0c1ff] font-mono text-[11px] sm:text-xs mb-6 shadow-[0_0_15px_rgba(99,102,241,0.25)]">
           <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
           <span>JUKEBOX COLABORATIVO · DISEÑO FIELTRO Y NEÓN</span>
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.05]">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold text-white tracking-tight leading-[1.1]">
           La música del bar la elige <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">la gente</span>
         </h1>
 

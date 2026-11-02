@@ -192,7 +192,7 @@ export function RedeemTab({
             </label>
 
             {/* Monospace Segmented 8-character Box Input */}
-            <div className="grid grid-cols-8 gap-1.5 sm:gap-2 pt-1" id="voucher-input-container">
+            <div className="grid grid-cols-8 gap-1 sm:gap-2 pt-1" id="voucher-input-container">
               {chars.map((char, index) => (
                 <input
                   key={index}
@@ -205,7 +205,7 @@ export function RedeemTab({
                   onPaste={handlePaste}
                   disabled={loading}
                   aria-label={`Carácter ${index + 1}`}
-                  className="w-full h-12 text-center font-mono text-lg font-bold bg-[#0a0e17] text-white rounded-xl border border-[#283250] shadow-[0_0_12px_rgba(99,102,241,0.1)] focus:outline-none focus:border-indigo-400 focus:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all uppercase"
+                  className="w-full min-w-0 h-11 sm:h-12 px-0 text-center font-mono text-base sm:text-lg font-bold bg-[#0a0e17] text-white rounded-xl border border-[#283250] shadow-[0_0_12px_rgba(99,102,241,0.1)] focus:outline-none focus:border-indigo-400 focus:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all uppercase"
                 />
               ))}
             </div>

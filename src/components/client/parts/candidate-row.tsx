@@ -75,7 +75,7 @@ export const CandidateRow = memo(function CandidateRow({
                 : `Votar por ${title}`
             }
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all active:scale-95",
+              "flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl font-mono text-xs font-bold transition-all active:scale-95 touch-manipulation",
               item.myVote
                 ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 cursor-default"
                 : disabled
@@ -85,12 +85,12 @@ export const CandidateRow = memo(function CandidateRow({
           >
             {item.myVote ? (
               <>
-                <Check className="size-3.5" aria-hidden="true" />
+                <Check className="size-4" aria-hidden="true" />
                 <span>Votado</span>
               </>
             ) : (
               <>
-                <Plus className="size-3.5" aria-hidden="true" />
+                <Plus className="size-4" aria-hidden="true" />
                 <span>+1 Voto</span>
               </>
             )}
@@ -99,14 +99,14 @@ export const CandidateRow = memo(function CandidateRow({
       </div>
 
       {/* Vote Progress Bar towards 5 votes */}
-      <div className="mt-2.5 pt-2 border-t border-[#1C2336]/80 flex items-center justify-between gap-3 font-mono text-[11px]">
+      <div className="mt-2.5 pt-2 border-t border-[#1C2336]/80 flex items-center justify-between gap-2 sm:gap-3 font-mono text-[11px] min-w-0">
         <div className="flex items-center gap-1.5 text-amber-300 font-semibold shrink-0">
           <Sparkles className="size-3 text-amber-400" />
           <span>{votes}/{target} votos</span>
         </div>
 
         {/* Mini Progress Bar */}
-        <div className="flex-1 max-w-[140px] xs:max-w-[180px] h-1.5 rounded-full bg-[#1A2032] overflow-hidden">
+        <div className="flex-1 min-w-[60px] max-w-[140px] xs:max-w-[180px] h-1.5 rounded-full bg-[#1A2032] overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-amber-400 to-indigo-500 rounded-full transition-all duration-300"
             style={{ width: `${progressPct}%` }}

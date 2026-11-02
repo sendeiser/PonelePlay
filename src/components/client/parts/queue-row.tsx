@@ -86,7 +86,7 @@ export const QueueRow = memo(function QueueRow({ item, rank, onVote, disabled }:
               : `Votar por ${title}`
           }
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition-all active:scale-95",
+            "flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl font-mono text-xs font-bold transition-all active:scale-95 touch-manipulation",
             item.myVote
               ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 cursor-default"
               : disabled
@@ -96,12 +96,12 @@ export const QueueRow = memo(function QueueRow({ item, rank, onVote, disabled }:
         >
           {item.myVote ? (
             <>
-              <Check className="size-3.5" aria-hidden="true" />
+              <Check className="size-4" aria-hidden="true" />
               <span>Votado</span>
             </>
           ) : (
             <>
-              <Plus className="size-3.5" aria-hidden="true" />
+              <Plus className="size-4" aria-hidden="true" />
               <span>+1 Voto</span>
             </>
           )}

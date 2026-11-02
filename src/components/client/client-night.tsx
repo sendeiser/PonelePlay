@@ -5,9 +5,11 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   BadgeCheck,
   Disc3,
+  Download,
   Info,
 } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/brand";
+import { usePwa } from "@/components/pwa-provider";
 import { ensureAnonymousParticipant } from "@/lib/api/anon";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { deriveNightPhase } from "@/lib/api/contracts";
@@ -40,6 +42,7 @@ const navigationTabs = [
 const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
 
 export function ClientNight({ slug }: { slug: string }) {
+  const { isInstallable, isInstalled, promptInstall } = usePwa();
   const source = useMemo(() => createNightStateSource(slug), [slug]);
   const { state, loading, offline, refresh } = useNightState(source);
 
@@ -167,17 +170,17 @@ export function ClientNight({ slug }: { slug: string }) {
       {offline ? <OfflineBanner /> : null}
 
       {/* Container Mobile Shell Frame */}
-      <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-[#1E2538]/50 relative pb-28">
+      <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-[#1E2538]/50 relative pb-32">
         {/* TOP APP BAR */}
-        <header className="bg-[#0D1220] border-b border-[#1E2538] sticky top-0 z-40">
-          <div className="flex justify-between items-center w-full px-4 py-2.5 max-w-md mx-auto">
+        <header className="bg-[#0D1220]/95 backdrop-blur-md border-b border-[#1E2538] sticky top-0 z-40 pt-[env(safe-area-inset-top,0px)]">
+          <div className="flex justify-between items-center w-full px-3.5 py-2.5 max-w-md mx-auto">
             {/* Brand & Venue Identity */}
-            <div className="flex items-center gap-2">
-              <BrandMark className="size-8" />
-              <div>
+            <div className="flex items-center gap-2 min-w-0">
+              <BrandMark className="size-8 shrink-0" />
+              <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <Wordmark className="text-base" />
-                  <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/15 text-[#c0c1ff] border border-indigo-500/25">
+                  <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/15 text-[#c0c1ff] border border-indigo-500/25 shrink-0">
                     Live
                   </span>
                 </div>
@@ -187,12 +190,20 @@ export function ClientNight({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {/* Live Badges: Sala Activa & Credits Balance */}
-            <div className="flex items-center gap-2">
-              <div className="hidden sm:flex items-center gap-1 bg-[#181b25] px-2 py-0.5 rounded-full border border-[#232b42]">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="font-mono text-[10px] text-cyan-300">Sala Activa</span>
-              </div>
+            {/* Live Badges: Install App & Credits Balance */}
+            <div className="flex items-center gap-2 shrink-0">
+              {isInstallable && !isInstalled && (
+                <button
+                  type="button"
+                  onClick={() => void promptInstall()}
+                  aria-label="Instalar app en tu pantalla de inicio"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-mono text-[11px] font-bold active:scale-95 transition-all shadow-sm"
+                  title="Instalar PonelePlay en tu celular"
+                >
+                  <Download className="size-3 text-indigo-400" />
+                  <span className="hidden xs:inline">Instalar</span>
+                </button>
+              )}
 
               {/* Credits Pill */}
               <button
@@ -463,8 +474,8 @@ export function ClientNight({ slug }: { slug: string }) {
         </main>
 
         {/* BOTTOM NAVIGATION BAR */}
-        <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220] border-t border-[#1E2538] shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
-          <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1.5">
+        <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220]/95 backdrop-blur-md border-t border-[#1E2538] shadow-[0_-4px_20px_rgba(0,0,0,0.5)] pb-[env(safe-area-inset-bottom,0px)]">
+          <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1">
             {navigationTabs.map(({ id, label, icon }) => {
               const active = tab === id;
               return (
@@ -474,7 +485,7 @@ export function ClientNight({ slug }: { slug: string }) {
                   onClick={() => setTab(id)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex flex-col items-center justify-center py-1.5 transition-all duration-150 active:scale-95",
+                    "flex flex-col items-center justify-center min-h-[52px] py-1 transition-all duration-150 active:scale-95 touch-manipulation",
                     active
                       ? "text-indigo-400 font-bold"
                       : "text-slate-400 hover:text-white",

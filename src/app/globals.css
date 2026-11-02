@@ -64,11 +64,43 @@
   color-scheme: dark;
 }
 
+html {
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
-  background-color: #0f131c;
+  background-color: #090D16;
   color: #dfe2ef;
   font-family: var(--font-sans);
   min-height: 100dvh;
+  min-height: 100vh;
+  overflow-x: hidden;
+  width: 100%;
+  overscroll-behavior-y: none;
+}
+
+/* Mobile Touch & Safe Area Utilities */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 ::selection {

@@ -113,7 +113,7 @@ function LoginForm() {
           {/* Back link */}
           <Link
             href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white uppercase mb-4 transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white uppercase mb-4 py-2 px-1 transition-colors min-h-[44px]"
           >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
             <span>Volver a PonelePlay</span>
@@ -294,7 +294,7 @@ function LoginForm() {
 
           <p className="text-center text-xs text-slate-500 font-mono">
             ¿No registraste tu bar todavía?{" "}
-            <Link href="/signup" className="text-indigo-400 hover:underline font-semibold">
+            <Link href="/signup" className="text-indigo-400 hover:underline font-semibold inline-block py-2 px-1">
               Crear cuenta de bar
             </Link>
           </p>
