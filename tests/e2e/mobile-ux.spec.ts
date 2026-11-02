@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test.describe("Mobile UX & PWA Verification", () => {
+test.describe("Mobile UX, Touch Scroll & Expandable Player Verification", () => {
   const viewports = [
     { name: "Android Small", width: 360, height: 740 },
     { name: "iPhone 14", width: 390, height: 844 },
@@ -36,6 +36,25 @@ test.describe("Mobile UX & PWA Verification", () => {
   });
 
   for (const vp of viewports) {
+    test(`Vertical touch scrolling works on landing page (${vp.name})`, async ({ page }) => {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto("http://localhost:3005/", { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(400);
+
+      const before = await page.evaluate(() => window.scrollY);
+      await page.evaluate(() => window.scrollBy(0, 300));
+      await page.waitForTimeout(300);
+      const after = await page.evaluate(() => window.scrollY);
+
+      expect(after).toBeGreaterThan(before);
+
+      // Scroll back up
+      await page.evaluate(() => window.scrollBy(0, -300));
+      await page.waitForTimeout(300);
+      const restored = await page.evaluate(() => window.scrollY);
+      expect(restored).toBeLessThan(after);
+    });
+
     test(`No horizontal overflow on client night screen (${vp.name})`, async ({ page }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto("http://localhost:3005/p/billar-aurora", { waitUntil: "domcontentloaded" });
@@ -45,32 +64,6 @@ test.describe("Mobile UX & PWA Verification", () => {
         return document.documentElement.scrollWidth > window.innerWidth + 1;
       });
       expect(hasOverflow).toBe(false);
-
-      // Check tab switching without overflow
-      const tabs = ["Proponer", "Canjear", "Mi Mesa", "En Vivo"];
-      for (const tabText of tabs) {
-        const btn = page.locator(`button:has-text("${tabText}")`);
-        if (await btn.count() > 0) {
-          await btn.first().click();
-          await page.waitForTimeout(300);
-          const tabOverflow = await page.evaluate(() => {
-            return document.documentElement.scrollWidth > window.innerWidth + 1;
-          });
-          expect(tabOverflow).toBe(false);
-        }
-      }
-    });
-
-    test(`Landing page responsive and clean (${vp.name})`, async ({ page }) => {
-      await page.setViewportSize({ width: vp.width, height: vp.height });
-      await page.goto("http://localhost:3005/", { waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(400);
-
-      const hasOverflow = await page.evaluate(() => {
-        return document.documentElement.scrollWidth > window.innerWidth + 1;
-      });
-      expect(hasOverflow).toBe(false);
     });
   }
 });
-

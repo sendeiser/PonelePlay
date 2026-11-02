@@ -47,8 +47,7 @@ export const viewport: Viewport = {
   colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
   viewportFit: "cover",
 };
 
@@ -76,7 +75,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap"
         />
       </head>
-      <body className="min-h-dvh bg-[#090D16] text-[#dfe2ef] font-sans antialiased selection:bg-[#8083ff] selection:text-[#0a0e17] overflow-x-hidden">
+      <body className="min-h-dvh bg-[#090D16] text-[#dfe2ef] font-sans antialiased selection:bg-[#8083ff] selection:text-[#0a0e17]">
         <PwaProvider>{children}</PwaProvider>
       </body>
     </html>

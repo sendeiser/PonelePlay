@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -16,7 +16,22 @@ import {
   Tv,
   Volume2,
   VolumeX,
+  ArrowUp,
+  ChevronUp,
+  Flame,
+  ListMusic,
+  PlayCircle,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
 } from "lucide-react";
+import { createNightStateSource } from "@/lib/api/night-state";
+import { useNightState } from "@/hooks/use-night-state";
+import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import { vetoItem } from "@/lib/api/panel-actions";
+import { castVote } from "@/lib/api/votes";
+import type { QueueItemView } from "@/lib/api/contracts";
 import type { PlayerTrack } from "@/lib/api/player";
 import {
   fetchPlaybackState,
@@ -56,6 +71,71 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [tvManagerOpen, setTvManagerOpen] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  // Expandable Queue & Remote Deck Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<"queue" | "candidates">("queue");
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+
+  const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
+  const { state: nightState, refresh: refreshNightState } = useNightState(nightSource);
+
+  const { activeQueue, candidateProposals } = useMemo(() => {
+    return partitionQueueAndProposals(nightState?.queue ?? [], nightState?.candidates ?? []);
+  }, [nightState?.queue, nightState?.candidates]);
+
+  // Drawer Actions: Play now, Veto, Boost vote
+  const handlePlayQueueItemNow = async (item: QueueItemView) => {
+    setPendingActionId(item.id);
+    try {
+      await sendPlaybackCommand(slug, "play_now", {
+        track: {
+          itemId: item.id,
+          trackId: item.trackId,
+          title: item.title,
+          artist: item.artist,
+          youtubeVideoId: item.youtubeVideoId,
+          thumbnailUrl: item.thumbnailUrl,
+          durationSeconds: item.durationSeconds,
+          source: item.source || "catalog",
+          voteCount: item.voteCount,
+        },
+      });
+      showToast(`Poniendo en TV: "${item.title}"`);
+      await refreshNightState();
+      await loadState();
+    } catch {
+      showToast("Error al reproducir en TV");
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  const handleVetoQueueItem = async (item: QueueItemView) => {
+    setPendingActionId(item.id);
+    try {
+      await vetoItem(item.id);
+      showToast(`Tema quitado de la cola: "${item.title}"`);
+      await refreshNightState();
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : "Error al quitar tema");
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  const handleBoostQueueItem = async (item: QueueItemView) => {
+    setPendingActionId(item.id);
+    try {
+      await castVote(item.id);
+      showToast(`+1 voto sumado para "${item.title}"`);
+      await refreshNightState();
+    } catch {
+      showToast("Error al sumar voto");
+    } finally {
+      setPendingActionId(null);
+    }
+  };
 
   const showToast = useCallback((msg: string) => {
     setFeedbackToast(msg);
@@ -301,7 +381,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
       )}
 
       {/* Sticky Bottom Control Bar */}
-      <footer className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-[#080b14] border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none">
+      <footer className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-0 left-0 right-0 z-40 bg-[#080b14] border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none">
         {/* Scrubber line */}
         <div className="w-full flex items-center gap-2.5 px-2">
           <span className="font-mono text-[10px] text-cyan-400 font-semibold w-9 text-right">
@@ -329,8 +409,13 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
         {/* Main Controls Row */}
                 {/* ==================== MOBILE COMPACT DOCK (< md) ==================== */}
         <div className="md:hidden flex items-center justify-between gap-2 px-1 py-0.5">
-          {/* Track Info */}
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Track Info: Clickable to expand full player drawer */}
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="flex items-center gap-2 min-w-0 flex-1 text-left p-0.5 rounded-lg hover:bg-white/5 active:scale-[0.98] transition-all"
+            title="Tocá para ver y gestionar la cola de canciones"
+          >
             <div className="relative size-9 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] shrink-0 shadow-md flex items-center justify-center">
               {currentTrack?.thumbnailUrl ? (
                 <Image
@@ -354,10 +439,22 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
                 {currentTrack?.artist || "Playlist Local"}
               </p>
             </div>
-          </div>
+          </button>
 
           {/* Quick Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
+            {/* Queue Drawer Toggle Pill */}
+            <button
+              type="button"
+              onClick={() => setDrawerOpen((prev) => !prev)}
+              className="flex items-center gap-1 bg-gradient-to-r from-indigo-600/30 to-violet-600/30 hover:from-indigo-600/40 text-indigo-300 border border-indigo-500/40 px-2.5 py-1.5 rounded-xl font-mono text-[11px] font-bold active:scale-95 transition-all shrink-0 shadow-sm"
+              title="Abrir cola y gestión de temas"
+            >
+              <ListMusic className="size-3.5 text-cyan-400" />
+              <span>Cola ({activeQueue.length})</span>
+              <ChevronUp className="size-3 text-indigo-300" />
+            </button>
+
             {/* Search YouTube modal */}
             <button
               type="button"
@@ -438,6 +535,18 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
                 {currentTrack?.artist || "Billar & Bar Playlist"}
               </p>
             </div>
+
+            {/* Quick Button: Abrir Cola */}
+            <button
+              type="button"
+              onClick={() => setDrawerOpen((prev) => !prev)}
+              className="shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600/25 to-violet-600/25 hover:from-indigo-600/35 hover:to-violet-600/35 text-indigo-300 hover:text-white px-3 py-1.5 rounded-xl border border-indigo-500/40 font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+              title="Abrir la cola de reproducción y gestionar temas"
+            >
+              <ListMusic className="size-3.5 text-cyan-400" />
+              <span>Cola de Salón ({activeQueue.length})</span>
+              <ChevronUp className="size-3.5 text-indigo-400" />
+            </button>
 
             {/* Quick Button: Elegir Canción (YouTube) */}
             <button
@@ -603,6 +712,333 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
         onClose={() => setTvManagerOpen(false)}
         slug={slug}
       />
+
+      {/* ==================== EXPANDABLE QUEUE & REMOTE PLAYER DRAWER ==================== */}
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-end animate-in fade-in duration-200">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
+            onClick={() => setDrawerOpen(false)}
+          />
+
+          {/* Drawer Body Sheet */}
+          <div className="relative w-full md:max-w-xl md:h-[92vh] max-h-[85vh] bg-[#0c101c] border-t md:border-l md:border-t-0 border-[#1E2538] rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none shadow-[0_-15px_40px_rgba(0,0,0,0.9)] flex flex-col z-10 overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
+            {/* Top Drag Handle (Mobile) */}
+            <div className="pt-3 pb-1 flex justify-center md:hidden cursor-pointer" onClick={() => setDrawerOpen(false)}>
+              <div className="w-12 h-1.5 bg-slate-700/60 rounded-full" />
+            </div>
+
+            {/* Drawer Header */}
+            <div className="px-5 py-3 border-b border-[#1E2538] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="size-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/40">
+                  <ListMusic className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white tracking-tight">
+                    Control Maestro & Cola de Salón
+                  </h3>
+                  <p className="font-mono text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                    <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span>TV Conectada</span>
+                    <span className="text-slate-600">·</span>
+                    <span>{activeQueue.length} temas en cola</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(true)}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold transition-all shadow-md flex items-center gap-1.5 active:scale-95"
+                >
+                  <Plus className="size-3.5" />
+                  <span>Poner Tema</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawerOpen(false)}
+                  className="size-8 rounded-lg bg-[#181F33] text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                  aria-label="Cerrar panel de cola"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Now Playing Banner in Drawer */}
+            <div className="p-4 bg-[#101524] border-b border-[#1E2538]">
+              <div className="flex items-center gap-3">
+                <div className="size-12 rounded-xl bg-[#090D16] border border-[#232B42] shrink-0 overflow-hidden flex items-center justify-center relative shadow-md">
+                  {currentTrack?.thumbnailUrl ? (
+                    <Image
+                      src={currentTrack.thumbnailUrl}
+                      alt={currentTrack.title}
+                      width={48}
+                      height={48}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <Music2 className="size-6 text-indigo-400" />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold">
+                      Sonando Ahora
+                    </span>
+                    {karaokeMode && (
+                      <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded bg-pink-500/20 text-pink-300 font-bold">
+                        Karaoke
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-white text-sm font-bold truncate mt-0.5">
+                    {currentTrack?.title || "Sin música activa"}
+                  </h4>
+                  <p className="text-slate-400 text-xs truncate">
+                    {currentTrack?.artist || "Playlist del Bar"}
+                  </p>
+                </div>
+
+                {/* Quick Play/Pause & Skip */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => void handleTogglePlay()}
+                    className="size-10 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-lg active:scale-95"
+                    title={isPaused ? "Reanudar" : "Pausar"}
+                  >
+                    {isPaused ? <Play className="size-4 fill-white ml-0.5" /> : <Pause className="size-4 fill-white" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSkipNext()}
+                    className="size-9 rounded-xl bg-[#181F33] border border-[#232B42] flex items-center justify-center text-slate-300 hover:text-white active:scale-90"
+                    title="Saltear al siguiente"
+                  >
+                    <SkipForward className="size-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrubber inside drawer */}
+              <div className="mt-3 pt-2 border-t border-[#1C2336] flex items-center gap-2.5">
+                <span className="font-mono text-[10px] text-cyan-400 font-semibold w-8 text-right">
+                  {formatDuration(elapsed)}
+                </span>
+                <div
+                  onClick={handleScrubberClick}
+                  className="flex-1 h-2 bg-[#181b25] rounded-full overflow-hidden relative border border-white/5 cursor-pointer"
+                >
+                  <div
+                    className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 rounded-full"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <span className="font-mono text-[10px] text-slate-400 font-semibold w-8">
+                  {formatDuration(duration)}
+                </span>
+              </div>
+            </div>
+
+            {/* Drawer Tabs: Cola Activa vs Candidatos */}
+            <div className="px-5 pt-3 pb-2 flex gap-2 border-b border-[#1E2538] bg-[#0c101c]">
+              <button
+                type="button"
+                onClick={() => setDrawerTab("queue")}
+                className={`flex-1 py-2 px-3 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  drawerTab === "queue"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "bg-[#181F33] text-slate-400 hover:text-white border border-[#232B42]"
+                }`}
+              >
+                <ListMusic className="size-3.5" />
+                <span>Cola Activa ({activeQueue.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDrawerTab("candidates")}
+                className={`flex-1 py-2 px-3 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  drawerTab === "candidates"
+                    ? "bg-amber-600 text-white shadow-md shadow-amber-600/30"
+                    : "bg-[#181F33] text-slate-400 hover:text-white border border-[#232B42]"
+                }`}
+              >
+                <Sparkles className="size-3.5 text-amber-400" />
+                <span>Candidatas ({candidateProposals.length})</span>
+              </button>
+            </div>
+
+            {/* Drawer Queue Scrollable List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+              {drawerTab === "queue" && (
+                <>
+                  {activeQueue.length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-[#232B42] bg-[#101524]/60">
+                      <Music2 className="size-8 mx-auto text-slate-600 mb-2" />
+                      <p className="text-sm font-bold text-white">No hay canciones en la cola de la TV</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                        Buscá un tema en YouTube o aprobá propuestas candidatas para llenar la cola.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setManualModalOpen(true)}
+                        className="mt-3.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold shadow-md"
+                      >
+                        Buscar y Poner Canción
+                      </button>
+                    </div>
+                  ) : (
+                    activeQueue.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-xl bg-[#121626] border border-[#232B42] hover:border-[#2f3b5c] transition-all flex items-center justify-between gap-3 shadow-sm"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="size-7 rounded-lg bg-[#181F33] border border-[#283250] text-indigo-300 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                            #{index + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h5 className="text-xs font-bold text-white truncate">{item.title}</h5>
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                              {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
+                            </p>
+                            <span className="inline-flex items-center gap-1 font-mono text-[10px] text-indigo-400 font-semibold mt-1">
+                              <Flame className="size-3 text-amber-400" />
+                              {item.voteCount} votos
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Actions for this song */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Play Now */}
+                          <button
+                            type="button"
+                            onClick={() => void handlePlayQueueItemNow(item)}
+                            disabled={pendingActionId === item.id}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            title="Reproducir inmediatamente en TV"
+                          >
+                            <PlayCircle className="size-3.5" />
+                            <span className="hidden sm:inline">Poner Ya</span>
+                          </button>
+
+                          {/* Boost / +1 Voto */}
+                          <button
+                            type="button"
+                            onClick={() => void handleBoostQueueItem(item)}
+                            disabled={pendingActionId === item.id}
+                            className="size-8 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 flex items-center justify-center active:scale-95 transition-all"
+                            title="Subir de puesto (+1 voto)"
+                          >
+                            <ArrowUp className="size-3.5" />
+                          </button>
+
+                          {/* Veto */}
+                          <button
+                            type="button"
+                            onClick={() => void handleVetoQueueItem(item)}
+                            disabled={pendingActionId === item.id}
+                            className="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center active:scale-95 transition-all"
+                            title="Vetar / Quitar de la cola"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+
+              {drawerTab === "candidates" && (
+                <>
+                  {candidateProposals.length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-[#232B42] bg-[#101524]/60">
+                      <Sparkles className="size-8 mx-auto text-amber-500 mb-2" />
+                      <p className="text-sm font-bold text-white">No hay propuestas esperando votos</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                        Cuando los clientes propongan canciones desde sus mesas, aparecerán aquí hasta juntar 5 votos.
+                      </p>
+                    </div>
+                  ) : (
+                    candidateProposals.map((item, index) => (
+                      <div
+                        key={item.id}
+                        className="p-3 rounded-xl bg-[#121626] border border-[#232B42] hover:border-[#2f3b5c] transition-all flex items-center justify-between gap-3 shadow-sm"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="size-7 rounded-lg bg-[#181F33] border border-[#283250] text-amber-400 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                            #{index + 1}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h5 className="text-xs font-bold text-white truncate">{item.title}</h5>
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.artist}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="font-mono text-[10px] text-amber-300 font-bold">
+                                {item.voteCount}/{MIN_VOTES_FOR_QUEUE} votos
+                              </span>
+                              <div className="w-16 h-1.5 rounded-full bg-[#181F33] overflow-hidden">
+                                <div
+                                  className="h-full bg-amber-400 rounded-full"
+                                  style={{ width: `${Math.min(100, (item.voteCount / MIN_VOTES_FOR_QUEUE) * 100)}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions for candidate */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Play Now directly */}
+                          <button
+                            type="button"
+                            onClick={() => void handlePlayQueueItemNow(item)}
+                            disabled={pendingActionId === item.id}
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95"
+                            title="Aprobar y reproducir directamente en TV"
+                          >
+                            <PlayCircle className="size-3.5" />
+                            <span className="hidden sm:inline">Poner Ya</span>
+                          </button>
+
+                          {/* Add vote */}
+                          <button
+                            type="button"
+                            onClick={() => void handleBoostQueueItem(item)}
+                            disabled={pendingActionId === item.id}
+                            className="size-8 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 flex items-center justify-center active:scale-95"
+                            title="Sumar voto (+1)"
+                          >
+                            <ArrowUp className="size-3.5" />
+                          </button>
+
+                          {/* Veto */}
+                          <button
+                            type="button"
+                            onClick={() => void handleVetoQueueItem(item)}
+                            disabled={pendingActionId === item.id}
+                            className="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center active:scale-95"
+                            title="Rechazar propuesta"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

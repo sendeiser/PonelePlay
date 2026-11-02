@@ -112,7 +112,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       </header>
 
       {/* Main Container with Sidebar */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden min-h-0">
         {/* ==================== DESKTOP SIDE NAVIGATION BAR ==================== */}
         <aside className="hidden md:flex w-64 bg-[#0a0e17] border-r border-[#1E2333] flex-col justify-between p-4 z-40 shadow-xl shrink-0">
           <div className="flex flex-col gap-4">
@@ -203,7 +203,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
         </aside>
 
         {/* Main View Area with mobile bottom safe area */}
-        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 overflow-y-auto bg-[#0a0e17]/60 pb-44 md:pb-28">
+        <main className="flex-1 p-3.5 sm:p-6 lg:p-8 md:overflow-y-auto bg-[#0a0e17]/60 pb-56 md:pb-28">
           <div className="max-w-7xl mx-auto">
             {children}
           </div>

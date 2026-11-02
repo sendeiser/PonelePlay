@@ -65,10 +65,9 @@
 }
 
 html {
-  overflow-x: hidden;
-  width: 100%;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -76,10 +75,8 @@ body {
   color: #dfe2ef;
   font-family: var(--font-sans);
   min-height: 100dvh;
-  min-height: 100vh;
-  overflow-x: hidden;
-  width: 100%;
-  overscroll-behavior-y: none;
+  touch-action: pan-y pinch-zoom;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Mobile Touch & Safe Area Utilities */
