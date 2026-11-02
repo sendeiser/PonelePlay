@@ -390,7 +390,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
       )}
 
       {/* Sticky Bottom Control Bar */}
-      <footer className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-0 left-0 right-0 z-40 bg-[#080b14] border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none">
+      <footer className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-0 left-0 md:left-64 right-0 z-40 bg-[#080b14] border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none">
         {/* Scrubber line */}
         <div className="w-full flex items-center gap-2.5 px-2">
           <span className="font-mono text-[10px] text-cyan-400 font-semibold w-9 text-right">
@@ -512,9 +512,14 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
 
         {/* ==================== DESKTOP CONTROLS ROW (>= md) ==================== */}
         <div className="hidden md:flex w-full items-center justify-between gap-4 px-2">
-          {/* LEFT: Currently Playing Track Details & Quick Manual Track Picker */}
-          <div className="flex items-center gap-3 min-w-0 max-w-[32%]">
-            <div className="relative size-11 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] shrink-0 shadow-md flex items-center justify-center">
+          {/* LEFT: Currently Playing Track Details & Quick Manual Track Picker (Clickable to open drawer) */}
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(true)}
+            className="flex items-center gap-3 min-w-0 max-w-[32%] text-left p-1 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all cursor-pointer group"
+            title="Click para abrir la cola de reproducción y gestionar temas"
+          >
+            <div className="relative size-11 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] group-hover:border-indigo-500/50 shrink-0 shadow-md flex items-center justify-center transition-colors">
               {currentTrack?.thumbnailUrl ? (
                 <Image
                   src={currentTrack.thumbnailUrl}
@@ -531,7 +536,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
 
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-white text-xs font-bold truncate leading-tight">
+                <span className="text-white text-xs font-bold truncate leading-tight group-hover:text-cyan-300 transition-colors">
                   {currentTrack?.title || "Sin música activa"}
                 </span>
                 {karaokeMode || currentTrack?.isKaraoke ? (
@@ -540,11 +545,13 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
                   </span>
                 ) : null}
               </div>
-              <p className="text-slate-400 text-[11px] truncate mt-0.5">
+              <p className="text-slate-400 text-[11px] truncate mt-0.5 group-hover:text-slate-300 transition-colors">
                 {currentTrack?.artist || "Billar & Bar Playlist"}
               </p>
             </div>
+          </button>
 
+          <div className="flex items-center gap-2">
             {/* Quick Button: Abrir Cola */}
             <button
               type="button"
@@ -724,7 +731,7 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
 
       {/* ==================== EXPANDABLE QUEUE & REMOTE PLAYER DRAWER ==================== */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-end animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center md:items-end animate-in fade-in duration-200">
           {/* Backdrop */}
           <div
             className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"

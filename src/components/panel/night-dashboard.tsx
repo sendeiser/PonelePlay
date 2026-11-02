@@ -483,7 +483,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-slate-400">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-400">
           <button
             type="button"
             onClick={() => setPrintQrModalOpen(true)}

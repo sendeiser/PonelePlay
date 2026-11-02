@@ -25,13 +25,13 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
   const nav = panelNavFor(role, slug);
 
   return (
-    <div className="min-h-screen bg-[#0f131c] text-[#dfe2ef] flex flex-col">
+    <div className="min-h-screen md:h-screen md:overflow-hidden bg-[#0f131c] text-[#dfe2ef] flex flex-col">
       {/* ==================== TOP NAVIGATION BAR ==================== */}
       <header className="bg-[#0f131c]/95 backdrop-blur-md border-b border-[#1E2333] flex justify-between items-center w-full px-3.5 sm:px-6 h-16 sticky top-0 z-50 shadow-md pt-[env(safe-area-inset-top,0px)]">
         {/* Brand Info */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2.5">
-            <span className="size-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md shrink-0">
+            <span className="size-8 rounded-lg bg-indigo-600 border border-indigo-400/30 flex items-center justify-center text-white shadow-md shrink-0">
               <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
                 sports_bar
               </span>
@@ -119,16 +119,14 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
             {/* Side Header Branding */}
             <div className="px-2 py-1 flex items-center justify-between border-b border-[#1E2333] pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="size-8 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-cyan-400 p-[1.5px] shadow-sm shrink-0">
-                  <div className="w-full h-full bg-[#0F172A] rounded-[10px] flex items-center justify-center">
-                    <span className="material-symbols-outlined text-indigo-400 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      play_arrow
-                    </span>
-                  </div>
+                <div className="size-8 rounded-xl bg-indigo-600/20 border border-indigo-500/40 shadow-sm shrink-0 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-cyan-400 text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    play_arrow
+                  </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="font-bold text-white text-sm tracking-tight leading-none">
-                    Ponele<span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">Play</span>
+                    Ponele<span className="text-cyan-400 font-bold">Play</span>
                   </span>
                   <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mt-0.5">
                     Control Central
@@ -149,10 +147,10 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                     key={item.href}
                     href={item.href}
                     prefetch={true}
-                    className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 font-medium transition-all text-xs font-mono ${
+                    className={`flex items-center gap-3 rounded-lg px-3.5 py-2.5 font-medium transition-all text-xs font-mono border ${
                       isActive
-                        ? "bg-indigo-600/15 text-indigo-300 font-semibold border-l-4 border-indigo-500 shadow-sm"
-                        : "text-slate-400 hover:bg-[#181b25] hover:text-white"
+                        ? "bg-indigo-600/20 text-white font-semibold border-indigo-500/40 shadow-sm"
+                        : "text-slate-400 hover:bg-[#181b25] hover:text-white border-transparent"
                     }`}
                   >
                     <span
