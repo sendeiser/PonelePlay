@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Maximize2, Minimize2, Music2, Volume2, X } from "lucide-react";
+import { Flame, HelpCircle, Maximize2, Mic, Minimize2, Music2, Volume2, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import {
@@ -91,6 +91,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [clock, setClock] = useState("23:48");
   const [qr, setQr] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState(false);
+  const [qrModalTimer, setQrModalTimer] = useState(25);
+  const [sidebarTab, setSidebarTab] = useState<"queue" | "candidates">("queue");
+  const [showHotkeysHelp, setShowHotkeysHelp] = useState(false);
+  const [liveToast, setLiveToast] = useState<{ icon: string; message: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -121,6 +125,38 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [hudMessage, setHudMessage] = useState<string | null>(null);
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
+
+  // Auto-cycle sidebar between upcoming queue and candidate proposals every 14 seconds
+  useEffect(() => {
+    const candidateCount = nightState?.candidates?.length || 0;
+    if (candidateCount === 0) {
+      setSidebarTab("queue");
+      return;
+    }
+    const timer = setInterval(() => {
+      setSidebarTab((prev) => (prev === "queue" ? "candidates" : "queue"));
+    }, 14000);
+    return () => clearInterval(timer);
+  }, [nightState?.candidates?.length]);
+
+  // Auto-close Large QR modal after 25s
+  useEffect(() => {
+    if (!qrModal) {
+      setQrModalTimer(25);
+      return;
+    }
+    const interval = setInterval(() => {
+      setQrModalTimer((prev) => {
+        if (prev <= 1) {
+          setQrModal(false);
+          return 25;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [qrModal]);
+
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const isVideoFullscreenRef = useRef(isVideoFullscreen);
@@ -409,17 +445,32 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (event.target instanceof HTMLInputElement) return;
 
       const key = event.key.toLowerCase();
-      if (key === "f") {
+      if (key === "f" || key === "enter") {
         toggleVideoFullscreen();
       }
       if (key === "v") {
         toggleVideoMode();
+        setLiveToast({ icon: "smart_display", message: videoMode ? "Vista: Vinilo" : "Vista: Video HD" });
+        setTimeout(() => setLiveToast(null), 3000);
       }
       if (key === "m") {
         setIsMuted((prev) => {
           const next = !prev;
           if (next) engine.mute?.();
           else engine.unMute?.();
+          setLiveToast({ icon: next ? "volume_off" : "volume_up", message: next ? "Audio Silenciado" : "Audio Activado" });
+          setTimeout(() => setLiveToast(null), 3000);
+          return next;
+        });
+      }
+      if (key === "h" || key === "?") {
+        setShowHotkeysHelp((prev) => !prev);
+      }
+      if (key === "k") {
+        setKaraokeMode((prev) => {
+          const next = !prev;
+          setLiveToast({ icon: "mic_external_on", message: next ? "Modo Karaoke Activado" : "Modo Normal" });
+          setTimeout(() => setLiveToast(null), 3000);
           return next;
         });
       }
@@ -449,6 +500,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         }
         setQrModal(false);
         setPairModalOpen(false);
+        setShowHotkeysHelp(false);
       }
     }
 
@@ -1037,11 +1089,29 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               </button>
             </div>
 
+            {/* Live Equalizer Visualizer */}
+            <div className="flex items-end gap-0.5 h-3.5 px-1.5 py-0.5 rounded bg-[#0d1017] border border-[#1e2333]" title="Visualizador de audio estéreo">
+              <span className={`w-0.5 rounded-full bg-cyan-400 ${isPlaying ? "animate-pulse h-full" : "h-1"}`} />
+              <span className={`w-0.5 rounded-full bg-indigo-400 ${isPlaying ? "animate-pulse delay-75 h-2.5" : "h-1.5"}`} />
+              <span className={`w-0.5 rounded-full bg-cyan-300 ${isPlaying ? "animate-pulse delay-150 h-3" : "h-1"}`} />
+              <span className={`w-0.5 rounded-full bg-indigo-300 ${isPlaying ? "animate-pulse delay-100 h-full" : "h-2"}`} />
+            </div>
+
             {/* Clock */}
             <div className="flex items-center gap-1 bg-[#0d1017] px-2 py-0.5 rounded-md border border-[#1e2333] font-mono text-[11px] text-white font-bold tracking-wider">
               <span className="material-symbols-outlined text-indigo-400 text-[13px]">schedule</span>
               <span suppressHydrationWarning>{clock}</span>
             </div>
+
+            {/* Hotkeys Remote Help Button */}
+            <button
+              type="button"
+              onClick={() => setShowHotkeysHelp((prev) => !prev)}
+              className="size-6 rounded-md bg-[#0d1017] border border-[#1e2333] flex items-center justify-center text-slate-400 hover:text-white transition-colors"
+              title="Atajos de teclado / Control remoto (H)"
+            >
+              <HelpCircle className="size-3 text-slate-400" />
+            </button>
 
             {/* Fullscreen Button */}
             <button
@@ -1072,6 +1142,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               : "col-span-7 flex flex-col justify-between rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg relative overflow-hidden min-h-0"
           }
         >
+          {/* KARAOKE LIVE BANNER OVERLAY */}
+          {!isVideoFullscreen && (karaokeMode || nowPlaying?.isKaraoke) && (
+            <div className="w-full bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white font-mono text-xs font-black tracking-widest px-3 py-1.5 rounded-lg mb-2 shadow-lg shadow-pink-600/30 flex items-center justify-between shrink-0 animate-pulse">
+              <div className="flex items-center gap-2">
+                <Mic className="size-3.5 text-yellow-300 animate-bounce" />
+                <span>MODO KARAOKE EN VIVO · ¡CANTÁ CON LA PANTALLA!</span>
+              </div>
+              <span className="text-[9px] uppercase font-bold bg-black/40 px-2 py-0.5 rounded border border-white/20">
+                Letras en Pantalla
+              </span>
+            </div>
+          )}
+
           {/* Header tag within card */}
           {!isVideoFullscreen && (
             <div className="flex items-center justify-between z-10 mb-1.5 shrink-0">
@@ -1366,64 +1449,136 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               </div>
             </div>
 
-            {/* BOTTOM SECTION: UPCOMING QUEUE WITH BILLIARD / RANK TOKENS */}
+            {/* BOTTOM SECTION: DUAL QUEUE & POPULAR PROPOSALS SWITCHER */}
             <div className="flex-1 rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg flex flex-col justify-between overflow-hidden min-h-0">
               <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+                {/* Switcher Tab Header */}
                 <div className="flex items-center justify-between pb-2 border-b border-[#232b42] shrink-0">
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-indigo-400 text-base">queue_music</span>
-                      A CONTINUACIÓN EN VIVO
-                    </h3>
-                    <p className="font-mono text-[10px] text-slate-400">
-                      Orden de reproducción en sala
-                    </p>
+                  <div className="flex items-center gap-1 p-0.5 bg-[#0a0e17] rounded-lg border border-[#1d2232]">
+                    <button
+                      type="button"
+                      onClick={() => setSidebarTab("queue")}
+                      className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-bold transition-all flex items-center gap-1 ${
+                        sidebarTab === "queue"
+                          ? "bg-indigo-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[13px]">queue_music</span>
+                      <span>En Cola ({queue.length})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setSidebarTab("candidates")}
+                      className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-bold transition-all flex items-center gap-1 ${
+                        sidebarTab === "candidates"
+                          ? "bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-sm"
+                          : "text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      <Flame className="size-3 text-amber-400" />
+                      <span>Votación en Mesas ({nightState?.candidates?.length ?? 0})</span>
+                    </button>
                   </div>
-                  <span className="font-mono text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 px-2 py-0.5 rounded-full">
-                    {queue.length} en cola
+
+                  <span className="font-mono text-[10px] text-slate-500 hidden sm:inline">
+                    Rotación auto 14s
                   </span>
                 </div>
 
-                {/* Queue Items List (3 to 4 tracks fit cleanly!) */}
-                <div className="mt-2 space-y-1.5 overflow-hidden flex-1 min-h-0">
-                  {queue.slice(0, 4).map((item, index) => (
-                    <div
-                      key={item.itemId}
-                      className="p-2 rounded-lg bg-[#10141f] border border-[#1d2232] flex items-center justify-between gap-2.5 shadow-sm hover:border-[#2a344e] transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <BallChip n={index + 1} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <h4 className="text-xs font-bold text-white truncate">
-                            {decodeHtml(item.title)}
-                          </h4>
-                          <p className="text-[11px] text-slate-400 truncate">
-                            {item.artist}
-                          </p>
+                {/* Content: TAB 1: CONFIRMED QUEUE */}
+                {sidebarTab === "queue" ? (
+                  <div className="mt-2 space-y-1.5 overflow-hidden flex-1 min-h-0 animate-in fade-in duration-200">
+                    {queue.slice(0, 4).map((item, index) => (
+                      <div
+                        key={item.itemId}
+                        className="p-2 rounded-lg bg-[#10141f] border border-[#1d2232] flex items-center justify-between gap-2.5 shadow-sm hover:border-[#2a344e] transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <BallChip n={index + 1} size="sm" />
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs font-bold text-white truncate">
+                              {decodeHtml(item.title)}
+                            </h4>
+                            <p className="text-[11px] text-slate-400 truncate">
+                              {item.artist}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                            {(item.voteCount >= 9999 || item.voteCount === 0)
+                              ? "⭐ Selección Bar"
+                              : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
+                          </span>
                         </div>
                       </div>
+                    ))}
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
-                          {(item.voteCount >= 9999 || item.voteCount === 0)
-                            ? "⭐ Selección Bar"
-                            : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
-                        </span>
+                    {queue.length === 0 && (
+                      <div className="py-6 text-center text-xs text-slate-500 font-mono">
+                        No hay canciones en cola de espera.
                       </div>
-                    </div>
-                  ))}
-
-                  {queue.length === 0 && (
-                    <div className="py-6 text-center text-xs text-slate-500 font-mono">
-                      No hay canciones en cola de espera.
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                ) : (
+                  /* Content: TAB 2: CANDIDATE PROPOSALS WAITING FOR 5 VOTES */
+                  <div className="mt-2 space-y-2 overflow-hidden flex-1 min-h-0 animate-in fade-in duration-200">
+                    {nightState?.candidates && nightState.candidates.length > 0 ? (
+                      nightState.candidates.slice(0, 4).map((cand) => {
+                        const needed = Math.max(0, 5 - cand.voteCount);
+                        const percent = Math.min(100, (cand.voteCount / 5) * 100);
+                        return (
+                          <div
+                            key={cand.id}
+                            className="p-2 rounded-lg bg-[#10141f] border border-[#252030] space-y-1.5 shadow-sm"
+                          >
+                            <div className="flex items-center justify-between gap-2 min-w-0">
+                              <div className="min-w-0 flex-1">
+                                <h4 className="text-xs font-bold text-white truncate">
+                                  {decodeHtml(cand.title)}
+                                </h4>
+                                <p className="text-[11px] text-slate-400 truncate">
+                                  {cand.artist}
+                                </p>
+                              </div>
+                              <span className="font-mono text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                                <Flame className="size-3 text-amber-400" />
+                                <span>{cand.voteCount}/5 votos</span>
+                              </span>
+                            </div>
+                            {/* Visual Vote Progress Bar */}
+                            <div className="w-full bg-[#181d2a] h-1.5 rounded-full overflow-hidden border border-[#232b42]">
+                              <div
+                                className="h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full transition-all duration-300"
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                              <span className="text-amber-400 font-semibold">
+                                {needed === 1 ? "¡Falta 1 voto para sonar en la TV!" : `Faltan ${needed} votos para sonar`}
+                              </span>
+                              <span className="text-slate-500">Mesa popular</span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-6 text-center text-xs text-slate-500 font-mono space-y-1">
+                        <Flame className="size-6 text-slate-600 mx-auto" />
+                        <p>No hay propuestas juntando votos en este momento.</p>
+                        <p className="text-[10px] text-slate-600">¡Escaneá el QR y proponé la tuya!</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 border-t border-[#232b42] flex items-center justify-between font-mono text-[10px] text-slate-400 shrink-0 mt-2">
-                <span>Modo: Prioridad por votos ponderados</span>
-                <span className="text-cyan-400 font-semibold">● En línea</span>
+                <span>{sidebarTab === "queue" ? "Modo: Prioridad por votos" : "Meta: 5 votos para ingresar a la TV"}</span>
+                <span className="text-cyan-400 font-semibold">● En vivo</span>
               </div>
             </div>
           </section>
@@ -1473,35 +1628,144 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         }}
       />
 
-      {/* QR Large Overlay Modal */}
+      {/* QR Large Overlay Modal with Step Guide & Auto-close Timer */}
       {qrModal && (
         <div
           onClick={() => setQrModal(false)}
-          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-6 cursor-pointer"
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 cursor-pointer animate-in fade-in duration-200"
         >
           <button
             type="button"
             onClick={() => setQrModal(false)}
-            className="absolute top-6 right-6 text-slate-400 hover:text-white"
+            className="absolute top-6 right-6 text-slate-400 hover:text-white p-2 rounded-xl bg-white/10"
+            aria-label="Cerrar modal"
           >
             <X className="size-8" />
           </button>
-          <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center">
-            {qr && (
-              <Image
-                src={qr}
-                alt="QR Gigante para votar"
-                width={360}
-                height={360}
-                className="w-full h-auto mx-auto"
-                unoptimized
-              />
-            )}
-            <h3 className="text-slate-900 font-bold text-lg mt-4">
-              Escaneá con tu celular
-            </h3>
-            <p className="font-mono text-xs text-slate-600 mt-1">
-              poneleplay.app/p/{slug}
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#0f1422] border border-[#232b42] p-8 sm:p-10 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-6 text-white cursor-default"
+          >
+            <div className="space-y-1">
+              <span className="font-mono text-xs text-cyan-400 font-bold uppercase tracking-wider block">
+                ROKOLA DIGITAL EN SALA
+              </span>
+              <h2 className="text-2xl font-black text-white tracking-tight">
+                Pedí tu Tema desde tu Mesa
+              </h2>
+              <p className="font-mono text-xs text-slate-400">
+                Escaneá con la cámara de tu celular y elegí la música
+              </p>
+            </div>
+
+            {/* Giant High-Contrast QR Code */}
+            <div className="p-4 bg-white rounded-2xl shadow-xl inline-block border-4 border-indigo-500/40">
+              {qr && (
+                <Image
+                  src={qr}
+                  alt="QR Gigante para votar"
+                  width={260}
+                  height={260}
+                  className="size-56 sm:size-64 object-contain mx-auto"
+                  unoptimized
+                />
+              )}
+            </div>
+
+            {/* 3 Step Micro-Guide */}
+            <div className="grid grid-cols-3 gap-2 text-left font-mono text-[10px] text-slate-300 pt-1">
+              <div className="p-2 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="font-bold text-cyan-400 block mb-0.5">1. Escaneá</span>
+                <span className="text-slate-400">con la cámara de tu teléfono.</span>
+              </div>
+              <div className="p-2 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="font-bold text-indigo-400 block mb-0.5">2. Canjeá</span>
+                <span className="text-slate-400">tu ticket del mozo para sumar votos.</span>
+              </div>
+              <div className="p-2 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="font-bold text-emerald-400 block mb-0.5">3. Votá</span>
+                <span className="text-slate-400">y tu canción sonará en esta TV.</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between font-mono text-[11px] text-slate-500 pt-2 border-t border-[#1e2333]">
+              <span>poneleplay.app/p/{slug}</span>
+              <span className="text-slate-400">Cierre automático en {qrModalTimer}s</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Dynamic Broadcast Toast */}
+      {liveToast && (
+        <div className="fixed bottom-12 left-6 z-50 bg-[#0f1424]/95 text-white font-mono text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-400/50 shadow-2xl animate-in slide-in-from-bottom duration-200 flex items-center gap-2.5 pointer-events-none">
+          <span className="material-symbols-outlined text-cyan-400 text-base">{liveToast.icon}</span>
+          <span>{liveToast.message}</span>
+        </div>
+      )}
+
+      {/* Hotkeys Remote Control Cheat-Sheet Modal */}
+      {showHotkeysHelp && (
+        <div
+          onClick={() => setShowHotkeysHelp(false)}
+          className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-6 cursor-pointer animate-in fade-in duration-150"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#0f1422] border border-[#232b42] p-6 sm:p-8 rounded-2xl shadow-2xl max-w-lg w-full text-white cursor-default space-y-5"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-[#1E2333]">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-cyan-400 text-xl">tv</span>
+                <h3 className="font-bold text-lg font-mono">Atajos de Teclado / Control Remoto TV</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHotkeysHelp(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="size-6" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Pantalla Completa:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">F / Enter</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Ver Video / Vinilo:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">V</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Agrandar QR Clientes:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">Q</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Silenciar / Sonido:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">M</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Modo Karaoke:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">K</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Pausa / Reanudar:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">Espacio</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Saltear tema:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">S / →</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Cerrar ventanas:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">ESC</kbd>
+              </div>
+            </div>
+
+            <p className="text-[11px] font-mono text-slate-400 text-center pt-2">
+              Compatible con controles remotos Smart TV y teclados USB/inalámbricos.
             </p>
           </div>
         </div>
