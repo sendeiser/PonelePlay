@@ -60,12 +60,28 @@ export const nightPlayerSchema = z
   .nullable()
   .optional();
 
+export const votingRoundSchema = z
+  .object({
+    enabled: z.boolean(),
+    durationSeconds: z.number().int().positive(),
+    roundNumber: z.number().int().positive(),
+    startedAt: z.string(),
+    remainingSeconds: z.number().int().nonnegative(),
+    topCandidateId: z.string().nullable().optional(),
+    totalCandidates: z.number().int().nonnegative().optional(),
+  })
+  .nullable()
+  .optional();
+
+export type VotingRound = z.infer<typeof votingRoundSchema>;
+
 export const nightStateSchema = z.object({
   venue: nightVenueSchema,
   night: nightSessionSchema,
   nowPlaying: queueItemViewSchema.nullable(),
   queue: z.array(queueItemViewSchema),
   candidates: z.array(queueItemViewSchema).optional().default([]),
+  votingRound: votingRoundSchema,
   me: nightMeSchema,
   settings: nightSettingsSchema,
   player: nightPlayerSchema,

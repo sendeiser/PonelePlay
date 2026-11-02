@@ -3,6 +3,7 @@ import {
   compareQueue,
   sortQueue,
   partitionQueueAndProposals,
+  selectRoundWinner,
   MIN_VOTES_FOR_QUEUE,
   PROPOSAL_COOLDOWN_SECONDS,
 } from "./queue";
@@ -89,6 +90,35 @@ describe("queue ordering", () => {
       ]);
       expect(after.activeQueue).toHaveLength(1);
       expect(after.candidateProposals).toHaveLength(0);
+    });
+  });
+
+  describe("selectRoundWinner (Rondas de Votación)", () => {
+    it("returns null when there are no candidate proposals", () => {
+      expect(selectRoundWinner([])).toBeNull();
+    });
+
+    it("selects the most voted candidate", () => {
+      const candidates = [
+        { id: "cand-1", voteCount: 2, createdAt: "2026-11-02T15:00:00Z" },
+        { id: "cand-2", voteCount: 4, createdAt: "2026-11-02T15:05:00Z" },
+        { id: "cand-3", voteCount: 1, createdAt: "2026-11-02T15:02:00Z" },
+      ];
+
+      const winner = selectRoundWinner(candidates);
+      expect(winner?.id).toBe("cand-2");
+      expect(winner?.voteCount).toBe(4);
+    });
+
+    it("breaks ties by earliest proposal time (order of arrival)", () => {
+      const candidates = [
+        { id: "second-proposed", voteCount: 3, createdAt: "2026-11-02T15:05:00Z" },
+        { id: "first-proposed", voteCount: 3, createdAt: "2026-11-02T15:01:00Z" },
+        { id: "third-proposed", voteCount: 3, createdAt: "2026-11-02T15:08:00Z" },
+      ];
+
+      const winner = selectRoundWinner(candidates);
+      expect(winner?.id).toBe("first-proposed");
     });
   });
 });

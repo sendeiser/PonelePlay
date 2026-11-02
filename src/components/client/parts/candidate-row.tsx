@@ -54,9 +54,16 @@ export const CandidateRow = memo(function CandidateRow({
           </div>
 
           <div className="min-w-0 flex-1">
-            <h4 className="text-sm text-white font-bold truncate">
-              {title}
-            </h4>
+            <div className="flex items-center gap-1.5">
+              <h4 className="text-sm text-white font-bold truncate">
+                {title}
+              </h4>
+              {rank === 1 && (
+                <span className="shrink-0 text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded">
+                  🏆 Líder
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-400 truncate mt-0.5">
               {artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
             </p>

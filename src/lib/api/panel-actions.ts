@@ -171,3 +171,38 @@ export async function vetoItem(
     throw new Error(mapModerationError(res.error));
   }
 }
+
+export interface ResolveRoundResult {
+  ok: boolean;
+  resolved: boolean;
+  promoted?: boolean;
+  promotedItem?: {
+    id: string;
+    title: string;
+    artist: string;
+    voteCount: number;
+  };
+  roundNumber?: number;
+  nextRoundNumber?: number;
+  durationSeconds?: number;
+  remainingSeconds?: number;
+  reason?: string;
+  error?: string;
+}
+
+export async function resolveVotingRound(
+  slug: string,
+  force: boolean = false,
+): Promise<ResolveRoundResult> {
+  const supabase = createBrowserSupabase();
+  const { data, error } = await supabase.rpc("resolve_voting_round" as never, {
+    p_venue_slug: slug,
+    p_force: force,
+  } as never);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data as ResolveRoundResult;
+}

@@ -99,6 +99,27 @@ export function ClientNight({ slug }: { slug: string }) {
   const stateQueue = state?.queue;
   const stateCandidates = state?.candidates;
 
+  const [clientRoundSeconds, setClientRoundSeconds] = useState<number>(180);
+  useEffect(() => {
+    if (state?.votingRound?.remainingSeconds !== undefined) {
+      setClientRoundSeconds(state.votingRound.remainingSeconds);
+    }
+  }, [state?.votingRound?.remainingSeconds]);
+
+  useEffect(() => {
+    if (!state?.votingRound?.enabled) return;
+    const interval = setInterval(() => {
+      setClientRoundSeconds((prev) => {
+        if (prev <= 1) {
+          void refresh();
+          return state?.votingRound?.durationSeconds ?? 180;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [state?.votingRound?.enabled, state?.votingRound?.durationSeconds, refresh]);
+
   // Partition queue into active playback queue and candidate proposals
   const { activeQueue, candidateProposals } = useMemo(() => {
     return partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? []);
@@ -367,7 +388,7 @@ export function ClientNight({ slug }: { slug: string }) {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400">
-                      Pedidos del público · Necesitan <strong>{MIN_VOTES_FOR_QUEUE} votos</strong> para pasar a la TV
+                      Pedidos del público · Con {MIN_VOTES_FOR_QUEUE} votos o al terminar la ronda entra la más votada
                     </p>
                   </div>
                   <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-amber-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
@@ -375,6 +396,26 @@ export function ClientNight({ slug }: { slug: string }) {
                     {candidateProposals.length} {candidateProposals.length === 1 ? "candidata" : "candidatas"}
                   </span>
                 </div>
+
+                {/* Voting Round Live Banner for Customers */}
+                {state?.votingRound?.enabled && (
+                  <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-indigo-500/15 border border-amber-500/30 flex items-center justify-between gap-3 text-xs font-mono">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="material-symbols-outlined text-amber-400 text-lg animate-pulse shrink-0">timer</span>
+                      <div className="min-w-0">
+                        <span className="font-bold text-white block truncate">
+                          Ronda #{state.votingRound?.roundNumber ?? 1} en Vivo
+                        </span>
+                        <span className="text-[10px] text-slate-300 block truncate">
+                          ¡Votá tu favorita! Al terminar, la más votada entra a sonar en la TV.
+                        </span>
+                      </div>
+                    </div>
+                    <span className="shrink-0 font-bold px-2.5 py-1 rounded-lg bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs">
+                      {Math.floor(clientRoundSeconds / 60)}:{(clientRoundSeconds % 60).toString().padStart(2, "0")}
+                    </span>
+                  </div>
+                )}
 
                 {candidateProposals.length === 0 ? (
                   <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">

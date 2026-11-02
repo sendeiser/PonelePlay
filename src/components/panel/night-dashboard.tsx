@@ -12,6 +12,7 @@ import { useNightState } from "@/hooks/use-night-state";
 import {
   closeNight,
   openNight,
+  resolveVotingRound,
   setProposalsEnabled,
   skipCurrent,
   vetoItem,
@@ -64,6 +65,48 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [printQrModalOpen, setPrintQrModalOpen] = useState(false);
   const [lastTvProgressAt, setLastTvProgressAt] = useState<number>(0);
+  const [roundSecondsLeft, setRoundSecondsLeft] = useState<number>(180);
+
+  // Sync remaining seconds from voting round
+  useEffect(() => {
+    if (state?.votingRound?.remainingSeconds !== undefined) {
+      setRoundSecondsLeft(state.votingRound.remainingSeconds);
+    }
+  }, [state?.votingRound?.remainingSeconds]);
+
+  // Local ticker for round seconds
+  useEffect(() => {
+    if (!state?.votingRound?.enabled) return;
+    const interval = setInterval(() => {
+      setRoundSecondsLeft((prev) => {
+        if (prev <= 1) {
+          void refresh();
+          return state?.votingRound?.durationSeconds ?? 180;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [state?.votingRound?.enabled, state?.votingRound?.durationSeconds, refresh]);
+
+  const handleResolveRound = async () => {
+    setActionLoading(true);
+    try {
+      const res = await resolveVotingRound(slug, true);
+      if (res.promoted && res.promotedItem) {
+        setPlayerResetMsg(`🎉 ¡Ronda resuelta! "${res.promotedItem.title}" ingresó a la cola de la TV.`);
+      } else {
+        setPlayerResetMsg("⏱️ Ronda reiniciada para el próximo ciclo.");
+      }
+      setTimeout(() => setPlayerResetMsg(null), 3500);
+      await refresh();
+    } catch {
+      setErrorMsg("Error al resolver ronda");
+      setTimeout(() => setErrorMsg(null), 3000);
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   // Sync initial playback state from backend and listen to Realtime
   useEffect(() => {
@@ -900,19 +943,44 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
           {/* ================= PROPUESTAS CANDIDATAS EN VOTACIÓN POPULAR ================= */}
           <div className="mt-6 pt-5 border-t border-[#1E2333]">
-            <div className="flex items-center justify-between pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
                   <span className="material-symbols-outlined text-amber-400 text-base">how_to_vote</span>
                   Propuestas en Votación ({MIN_VOTES_FOR_QUEUE} votos requeridos)
                 </h3>
                 <p className="font-mono text-[11px] text-slate-400">
-                  Temas propuestos por clientes · Con 5 votos entran a la cola del salón
+                  Temas propuestos por clientes · Con 5 votos entran directo a la TV, o al terminar la ronda entra la más votada
                 </p>
               </div>
-              <span className="font-mono text-xs text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
-                {candidateProposals.length} en votación
-              </span>
+
+              <div className="flex items-center gap-2">
+                {state?.votingRound?.enabled && (
+                  <span className="font-mono text-xs text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/25 flex items-center gap-1.5 shadow-sm">
+                    <span className="material-symbols-outlined text-sm text-amber-400">timer</span>
+                    <span>
+                      Ronda #{state.votingRound.roundNumber}: {formatDuration(roundSecondsLeft)}
+                    </span>
+                  </span>
+                )}
+
+                {candidateProposals.length > 0 && (
+                  <button
+                    type="button"
+                    disabled={actionLoading}
+                    onClick={handleResolveRound}
+                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 font-mono text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
+                    title="Promueve inmediatamente el tema líder a la cola sin esperar que termine el temporizador"
+                  >
+                    <span className="material-symbols-outlined text-sm">bolt</span>
+                    <span>Resolver Ronda Ahora</span>
+                  </button>
+                )}
+
+                <span className="font-mono text-xs text-slate-400 bg-[#101420] px-2.5 py-1 rounded-full border border-[#232b42]">
+                  {candidateProposals.length} en votación
+                </span>
+              </div>
             </div>
 
             {candidateProposals.length === 0 ? (
@@ -931,16 +999,23 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                         #{index + 1}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="text-sm font-bold text-white truncate">
-                          {item.title}
-                        </h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white truncate">
+                            {item.title}
+                          </h4>
+                          {index === 0 && (
+                            <span className="shrink-0 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 rounded-md">
+                              🏆 1° de la Ronda
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-slate-400 truncate mt-0.5">
                           {item.artist}
                         </p>
                         <div className="flex items-center gap-2 mt-1 font-mono text-[10px]">
                           <span className="text-amber-400 font-semibold">{item.voteCount} / {MIN_VOTES_FOR_QUEUE} votos</span>
                           <span className="text-slate-600">•</span>
-                          <span className="text-slate-400">Faltan {Math.max(0, MIN_VOTES_FOR_QUEUE - item.voteCount)} para entrar</span>
+                          <span className="text-slate-400">Faltan {Math.max(0, MIN_VOTES_FOR_QUEUE - item.voteCount)} para entrada directa</span>
                         </div>
                       </div>
                     </div>

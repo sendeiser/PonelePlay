@@ -22,6 +22,8 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
   const [maxDuration, setMaxDuration] = useState(480);
   const [maxProposals, setMaxProposals] = useState(3);
   const [maxQueue, setMaxQueue] = useState(30);
+  const [votingRoundsEnabled, setVotingRoundsEnabled] = useState(true);
+  const [votingRoundSeconds, setVotingRoundSeconds] = useState(180);
 
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [summary, setSummary] = useState<NightSummary | null>(null);
@@ -74,12 +76,16 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           max_song_duration_seconds: number;
           max_proposals_per_participant: number;
           max_queue_size: number;
+          voting_rounds_enabled?: boolean;
+          voting_round_seconds?: number;
         };
         setExplicitFilter(s.explicit_filter_enabled);
         setKeywords(s.explicit_keywords?.join(", ") || "");
         setMaxDuration(s.max_song_duration_seconds || 480);
         setMaxProposals(s.max_proposals_per_participant || 3);
         setMaxQueue(s.max_queue_size || 30);
+        setVotingRoundsEnabled(s.voting_rounds_enabled ?? true);
+        setVotingRoundSeconds(s.voting_round_seconds ?? 180);
       }
 
       const sum = await fetchNightSummary(v.id).catch(() => null);
@@ -121,6 +127,8 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           max_song_duration_seconds: maxDuration,
           max_proposals_per_participant: maxProposals,
           max_queue_size: maxQueue,
+          voting_rounds_enabled: votingRoundsEnabled,
+          voting_round_seconds: votingRoundSeconds,
         })
         .eq("venue_id", venueId);
 
@@ -384,6 +392,81 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
                 placeholder="gemidos, insultos..."
                 className="w-full bg-[#0a0e17] border border-[#232b42] rounded-xl px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-indigo-400"
               />
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 5: RONDAS DE VOTACIÓN AUTOMÁTICAS (12 Cols) */}
+        <section className="lg:col-span-12 bg-[#181b25] rounded-2xl border border-[#232b42] p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-[#232b42] pb-3">
+            <div className="flex items-center gap-2.5">
+              <span className="size-9 rounded-xl bg-[#121624] border border-[#232b42] text-amber-400 flex items-center justify-center">
+                <span className="material-symbols-outlined text-lg">timer</span>
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-white">5. Rondas de Votación (Desempate por Tiempo)</h3>
+                <p className="text-xs text-slate-400">
+                  Si las canciones propuestas no alcanzan los 5 votos durante la ronda, la más votada (o por orden de llegada) se agrega automáticamente a la TV.
+                </p>
+              </div>
+            </div>
+
+            <label className="flex items-center gap-2 cursor-pointer font-mono text-xs text-slate-300">
+              <span className={votingRoundsEnabled ? "text-emerald-400 font-bold" : "text-slate-500"}>
+                {votingRoundsEnabled ? "Rondas Activas" : "Rondas Desactivadas"}
+              </span>
+              <input
+                type="checkbox"
+                checked={votingRoundsEnabled}
+                onChange={(e) => setVotingRoundsEnabled(e.target.checked)}
+                className="size-5 rounded bg-[#0a0e17] border-[#232b42] text-amber-500 focus:ring-0 cursor-pointer"
+              />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono text-xs pt-2">
+            <div className="bg-[#121624] p-3 rounded-xl border border-[#232b42]">
+              <label className="text-slate-400 block mb-1">Duración de la Ronda</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={30}
+                  max={1800}
+                  step={10}
+                  value={votingRoundSeconds}
+                  onChange={(e) => setVotingRoundSeconds(Number(e.target.value))}
+                  className="w-full bg-[#0a0e17] border border-[#232b42] rounded-lg px-2.5 py-2 text-white font-bold"
+                />
+                <span className="text-slate-400">seg</span>
+              </div>
+              <span className="text-[10px] text-amber-400 mt-1 block">
+                {(votingRoundSeconds / 60).toFixed(1)} minutos por ronda
+              </span>
+            </div>
+
+            <div className="bg-[#121624] p-3 rounded-xl border border-[#232b42] sm:col-span-2 flex flex-col justify-between">
+              <span className="text-slate-400 block mb-1">Atajos Rápidos de Tiempo:</span>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "1 Minuto (60s)", val: 60 },
+                  { label: "2 Minutos (120s)", val: 120 },
+                  { label: "3 Minutos (180s - Recomendado)", val: 180 },
+                  { label: "5 Minutos (300s)", val: 300 },
+                ].map((preset) => (
+                  <button
+                    key={preset.val}
+                    type="button"
+                    onClick={() => setVotingRoundSeconds(preset.val)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${
+                      votingRoundSeconds === preset.val
+                        ? "bg-amber-500/20 border-amber-500/60 text-amber-300"
+                        : "bg-[#0a0e17] border-[#232b42] text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </section>

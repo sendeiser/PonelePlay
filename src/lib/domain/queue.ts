@@ -58,3 +58,13 @@ export function formatVotesBadge(voteCount: number): string {
   if (voteCount === 0) return "⭐ Selección Bar";
   return `${voteCount} ${voteCount === 1 ? "voto" : "votos"}`;
 }
+
+/**
+ * Selects the round winner among candidate proposals when time expires:
+ * Most voted candidate first; if tied, earliest proposed (created_at asc).
+ */
+export function selectRoundWinner<T extends QueueCandidate>(candidates: T[]): T | null {
+  if (!candidates || candidates.length === 0) return null;
+  const sorted = sortQueue(candidates);
+  return sorted[0] ?? null;
+}

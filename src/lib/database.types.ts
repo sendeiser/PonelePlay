@@ -28,6 +28,8 @@ export interface Database {
         max_credits_per_code: number;
         max_queue_size: number;
         proposals_enabled: boolean;
+        voting_rounds_enabled?: boolean;
+        voting_round_seconds?: number;
         updated_at: string;
       }>;
       night_sessions: TableDefinition<{
@@ -38,6 +40,8 @@ export interface Database {
         opened_by_id: string;
         opened_at: string;
         closed_at: string | null;
+        current_round_started_at?: string;
+        current_round_number?: number;
       }>;
       participants: TableDefinition<{
         id: string;

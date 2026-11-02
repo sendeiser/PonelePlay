@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Flame, HelpCircle, Maximize2, Mic, Minimize2, Music2, Volume2, X } from "lucide-react";
+import { Flame, HelpCircle, Maximize2, Mic, Minimize2, Music2, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import {
@@ -50,7 +50,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   // Continuous Night State Realtime Sync (Live Queue & Now Playing)
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
-  const { state: nightState } = useNightState(nightSource, { pollMs: 3000 });
+  const { state: nightState, refresh: refreshNightState } = useNightState(nightSource, { pollMs: 3000 });
 
   const liveNightQueue: PlayerTrack[] = useMemo(() => {
     if (nightState?.queue && nightState.queue.length > 0) {
@@ -95,6 +95,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [sidebarTab, setSidebarTab] = useState<"queue" | "candidates">("queue");
   const [showHotkeysHelp, setShowHotkeysHelp] = useState(false);
   const [liveToast, setLiveToast] = useState<{ icon: string; message: string } | null>(null);
+  const [roundSecondsLeft, setRoundSecondsLeft] = useState<number>(180);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -156,6 +157,27 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }, 1000);
     return () => clearInterval(interval);
   }, [qrModal]);
+
+  // Sync voting round countdown on TV
+  useEffect(() => {
+    if (nightState?.votingRound?.remainingSeconds !== undefined) {
+      setRoundSecondsLeft(nightState.votingRound.remainingSeconds);
+    }
+  }, [nightState?.votingRound?.remainingSeconds]);
+
+  useEffect(() => {
+    if (!nightState?.votingRound?.enabled) return;
+    const timer = setInterval(() => {
+      setRoundSecondsLeft((prev) => {
+        if (prev <= 1) {
+          void refreshNightState();
+          return nightState?.votingRound?.durationSeconds ?? 180;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [nightState?.votingRound?.enabled, nightState?.votingRound?.durationSeconds, refreshNightState]);
 
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -439,7 +461,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.removeEventListener("click", onFirstClick);
   }, [audioUnlocked, handleUnlockAudio]);
 
-  // Keyboard shortcuts
+  // TV Screen Remote Navigation (Display only - No local playback controls)
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.target instanceof HTMLInputElement) return;
@@ -453,43 +475,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setLiveToast({ icon: "smart_display", message: videoMode ? "Vista: Vinilo" : "Vista: Video HD" });
         setTimeout(() => setLiveToast(null), 3000);
       }
-      if (key === "m") {
-        setIsMuted((prev) => {
-          const next = !prev;
-          if (next) engine.mute?.();
-          else engine.unMute?.();
-          setLiveToast({ icon: next ? "volume_off" : "volume_up", message: next ? "Audio Silenciado" : "Audio Activado" });
-          setTimeout(() => setLiveToast(null), 3000);
-          return next;
-        });
-      }
       if (key === "h" || key === "?") {
         setShowHotkeysHelp((prev) => !prev);
-      }
-      if (key === "k") {
-        setKaraokeMode((prev) => {
-          const next = !prev;
-          setLiveToast({ icon: "mic_external_on", message: next ? "Modo Karaoke Activado" : "Modo Normal" });
-          setTimeout(() => setLiveToast(null), 3000);
-          return next;
-        });
-      }
-      if (key === " ") {
-        event.preventDefault();
-        setIsPlaying((prev) => {
-          const next = !prev;
-          if (next) void engine.play?.();
-          else engine.pause?.();
-          return next;
-        });
-      }
-      if (key === "arrowleft") {
-        event.preventDefault();
-        handleSeekRef.current(elapsedRef.current - 10);
-      }
-      if (key === "arrowright") {
-        event.preventDefault();
-        handleSeekRef.current(elapsedRef.current + 10);
       }
       if (key === "q") {
         setQrModal((val) => !val);
@@ -506,7 +493,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [engine, videoMode, toggleVideoFullscreen]);
+  }, [videoMode, toggleVideoFullscreen]);
 
   // Unified track list (live night queue -> runtime queue -> venue fallback -> demo)
   const allTracks: PlayerTrack[] = useMemo(() => {
@@ -668,30 +655,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     [slug, queue, allTracks, engine],
   );
 
-  const handleRestartOrPrev = useCallback(() => {
-    const candidates = queue.length > 0 ? queue : allTracks;
-    if (elapsedRef.current <= 5 && candidates.length > 0) {
-      const prevTrack = candidates[candidates.length - 1];
-      setManualNowPlaying(prevTrack);
-      setElapsed(0);
-      elapsedRef.current = 0;
-      setVideoDuration(prevTrack.durationSeconds ?? null);
-      setIsPlaying(true);
-      void engine.load(prevTrack);
-      setHudMessage(`⏮️ Anterior: ${prevTrack.title}`);
-      setTimeout(() => setHudMessage(null), 2500);
-      return;
-    }
-    if (nowPlaying) {
-      setElapsed(0);
-      elapsedRef.current = 0;
-      engine.seekTo?.(0);
-      void engine.play();
-      setHudMessage(`⏮️ Reiniciando: ${nowPlaying.title}`);
-      setTimeout(() => setHudMessage(null), 2500);
-    }
-  }, [nowPlaying, queue, allTracks, engine]);
-
   // Auto-advance exactly once when the video ends
   const handleSkipNextRef = useRef(handleSkipNext);
   useEffect(() => {
@@ -706,22 +669,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     [engine],
   );
 
-  // Keyboard shortcuts for Skip (S) and Restart/Prev (R)
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.key.toLowerCase() === "s") {
-        void handleSkipNext(false);
-      } else if (e.key.toLowerCase() === "r") {
-        handleRestartOrPrev();
-      }
-    }
-
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [handleSkipNext, handleRestartOrPrev]);
 
   // Master Remote Control synchronization (Single persistent Realtime channel + progress broadcast)
   useEffect(() => {
@@ -1061,20 +1008,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             )}
           </div>
 
-          {/* Right utilities: Audio Unlock (if needed), Pair status, Clock, Fullscreen */}
+          {/* Right utilities: Pair status, Clock, Fullscreen */}
           <div className="flex items-center gap-2">
-            {/* Audio Unlock Button if needed */}
-            {!audioUnlocked && (
-              <button
-                type="button"
-                onClick={handleUnlockAudio}
-                className="animate-pulse bg-cyan-400 text-black px-2 py-0.5 rounded-md font-mono text-[10px] font-bold shadow-sm flex items-center gap-1 hover:opacity-90 transition-opacity"
-              >
-                <Volume2 className="size-3" />
-                <span>Activar Sonido TV</span>
-              </button>
-            )}
-
             {/* Pairing Status & Disconnect Button */}
             <div className="flex items-center gap-1.5 bg-emerald-950/60 px-2.5 py-1 rounded-md border border-emerald-500/40 text-[11px] font-mono text-emerald-300 font-bold">
               <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -1251,20 +1186,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   title="Pantalla completa del video (F)"
                 >
                   <Maximize2 className="size-3.5 text-cyan-400" />
-                </button>
-              )}
-
-              {/* Click to unmute overlay */}
-              {!audioUnlocked && videoMode && (
-                <button
-                  type="button"
-                  onClick={handleUnlockAudio}
-                  className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/70 cursor-pointer group-hover:bg-black/60 transition-colors"
-                >
-                  <div className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-500 text-white font-mono text-xs font-bold shadow-2xl flex items-center gap-2 animate-pulse">
-                    <Volume2 className="size-4" />
-                    <span>CLIC PARA ACTIVAR AUDIO DEL SALÓN</span>
-                  </div>
                 </button>
               )}
             </div>
@@ -1526,8 +1447,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 ) : (
                   /* Content: TAB 2: CANDIDATE PROPOSALS WAITING FOR 5 VOTES */
                   <div className="mt-2 space-y-2 overflow-hidden flex-1 min-h-0 animate-in fade-in duration-200">
+                    {/* Voting Round Live Banner on TV */}
+                    {nightState?.votingRound?.enabled && (
+                      <div className="p-2 rounded-lg bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-indigo-500/15 border border-amber-500/30 flex items-center justify-between font-mono text-[11px] shrink-0 mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="material-symbols-outlined text-amber-400 text-sm animate-pulse">timer</span>
+                          <span className="font-bold text-white shrink-0">Ronda #{nightState.votingRound.roundNumber}</span>
+                          <span className="text-slate-400 text-[10px] truncate">· La + votada entra a TV</span>
+                        </div>
+                        <span className="font-bold px-2 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 text-[11px] shrink-0">
+                          {formatDuration(roundSecondsLeft)}
+                        </span>
+                      </div>
+                    )}
+
                     {nightState?.candidates && nightState.candidates.length > 0 ? (
-                      nightState.candidates.slice(0, 4).map((cand) => {
+                      nightState.candidates.slice(0, 4).map((cand, index) => {
                         const needed = Math.max(0, 5 - cand.voteCount);
                         const percent = Math.min(100, (cand.voteCount / 5) * 100);
                         return (
@@ -1537,9 +1472,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                           >
                             <div className="flex items-center justify-between gap-2 min-w-0">
                               <div className="min-w-0 flex-1">
-                                <h4 className="text-xs font-bold text-white truncate">
-                                  {decodeHtml(cand.title)}
-                                </h4>
+                                <div className="flex items-center gap-1.5">
+                                  <h4 className="text-xs font-bold text-white truncate">
+                                    {decodeHtml(cand.title)}
+                                  </h4>
+                                  {index === 0 && (
+                                    <span className="shrink-0 text-[9px] font-mono font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded">
+                                      🏆 Líder Ronda
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-slate-400 truncate">
                                   {cand.artist}
                                 </p>
@@ -1577,7 +1519,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               </div>
 
               <div className="pt-2 border-t border-[#232b42] flex items-center justify-between font-mono text-[10px] text-slate-400 shrink-0 mt-2">
-                <span>{sidebarTab === "queue" ? "Modo: Prioridad por votos" : "Meta: 5 votos para ingresar a la TV"}</span>
+                <span>
+                  {sidebarTab === "queue"
+                    ? "Modo: Prioridad por votos ponderados"
+                    : nightState?.votingRound?.enabled
+                      ? `Ronda activa: ${formatDuration(roundSecondsLeft)} restantes`
+                      : "Meta: 5 votos para ingresar"}
+                </span>
                 <span className="text-cyan-400 font-semibold">● En vivo</span>
               </div>
             </div>
@@ -1743,29 +1691,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">Q</kbd>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
-                <span className="text-slate-300">Silenciar / Sonido:</span>
-                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">M</kbd>
+                <span className="text-slate-300">Ajustes Android TV:</span>
+                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">Menú / Back</kbd>
               </div>
               <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
-                <span className="text-slate-300">Modo Karaoke:</span>
-                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">K</kbd>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
-                <span className="text-slate-300">Pausa / Reanudar:</span>
-                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">Espacio</kbd>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
-                <span className="text-slate-300">Saltear tema:</span>
-                <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">S / →</kbd>
-              </div>
-              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
-                <span className="text-slate-300">Cerrar ventanas:</span>
+                <span className="text-slate-300">Cerrar Ventanas:</span>
                 <kbd className="px-2 py-0.5 rounded bg-[#1f2638] text-cyan-300 font-bold border border-[#2f3954]">ESC</kbd>
+              </div>
+              <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#141824] border border-[#232b42]">
+                <span className="text-slate-300">Control de Música:</span>
+                <span className="text-cyan-400 font-bold text-[11px]">Exclusivo Panel Admin</span>
               </div>
             </div>
 
             <p className="text-[11px] font-mono text-slate-400 text-center pt-2">
-              Compatible con controles remotos Smart TV y teclados USB/inalámbricos.
+              Esta pantalla es una cartelera visual. La reproducción y volumen se controlan exclusivamente desde el Panel Admin.
             </p>
           </div>
         </div>
