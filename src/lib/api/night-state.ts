@@ -21,8 +21,13 @@ export function createNightStateSource(slug: string): NightStateSource {
     fetch: () => fetchNightState(slug),
     subscribe: (onChange: () => void) => {
       const supabase = createBrowserSupabase();
+      const instanceId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2, 9);
+
       const channel = supabase
-        .channel(`night-state:${slug}`)
+        .channel(`night-state:${slug}:${instanceId}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "queue_items" },
@@ -46,4 +51,3 @@ export function createNightStateSource(slug: string): NightStateSource {
     },
   };
 }
-

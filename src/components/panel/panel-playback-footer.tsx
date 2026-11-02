@@ -169,6 +169,15 @@ export function PanelPlaybackFooter({ slug }: PanelPlaybackFooterProps) {
       if (!active) return;
       const supabase = createBrowserSupabase();
 
+      const existing = supabase.getChannels().find(
+        (c) =>
+          c.topic === `realtime:playback-control:${slug}` ||
+          c.topic === `playback-control:${slug}`,
+      );
+      if (existing) {
+        void supabase.removeChannel(existing);
+      }
+
       channel = supabase
         .channel(`playback-control:${slug}`)
         .on(

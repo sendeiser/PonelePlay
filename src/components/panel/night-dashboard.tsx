@@ -84,6 +84,15 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
       try {
         const supabase = createBrowserSupabase();
+        const existing = supabase.getChannels().find(
+          (c) =>
+            c.topic === `realtime:dashboard-playback:${slug}` ||
+            c.topic === `dashboard-playback:${slug}`,
+        );
+        if (existing) {
+          void supabase.removeChannel(existing);
+        }
+
         channel = supabase
           .channel(`dashboard-playback:${slug}`)
           .on(

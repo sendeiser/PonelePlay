@@ -46,6 +46,7 @@ vi.mock("@/lib/api/supabase/browser", () => ({
     return {
       channel: () => channelMock,
       removeChannel: vi.fn(),
+      getChannels: () => [],
     };
   },
 }));
