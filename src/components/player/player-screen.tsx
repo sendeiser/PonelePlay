@@ -53,7 +53,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   const liveNightQueue: PlayerTrack[] = useMemo(() => {
     if (nightState?.queue && nightState.queue.length > 0) {
-      return nightState.queue.map((item) => ({
+      return nightState.queue
+        .filter((item) => item.status === "queued" || item.voteCount >= 5)
+        .map((item) => ({
         itemId: item.id,
         trackId: item.trackId,
         title: item.title,
@@ -545,24 +547,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   useEffect(() => {
     handleSeekRef.current = handleSeek;
   }, [handleSeek]);
-
-  const handleSeekDelta = useCallback(
-    (deltaSec: number) => {
-      handleSeek(elapsedRef.current + deltaSec);
-    },
-    [handleSeek],
-  );
-
-  const handleSeekClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const pct = Math.max(0, Math.min(1, clickX / rect.width));
-      const targetSec = Math.floor(pct * (durationRef.current || 210));
-      handleSeek(targetSec);
-    },
-    [handleSeek],
-  );
 
   // Reset counters when new track is loaded
   useEffect(() => {
@@ -1395,7 +1379,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <span className="text-slate-600">·</span>
               <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
               <span className="text-slate-600">·</span>
-              <span>Cada consumición suma créditos para votar</span>
+              <span>Canciones con 5 votos entran a la cola de la TV</span>
+              <span className="text-slate-600">·</span>
+              <span>Cada consumición suma créditos para votar y subir temas</span>
               <span className="text-slate-600">·</span>
               <span className="text-slate-300 font-semibold">PonelePlay TV Jukebox</span>
             </span>
@@ -1404,7 +1390,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <span className="text-slate-600">·</span>
               <span>Pedí tus temas favoritos escaneando el código QR en la mesa</span>
               <span className="text-slate-600">·</span>
-              <span>Cada consumición suma créditos para votar</span>
+              <span>Canciones con 5 votos entran a la cola de la TV</span>
+              <span className="text-slate-600">·</span>
+              <span>Cada consumición suma créditos para votar y subir temas</span>
               <span className="text-slate-600">·</span>
               <span className="text-slate-300 font-semibold">PonelePlay TV Jukebox</span>
             </span>

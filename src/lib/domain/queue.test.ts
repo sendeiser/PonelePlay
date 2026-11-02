@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { compareQueue, sortQueue } from "./queue";
+import {
+  compareQueue,
+  sortQueue,
+  partitionQueueAndProposals,
+  MIN_VOTES_FOR_QUEUE,
+  PROPOSAL_COOLDOWN_SECONDS,
+} from "./queue";
 
 describe("queue ordering", () => {
   it("orders by votes desc, then oldest proposal first", () => {
@@ -49,5 +55,40 @@ describe("queue ordering", () => {
     ];
 
     expect(sortQueue(items).map((item) => item.id)).toEqual(["a", "b"]);
+  });
+
+  describe("partitionQueueAndProposals", () => {
+    it("partitions items below 5 votes into candidate proposals and 5+ votes into active queue", () => {
+      const items = [
+        { id: "song-1", voteCount: 5, createdAt: "2026-10-31T21:00:00Z", status: "queued" },
+        { id: "song-2", voteCount: 2, createdAt: "2026-10-31T21:05:00Z", status: "proposed" },
+        { id: "song-3", voteCount: 8, createdAt: "2026-10-31T21:02:00Z", status: "queued" },
+        { id: "song-4", voteCount: 4, createdAt: "2026-10-31T21:10:00Z", status: "queued" },
+      ];
+
+      const { activeQueue, candidateProposals } = partitionQueueAndProposals(items);
+
+      expect(activeQueue.map((s) => s.id)).toEqual(["song-3", "song-1"]);
+      expect(candidateProposals.map((s) => s.id)).toEqual(["song-4", "song-2"]);
+      expect(MIN_VOTES_FOR_QUEUE).toBe(5);
+      expect(PROPOSAL_COOLDOWN_SECONDS).toBe(120);
+    });
+
+    it("graduates a song to activeQueue once it reaches 5 votes", () => {
+      const items = [
+        { id: "candidate", voteCount: 4, createdAt: "2026-10-31T21:00:00Z" },
+      ];
+
+      const before = partitionQueueAndProposals(items);
+      expect(before.activeQueue).toHaveLength(0);
+      expect(before.candidateProposals).toHaveLength(1);
+
+      // Cast 5th vote
+      const after = partitionQueueAndProposals([
+        { id: "candidate", voteCount: 5, createdAt: "2026-10-31T21:00:00Z" },
+      ]);
+      expect(after.activeQueue).toHaveLength(1);
+      expect(after.candidateProposals).toHaveLength(0);
+    });
   });
 });

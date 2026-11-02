@@ -58,8 +58,6 @@ describe("ProposalSearch component", () => {
       <ProposalSearch
         queue={[]}
         proposalsEnabled={true}
-        proposalsUsed={0}
-        maxProposals={3}
         onProposed={vi.fn()}
         onNotify={vi.fn()}
       />,
@@ -75,8 +73,6 @@ describe("ProposalSearch component", () => {
       <ProposalSearch
         queue={mockQueue}
         proposalsEnabled={true}
-        proposalsUsed={0}
-        maxProposals={3}
         onProposed={vi.fn()}
         onNotify={vi.fn()}
       />,
@@ -105,8 +101,6 @@ describe("ProposalSearch component", () => {
       <ProposalSearch
         queue={mockQueue}
         proposalsEnabled={true}
-        proposalsUsed={0}
-        maxProposals={3}
         onProposed={onProposed}
         onNotify={onNotify}
       />,
@@ -131,7 +125,7 @@ describe("ProposalSearch component", () => {
       });
       expect(onProposed).toHaveBeenCalled();
       expect(onNotify).toHaveBeenCalledWith(
-        "«Trátame Suavemente» entró a la cola.",
+        "«Trátame Suavemente» fue propuesta. Con 5 votos entra a la cola.",
         "ok",
       );
     });
@@ -142,8 +136,6 @@ describe("ProposalSearch component", () => {
       <ProposalSearch
         queue={[]}
         proposalsEnabled={false}
-        proposalsUsed={0}
-        maxProposals={3}
         onProposed={vi.fn()}
         onNotify={vi.fn()}
       />,

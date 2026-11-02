@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BallChip } from "@/components/ball-chip";
+import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import {
@@ -313,6 +314,16 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     }
   }
 
+  const stateQueue = state?.queue;
+  const stateCandidates = state?.candidates;
+  const { activeQueue, candidateProposals } = useMemo(
+    () => partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? []),
+    [stateQueue, stateCandidates],
+  );
+  const queue = activeQueue;
+  const nowPlaying = state?.nowPlaying ?? null;
+  const isPlayerConnected = Boolean(state?.player?.lastSeenAt);
+
   if (loading && !state) {
     return (
       <div className="flex h-64 items-center justify-center text-slate-400 font-mono text-xs">
@@ -321,10 +332,6 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       </div>
     );
   }
-
-  const queue = state?.queue ?? [];
-  const nowPlaying = state?.nowPlaying ?? null;
-  const isPlayerConnected = Boolean(state?.player?.lastSeenAt);
 
   return (
     <div className="space-y-6">
@@ -803,20 +810,19 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               </p>
             </div>
             <span className="font-mono text-xs text-indigo-300 bg-[#181b25] px-2.5 py-1 rounded-full border border-[#1E2333]">
-              {queue.length} temas en cola
+              {activeQueue.length} temas en cola
             </span>
           </div>
 
-          {/* Queue List */}
-          {queue.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-500 font-mono space-y-2">
-              <span className="material-symbols-outlined text-slate-600 text-3xl">playlist_remove</span>
-              <p>No hay canciones en la cola en este momento.</p>
-              <p className="text-slate-600">Cuando los clientes propongan temas, aparecerán aquí para moderar.</p>
+          {/* Active Queue List */}
+          {activeQueue.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-500 font-mono space-y-1">
+              <span className="material-symbols-outlined text-slate-600 text-2xl">playlist_remove</span>
+              <p>No hay canciones con 5+ votos en la cola en este momento.</p>
             </div>
           ) : (
-            <div className="mt-4 space-y-2.5">
-              {queue.map((item, index) => (
+            <div className="mt-3 space-y-2">
+              {activeQueue.map((item, index) => (
                 <div
                   key={item.id}
                   className="p-3 rounded-xl bg-[#131722] border border-[#1e2333] flex items-center justify-between gap-3 hover:border-[#2a344e] transition-colors"
@@ -855,6 +861,71 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               ))}
             </div>
           )}
+
+          {/* ================= PROPUESTAS CANDIDATAS EN VOTACIÓN POPULAR ================= */}
+          <div className="mt-6 pt-5 border-t border-[#1E2333]">
+            <div className="flex items-center justify-between pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                  <span className="material-symbols-outlined text-amber-400 text-base">how_to_vote</span>
+                  Propuestas en Votación ({MIN_VOTES_FOR_QUEUE} votos requeridos)
+                </h3>
+                <p className="font-mono text-[11px] text-slate-400">
+                  Temas propuestos por clientes · Con 5 votos entran a la cola del salón
+                </p>
+              </div>
+              <span className="font-mono text-xs text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                {candidateProposals.length} en votación
+              </span>
+            </div>
+
+            {candidateProposals.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-500 font-mono">
+                No hay propuestas esperando votos en este momento.
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {candidateProposals.map((item, index) => (
+                  <div
+                    key={item.id}
+                    className="p-3 rounded-xl bg-[#101420] border border-amber-500/20 flex items-center justify-between gap-3 hover:border-amber-500/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex items-center justify-center size-7 rounded-lg bg-amber-500/10 text-amber-400 font-mono text-xs font-bold shrink-0">
+                        #{index + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold text-white truncate">
+                          {item.title}
+                        </h4>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">
+                          {item.artist}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 font-mono text-[10px]">
+                          <span className="text-amber-400 font-semibold">{item.voteCount} / {MIN_VOTES_FOR_QUEUE} votos</span>
+                          <span className="text-slate-600">•</span>
+                          <span className="text-slate-400">Faltan {Math.max(0, MIN_VOTES_FOR_QUEUE - item.voteCount)} para entrar</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={() => setConfirmVetoId(item.id)}
+                        className="py-1 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-500/30 font-mono text-xs flex items-center gap-1 active:scale-95 transition-all"
+                        title="Vetar propuesta"
+                      >
+                        <span className="material-symbols-outlined text-sm">block</span>
+                        <span>Vetar</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       </div>
 

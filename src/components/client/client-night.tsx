@@ -13,10 +13,16 @@ import { createNightStateSource } from "@/lib/api/night-state";
 import { deriveNightPhase } from "@/lib/api/contracts";
 import { castVote, voteErrorMessage } from "@/lib/api/votes";
 import { useNightState } from "@/hooks/use-night-state";
+import {
+  partitionQueueAndProposals,
+  MIN_VOTES_FOR_QUEUE,
+  PROPOSAL_COOLDOWN_SECONDS,
+} from "@/lib/domain/queue";
 import { OfflineBanner } from "./parts/offline-banner";
 import { ClosedState } from "./parts/closed-state";
 import { NowPlayingCard } from "./parts/now-playing-card";
 import { QueueRow } from "./parts/queue-row";
+import { CandidateRow } from "./parts/candidate-row";
 import { ProposalSearch } from "./parts/proposal-search";
 import { RedeemTab } from "./parts/redeem-tab";
 import { ActivityTab } from "./parts/activity-tab";
@@ -31,6 +37,8 @@ const navigationTabs = [
   { id: "actividad" as const, label: "Mi Mesa", icon: "person" },
 ];
 
+const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
+
 export function ClientNight({ slug }: { slug: string }) {
   const source = useMemo(() => createNightStateSource(slug), [slug]);
   const { state, loading, offline, refresh } = useNightState(source);
@@ -41,6 +49,32 @@ export function ClientNight({ slug }: { slug: string }) {
     message: string;
     tone: "ok" | "error" | "info";
   } | null>(null);
+
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  // Load and tick 2-minute cooldown
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_PROPOSAL_KEY);
+      if (saved) {
+        const elapsed = (Date.now() - parseInt(saved, 10)) / 1000;
+        const remaining = Math.max(0, Math.ceil(PROPOSAL_COOLDOWN_SECONDS - elapsed));
+        if (remaining > 0) {
+          setCooldownSeconds(remaining);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownSeconds((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
 
   useEffect(() => {
     void ensureAnonymousParticipant(slug).catch(() => {
@@ -59,7 +93,13 @@ export function ClientNight({ slug }: { slug: string }) {
   }
 
   const credits = state?.me?.credits ?? 0;
-  const queue = state?.queue ?? [];
+  const stateQueue = state?.queue;
+  const stateCandidates = state?.candidates;
+
+  // Partition queue into active playback queue and candidate proposals
+  const { activeQueue, candidateProposals } = useMemo(() => {
+    return partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? []);
+  }, [stateQueue, stateCandidates]);
 
   async function handleVote(queueItemId: string) {
     if (credits <= 0) {
@@ -72,7 +112,7 @@ export function ClientNight({ slug }: { slug: string }) {
     try {
       const res = await castVote(queueItemId);
       if (res.ok) {
-        notify("¡Voto computado con éxito! La cola se actualizó.", "ok");
+        notify("¡Voto computado con éxito! La lista se actualizó.", "ok");
         await refresh();
       } else {
         notify(voteErrorMessage(res.error), "error");
@@ -90,6 +130,12 @@ export function ClientNight({ slug }: { slug: string }) {
       });
     }
   }
+
+  const formatRemainingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toString().padStart(2, "0");
+    return `${mins}:${secs}`;
+  };
 
   if (loading && !state) {
     return (
@@ -122,7 +168,7 @@ export function ClientNight({ slug }: { slug: string }) {
 
       {/* Container Mobile Shell Frame */}
       <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-[#1E2538]/50 relative pb-28">
-        {/* TOP APP BAR (Stitch Shared Component) */}
+        {/* TOP APP BAR */}
         <header className="bg-[#0D1220] border-b border-[#1E2538] sticky top-0 z-40">
           <div className="flex justify-between items-center w-full px-4 py-2.5 max-w-md mx-auto">
             {/* Brand & Venue Identity */}
@@ -148,20 +194,20 @@ export function ClientNight({ slug }: { slug: string }) {
                 <span className="font-mono text-[10px] text-cyan-300">Sala Activa</span>
               </div>
 
-              {/* Credits counter pill (navigates to Canjear) */}
+              {/* Credits Pill */}
               <button
                 type="button"
                 onClick={() => setTab("canjear")}
-                className="flex items-center gap-1.5 bg-[#181F33] hover:bg-[#202944] text-[#c0c1ff] px-3 py-1.5 rounded-full border border-indigo-500/30 shadow-sm active:scale-95 transition-all"
-                title="Canjear o cargar créditos"
+                aria-label={`Tenés ${credits} créditos de votación. Tocá para canjear más.`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/15 to-violet-500/15 border border-indigo-500/30 hover:border-indigo-400 active:scale-95 transition-all"
               >
-                <span className="material-symbols-outlined text-[16px] text-amber-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  confirmation_number
+                <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  token
                 </span>
                 <span className="font-mono text-xs font-bold text-white">
                   {credits}
                 </span>
-                <span className="font-mono text-[10px] text-slate-400 uppercase hidden xs:inline">
+                <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
                   {credits === 1 ? "voto" : "votos"}
                 </span>
               </button>
@@ -169,8 +215,43 @@ export function ClientNight({ slug }: { slug: string }) {
           </div>
         </header>
 
-        {/* MAIN SCROLLABLE CONTENT CANVAS */}
-        <main className="flex-1 px-4 pt-3 space-y-4">
+        {/* NOTIFICATION TOAST */}
+        <AnimatePresence>
+          {toast && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="fixed top-16 inset-x-4 max-w-md mx-auto z-50 pointer-events-none"
+            >
+              <div
+                className={cn(
+                  "rounded-xl px-4 py-3 text-xs font-mono font-medium shadow-2xl flex items-center gap-2.5 border",
+                  toast.tone === "ok" &&
+                    "bg-emerald-950/90 text-emerald-200 border-emerald-500/40",
+                  toast.tone === "error" &&
+                    "bg-rose-950/90 text-rose-200 border-rose-500/40",
+                  toast.tone === "info" &&
+                    "bg-indigo-950/90 text-indigo-200 border-indigo-500/40",
+                )}
+              >
+                {toast.tone === "ok" && (
+                  <BadgeCheck className="size-4 shrink-0 text-emerald-400" />
+                )}
+                {toast.tone === "error" && (
+                  <Info className="size-4 shrink-0 text-rose-400" />
+                )}
+                {toast.tone === "info" && (
+                  <Info className="size-4 shrink-0 text-indigo-400" />
+                )}
+                <span className="flex-1 leading-snug">{toast.message}</span>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* MAIN BODY CONTENT AREA */}
+        <main className="flex-1 p-3.5 space-y-4">
           {/* TAB 1: EN VIVO */}
           {tab === "vivo" && (
             <motion.div
@@ -196,11 +277,17 @@ export function ClientNight({ slug }: { slug: string }) {
                     </div>
                     <div>
                       <p className="text-sm text-white font-bold leading-tight">
-                        ¿Querés poner tu tema?
+                        ¿Querés proponer una canción?
                       </p>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Buscá en YouTube y sumalo con 1 crédito
-                      </p>
+                      {cooldownSeconds > 0 ? (
+                        <p className="text-xs text-amber-300 mt-0.5 font-mono flex items-center gap-1 font-semibold">
+                          <span>⏳ Podrás proponer en {formatRemainingTime(cooldownSeconds)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Proponé libremente · Con 5 votos pasa a la TV
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center justify-center size-7 rounded-full bg-[#131826] text-indigo-400 border border-[#232B42] shrink-0">
@@ -209,44 +296,96 @@ export function ClientNight({ slug }: { slug: string }) {
                 </button>
               </section>
 
-              {/* UPCOMING QUEUE SECTION */}
+              {/* ================= SECTION 1: COLA DE REPRODUCCIÓN (SALÓN) ================= */}
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
                   <div>
-                    <h3 className="text-sm text-white font-bold tracking-tight">
-                      A continuación en la cola
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm text-white font-bold tracking-tight">
+                        Cola de Reproducción
+                      </h3>
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
+                        En Salón
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-400">
-                      Ordenado por votos y antigüedad
+                      Temas listos para sonar · Votá para que suban de puesto
                     </p>
                   </div>
-                  <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-indigo-300 border border-[#1E2538] flex items-center gap-1.5">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400 animate-ping" />
-                    {queue.length} {queue.length === 1 ? "en espera" : "en espera"}
+                  <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-indigo-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    {activeQueue.length} {activeQueue.length === 1 ? "en cola" : "en cola"}
                   </span>
                 </div>
 
-                {queue.length === 0 ? (
-                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-10 text-center bg-[#131826]/40">
-                    <Disc3 className="size-10 text-slate-600 animate-spin-vinyl" aria-hidden="true" />
-                    <p className="mt-3 text-base font-bold text-white">
-                      La cola está vacía
+                {activeQueue.length === 0 ? (
+                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">
+                    <Disc3 className="size-8 text-slate-600 animate-spin-vinyl" aria-hidden="true" />
+                    <p className="mt-2 text-sm font-bold text-white">
+                      No hay canciones en la cola activa
                     </p>
                     <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
-                      Sé el primero en proponer una canción desde la mesa.
+                      Las canciones propuestas necesitan <strong>{MIN_VOTES_FOR_QUEUE} votos</strong> para entrar aquí y sonar en la TV.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {activeQueue.map((item, index) => (
+                      <QueueRow
+                        key={item.id}
+                        item={item}
+                        rank={index + 1}
+                        disabled={pendingVotes.has(item.id)}
+                        onVote={() => void handleVote(item.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* ================= SECTION 2: PROPUESTAS EN VOTACIÓN POPULAR ================= */}
+              <section className="space-y-2.5 pt-2">
+                <div className="flex items-center justify-between px-0.5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm text-white font-bold tracking-tight">
+                        Propuestas en Votación
+                      </h3>
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
+                        Pre-Cola
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      Pedidos del público · Necesitan <strong>{MIN_VOTES_FOR_QUEUE} votos</strong> para pasar a la TV
+                    </p>
+                  </div>
+                  <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-amber-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    {candidateProposals.length} {candidateProposals.length === 1 ? "candidata" : "candidatas"}
+                  </span>
+                </div>
+
+                {candidateProposals.length === 0 ? (
+                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">
+                    <span className="material-symbols-outlined text-2xl text-slate-600">how_to_vote</span>
+                    <p className="mt-2 text-sm font-bold text-white">
+                      No hay propuestas en votación
+                    </p>
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
+                      ¿Querés escuchar tu música favorita? Proponé una canción para que todos la voten.
                     </p>
                     <button
                       type="button"
                       onClick={() => setTab("proponer")}
-                      className="mt-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 font-mono text-xs font-bold text-white shadow-md shadow-indigo-600/30"
+                      className="mt-3 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2 font-mono text-xs font-bold text-white shadow-md shadow-amber-600/20"
                     >
                       Proponer canción
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
-                    {queue.map((item, index) => (
-                      <QueueRow
+                    {candidateProposals.map((item, index) => (
+                      <CandidateRow
                         key={item.id}
                         item={item}
                         rank={index + 1}
@@ -269,10 +408,9 @@ export function ClientNight({ slug }: { slug: string }) {
               transition={{ duration: 0.2 }}
             >
               <ProposalSearch
-                queue={queue}
+                queue={activeQueue}
+                candidates={candidateProposals}
                 proposalsEnabled={state.settings.proposalsEnabled}
-                proposalsUsed={state.me?.proposalsUsed ?? 0}
-                maxProposals={state.settings.maxProposalsPerParticipant}
                 onProposed={async () => {
                   await refresh();
                   setTab("vivo");
@@ -315,7 +453,7 @@ export function ClientNight({ slug }: { slug: string }) {
                 credits={credits}
                 proposalsUsed={state.me?.proposalsUsed ?? 0}
                 maxProposals={state.settings.maxProposalsPerParticipant}
-                queue={queue}
+                queue={activeQueue}
                 nowPlaying={state.nowPlaying}
                 onGoToRedeem={() => setTab("canjear")}
                 onGoToPropose={() => setTab("proponer")}
@@ -324,7 +462,7 @@ export function ClientNight({ slug }: { slug: string }) {
           )}
         </main>
 
-        {/* BOTTOM NAVIGATION BAR (Glassmorphism Dock) */}
+        {/* BOTTOM NAVIGATION BAR */}
         <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220] border-t border-[#1E2538] shadow-[0_-4px_20px_rgba(0,0,0,0.5)]">
           <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1.5">
             {navigationTabs.map(({ id, label, icon }) => {
@@ -338,17 +476,24 @@ export function ClientNight({ slug }: { slug: string }) {
                   className={cn(
                     "flex flex-col items-center justify-center py-1.5 transition-all duration-150 active:scale-95",
                     active
-                      ? "text-[#c0c1ff] font-semibold"
+                      ? "text-indigo-400 font-bold"
                       : "text-slate-400 hover:text-white",
                   )}
                 >
-                  <span
-                    className="material-symbols-outlined text-[22px]"
-                    style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                  <div
+                    className={cn(
+                      "size-8 rounded-xl flex items-center justify-center transition-all",
+                      active && "bg-indigo-600/20 text-indigo-300 shadow-sm",
+                    )}
                   >
-                    {icon}
-                  </span>
-                  <span className="font-mono text-[10px] uppercase tracking-tight mt-0.5">
+                    <span
+                      className="material-symbols-outlined text-lg"
+                      style={active ? { fontVariationSettings: "'FILL' 1" } : undefined}
+                    >
+                      {icon}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono tracking-tight mt-0.5">
                     {label}
                   </span>
                 </button>
@@ -356,35 +501,6 @@ export function ClientNight({ slug }: { slug: string }) {
             })}
           </div>
         </nav>
-      </div>
-
-      {/* Toast Notification */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex justify-center px-4">
-        <AnimatePresence>
-          {toast && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.96 }}
-              className={cn(
-                "flex max-w-sm items-center gap-2 rounded-xl border px-4 py-2.5 text-center text-xs shadow-2xl font-mono",
-                toast.tone === "ok"
-                  ? "border-emerald-500/40 bg-[#131b26] text-emerald-200"
-                  : toast.tone === "error"
-                    ? "border-rose-500/40 bg-[#1f131a] text-rose-200"
-                    : "border-indigo-500/40 bg-[#181b29] text-[#c0c1ff]",
-              )}
-              role="status"
-            >
-              {toast.tone === "ok" ? (
-                <BadgeCheck className="size-4 shrink-0 text-emerald-400" aria-hidden="true" />
-              ) : (
-                <Info className="size-4 shrink-0 text-rose-400" aria-hidden="true" />
-              )}
-              <span>{toast.message}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
     </div>
   );

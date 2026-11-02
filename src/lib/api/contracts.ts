@@ -11,7 +11,7 @@ export const queueItemViewSchema = z.object({
   youtubeVideoId: z.string().nullable().optional(),
   voteCount: z.number().int().nonnegative(),
   createdAt: z.string(),
-  status: z.enum(["queued", "playing"]),
+  status: z.enum(["proposed", "queued", "playing"]),
   myVote: z.boolean(),
 });
 
@@ -39,6 +39,7 @@ export const nightMeSchema = z
     participantId: z.string().uuid().or(z.string()),
     credits: z.number().int().nonnegative(),
     proposalsUsed: z.number().int().nonnegative(),
+    lastProposedAt: z.string().nullable().optional(),
   })
   .nullable();
 
@@ -64,6 +65,7 @@ export const nightStateSchema = z.object({
   night: nightSessionSchema,
   nowPlaying: queueItemViewSchema.nullable(),
   queue: z.array(queueItemViewSchema),
+  candidates: z.array(queueItemViewSchema).optional().default([]),
   me: nightMeSchema,
   settings: nightSettingsSchema,
   player: nightPlayerSchema,
@@ -111,4 +113,3 @@ export function deriveNightPhase(state: NightState): NightPhase {
   }
   return "active";
 }
-

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Music2, Search, X } from "lucide-react";
+import { Music2, Search, Sparkles, X } from "lucide-react";
 import { demoSearchSuggestions } from "@/lib/demo-data";
 import { messageForApiError } from "@/lib/api/error-messages";
 import {
@@ -11,12 +11,14 @@ import {
   type SearchResult,
 } from "@/lib/api/proposals";
 import type { QueueItemView } from "@/lib/api/contracts";
+import { PROPOSAL_COOLDOWN_SECONDS, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
 
 interface ProposalSearchProps {
   queue: QueueItemView[];
+  candidates?: QueueItemView[];
   proposalsEnabled: boolean;
-  proposalsUsed: number;
-  maxProposals: number;
+  proposalsUsed?: number;
+  maxProposals?: number;
   onProposed: () => void;
   onNotify: (message: string, tone?: "ok" | "error" | "info") => void;
   onVoteExisting?: (queueItemId: string) => void;
@@ -31,11 +33,12 @@ const filterChips = [
   "Trap / Urbano",
 ];
 
+const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
+
 export function ProposalSearch({
   queue,
+  candidates = [],
   proposalsEnabled,
-  proposalsUsed,
-  maxProposals,
   onProposed,
   onNotify,
   onVoteExisting,
@@ -47,7 +50,23 @@ export function ProposalSearch({
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [activeChip, setActiveChip] = useState("Top Búsquedas");
 
-  // 30s Cooldown timer
+  // Load and sync 2-minute (120s) Cooldown from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(LAST_PROPOSAL_KEY);
+      if (saved) {
+        const elapsed = (Date.now() - parseInt(saved, 10)) / 1000;
+        const remaining = Math.max(0, Math.ceil(PROPOSAL_COOLDOWN_SECONDS - elapsed));
+        if (remaining > 0) {
+          setCooldownSeconds(remaining);
+        }
+      }
+    } catch {
+      // Ignore localStorage access errors
+    }
+  }, []);
+
+  // 1-second countdown tick
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
     const timer = setInterval(() => {
@@ -86,15 +105,12 @@ export function ProposalSearch({
 
   async function handlePropose(item: SearchResult) {
     if (cooldownSeconds > 0) {
+      const mins = Math.floor(cooldownSeconds / 60);
+      const secs = (cooldownSeconds % 60).toString().padStart(2, "0");
       onNotify(
-        `Esperá ${cooldownSeconds}s antes de proponer otro tema.`,
+        `Debés esperar ${mins}:${secs} antes de proponer otra canción (límite de 2 min).`,
         "error",
       );
-      return;
-    }
-
-    if (proposalsUsed >= maxProposals) {
-      onNotify(messageForApiError("proposal_limit"), "error");
       return;
     }
 
@@ -108,8 +124,13 @@ export function ProposalSearch({
         thumbnailUrl: item.thumbnailUrl,
       });
 
-      onNotify(`«${item.title}» entró a la cola.`, "ok");
-      setCooldownSeconds(30);
+      onNotify(`«${item.title}» fue propuesta. Con 5 votos entra a la cola.`, "ok");
+      setCooldownSeconds(PROPOSAL_COOLDOWN_SECONDS);
+      try {
+        localStorage.setItem(LAST_PROPOSAL_KEY, Date.now().toString());
+      } catch {
+        // localStorage fallback
+      }
       onProposed();
     } catch (err: unknown) {
       const code = err instanceof Error ? err.message : "internal_error";
@@ -126,33 +147,70 @@ export function ProposalSearch({
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   }
 
-  // Check if a search result is already in the queue
+  // Check if track is already in the playback queue
   function findInQueue(item: SearchResult): QueueItemView | undefined {
     return queue.find(
       (q) =>
+        (item.videoId && q.youtubeVideoId && q.youtubeVideoId === item.videoId) ||
         q.title.toLowerCase() === item.title.toLowerCase() ||
         (q.artist.toLowerCase() === item.artist.toLowerCase() &&
           q.title.toLowerCase().includes(item.title.toLowerCase().slice(0, 10))),
     );
   }
 
+  // Check if track is already in candidate proposals
+  function findInCandidates(item: SearchResult): QueueItemView | undefined {
+    return candidates.find(
+      (c) =>
+        (item.videoId && c.youtubeVideoId && c.youtubeVideoId === item.videoId) ||
+        c.title.toLowerCase() === item.title.toLowerCase() ||
+        (c.artist.toLowerCase() === item.artist.toLowerCase() &&
+          c.title.toLowerCase().includes(item.title.toLowerCase().slice(0, 10))),
+    );
+  }
+
+  const formatRemainingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = (seconds % 60).toString().padStart(2, "0");
+    return `${mins}:${secs}`;
+  };
+
   return (
     <div className="space-y-4 pb-6">
       {/* Header */}
       <div className="pt-1">
         <div className="flex items-center justify-between mb-1">
-          <span className="font-mono text-[11px] text-indigo-400 uppercase tracking-wider font-semibold">
-            Catálogo Conectado
+          <span className="font-mono text-[11px] text-indigo-400 uppercase tracking-wider font-semibold flex items-center gap-1.5">
+            <Sparkles className="size-3 text-indigo-400" />
+            Propuestas Libres
           </span>
           <span className="font-mono text-[11px] text-slate-400">
-            Cupo: {proposalsUsed}/{maxProposals}
+            {cooldownSeconds > 0 ? (
+              <span className="text-amber-400 font-bold">
+                ⏳ Esperá {formatRemainingTime(cooldownSeconds)}
+              </span>
+            ) : (
+              <span className="text-emerald-400 font-medium">
+                ✓ Límite de 2 min
+              </span>
+            )}
           </span>
         </div>
         <h1 className="text-xl font-bold text-white tracking-tight">Buscar y Proponer</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Buscá canciones en YouTube para sumar a la lista y votarla en el salón.
+          Proponé tus temas favoritos. Al acumular <strong>5 votos</strong> en el salón, entran automáticamente a la cola de la TV.
         </p>
       </div>
+
+      {cooldownSeconds > 0 && (
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200 flex items-center gap-2.5">
+          <span className="material-symbols-outlined text-lg text-amber-400">timer</span>
+          <div>
+            <span className="font-bold">Límite de 2 minutos activo: </span>
+            <span>Podrás proponer otra canción en <strong>{formatRemainingTime(cooldownSeconds)}</strong>.</span>
+          </div>
+        </div>
+      )}
 
       {!proposalsEnabled && (
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 space-y-1">
@@ -161,81 +219,79 @@ export function ProposalSearch({
         </div>
       )}
 
-      {cooldownSeconds > 0 && (
-        <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-200 flex items-center justify-between font-mono">
-          <span>Tiempo de espera entre propuestas:</span>
-          <span className="font-bold text-cyan-400">{cooldownSeconds}s</span>
-        </div>
-      )}
-
-      {/* Search Input Box */}
+      {/* Search Input Bar */}
       <div className="relative">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-          <Search className="size-4" />
-        </span>
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar por artista, canción o link de YouTube..."
-          className="w-full h-12 pl-10 pr-10 rounded-xl bg-[#181b25] border border-[#232b42] text-white text-sm placeholder:text-slate-500 focus:outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-400 transition-all shadow-inner"
+          placeholder="Artista, canción o link de YouTube..."
+          disabled={!proposalsEnabled}
+          className="w-full bg-[#181b25] text-white placeholder-slate-500 text-sm rounded-xl pl-10 pr-10 py-3.5 border border-[#232b42] focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
         />
+        <Search className="absolute left-3.5 top-4 size-4 text-slate-400 pointer-events-none" />
         {query && (
           <button
             type="button"
             onClick={() => setQuery("")}
-            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+            className="absolute right-3.5 top-4 text-slate-400 hover:text-white"
           >
             <X className="size-4" />
           </button>
         )}
       </div>
 
-      {/* Filter / Genre Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        {filterChips.map((chip) => (
-          <button
-            key={chip}
-            type="button"
-            onClick={() => {
-              setActiveChip(chip);
-              if (chip !== "Top Búsquedas") {
-                setQuery(chip);
-              }
-            }}
-            className={`whitespace-nowrap px-3 py-1.5 rounded-full font-mono text-[11px] font-medium transition-all ${
-              activeChip === chip
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30 border border-indigo-400/40"
-                : "bg-[#181b25] text-slate-400 border border-[#232b42] hover:text-white hover:border-slate-600"
-            }`}
-          >
-            {chip}
-          </button>
-        ))}
+      {/* Filter Chips */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {filterChips.map((chip) => {
+          const isActive = activeChip === chip;
+          return (
+            <button
+              key={chip}
+              type="button"
+              onClick={() => {
+                setActiveChip(chip);
+                if (chip === "🎤 Karaoke" && !query.includes("karaoke")) {
+                  setQuery((q) => (q ? `${q} karaoke` : "karaoke"));
+                }
+              }}
+              className={`px-3 py-1.5 rounded-full text-xs font-mono font-medium whitespace-nowrap transition-all ${
+                isActive
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "bg-[#181b25] text-slate-400 hover:text-white hover:bg-[#202534] border border-[#232b42]"
+              }`}
+            >
+              {chip}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Searching spinner */}
+      {/* Search Results */}
       {searching && (
-        <div className="flex items-center justify-center py-8 text-xs text-slate-400 font-mono gap-2">
-          <span className="inline-block size-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-          <span>Buscando temas en YouTube...</span>
+        <div className="flex items-center justify-center py-10 text-slate-500 font-mono text-xs gap-2">
+          <span className="inline-block size-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <span>Buscando en YouTube...</span>
         </div>
       )}
 
-      {/* Results List */}
-      {!searching && query.trim() && results.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1 font-mono text-[11px] text-slate-400">
-            <span>RESULTADOS ({results.length})</span>
-            <span className="flex items-center gap-1 text-cyan-400">
-              <span className="material-symbols-outlined text-xs">sync</span>
-              Sincronizado
-            </span>
-          </div>
+      {!searching && query.trim() && results.length === 0 && (
+        <div className="text-center py-12 px-4 rounded-xl border border-dashed border-[#232b42] bg-[#181b25]/50">
+          <Music2 className="size-8 mx-auto text-slate-600 mb-2" />
+          <p className="text-sm font-bold text-white">No encontramos resultados</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Probá con otro título o pegá el link directo de YouTube.
+          </p>
+        </div>
+      )}
 
+      {!searching && results.length > 0 && (
+        <div className="space-y-3">
           {results.map((item) => {
             const existingQueueItem = findInQueue(item);
+            const existingCandidate = findInCandidates(item);
 
+            // 1. If already in active playback queue (5+ votes)
             if (existingQueueItem) {
               return (
                 <article
@@ -244,14 +300,14 @@ export function ProposalSearch({
                 >
                   <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-2.5 flex items-start gap-2">
                     <span className="material-symbols-outlined text-cyan-400 text-base mt-0.5">
-                      notification_important
+                      check_circle
                     </span>
                     <div className="flex-1">
                       <p className="text-xs font-bold text-cyan-300">
-                        ¡Ya está en la cola activa!
+                        ¡Ya está en la cola del salón!
                       </p>
                       <p className="text-[11px] text-slate-400 leading-snug">
-                        Esta canción ya fue propuesta. Sumale tu voto en lugar de duplicarla.
+                        Esta canción ya tiene 5+ votos y va a sonar en la TV. Sumale tu voto para que suene antes.
                       </p>
                     </div>
                   </div>
@@ -301,6 +357,74 @@ export function ProposalSearch({
               );
             }
 
+            // 2. If already in candidate proposals (< 5 votes)
+            if (existingCandidate) {
+              const needed = Math.max(0, MIN_VOTES_FOR_QUEUE - existingCandidate.voteCount);
+              return (
+                <article
+                  key={item.videoId}
+                  className="bg-[#181b25] rounded-xl p-3.5 border border-amber-500/40 flex flex-col gap-3 shadow-md"
+                >
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex items-start gap-2">
+                    <Sparkles className="size-4 text-amber-400 mt-0.5 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-xs font-bold text-amber-300">
+                        ¡Ya está en votación popular ({existingCandidate.voteCount}/{MIN_VOTES_FOR_QUEUE} votos)!
+                      </p>
+                      <p className="text-[11px] text-slate-400 leading-snug">
+                        {needed === 1 ? "¡Falta solo 1 voto para que pase a la cola del salón!" : `Faltan ${needed} votos para que pase a la cola del salón.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-900 border border-[#232b42]">
+                      {item.thumbnailUrl ? (
+                        <Image
+                          src={item.thumbnailUrl}
+                          alt={item.title}
+                          width={56}
+                          height={56}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-600">
+                          <Music2 className="size-5" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-bold text-white truncate">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                        {item.artist} · {formatDuration(item.durationSeconds)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {onVoteExisting ? (
+                    <button
+                      type="button"
+                      onClick={() => onVoteExisting(existingCandidate.id)}
+                      className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/40 hover:to-indigo-600/40 text-amber-200 border border-amber-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                    >
+                      <span className="material-symbols-outlined text-sm">how_to_vote</span>
+                      <span>Votar propuesta ({existingCandidate.voteCount}/{MIN_VOTES_FOR_QUEUE})</span>
+                    </button>
+                  ) : (
+                    <div className="text-center py-2 px-3 rounded-lg bg-[#232b42]/60 text-amber-300 font-mono text-xs font-bold">
+                      En votación ({existingCandidate.voteCount}/{MIN_VOTES_FOR_QUEUE})
+                    </div>
+                  )}
+                </article>
+              );
+            }
+
+            // 3. New track that can be proposed
+            const isBlockedByCooldown = cooldownSeconds > 0;
+
             return (
               <article
                 key={item.videoId}
@@ -345,7 +469,7 @@ export function ProposalSearch({
 
                 <button
                   type="button"
-                  disabled={submittingId === item.videoId || !proposalsEnabled || cooldownSeconds > 0}
+                  disabled={submittingId === item.videoId || !proposalsEnabled || isBlockedByCooldown}
                   onClick={() => handlePropose(item)}
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(99,102,241,0.35)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -357,7 +481,9 @@ export function ProposalSearch({
                   <span>
                     {submittingId === item.videoId
                       ? "Proponiendo..."
-                      : "Proponer"}
+                      : isBlockedByCooldown
+                        ? `Esperá ${formatRemainingTime(cooldownSeconds)}`
+                        : "Proponer"}
                   </span>
                 </button>
               </article>
@@ -379,23 +505,11 @@ export function ProposalSearch({
                 className="flex items-center justify-between p-3 rounded-xl bg-[#181b25] border border-[#232b42] hover:border-slate-600 transition-colors cursor-pointer"
                 onClick={() => setQuery(term)}
               >
-                <div className="flex items-center gap-3 min-w-0 pr-2">
-                  <div className="grid size-10 shrink-0 place-items-center rounded-lg bg-slate-800 text-indigo-400">
-                    <Music2 className="size-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate">
-                      {term}
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      Artista / Banda recomendada
-                    </p>
-                  </div>
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-sm text-slate-400">trending_up</span>
+                  <span className="text-sm text-white font-medium">{term}</span>
                 </div>
-                <span className="font-mono text-[11px] text-indigo-300 shrink-0 flex items-center gap-1">
-                  Buscar
-                  <Search className="size-3" />
-                </span>
+                <span className="material-symbols-outlined text-sm text-slate-500">north_west</span>
               </div>
             ))}
           </div>
