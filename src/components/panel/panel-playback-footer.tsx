@@ -34,9 +34,11 @@ import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   fetchPlaybackState,
-  togglePausePlayback,
+  pausePlayback,
+  resumePlayback,
   setPlaybackVolume,
-  toggleMutePlayback,
+  mutePlayback,
+  unmutePlayback,
   skipPlayback,
   seekPlayback,
   setKaraokeMode as setKmRemote,
@@ -410,7 +412,11 @@ export function PanelPlaybackFooter({
     showToast(next ? "⏸️ TV Pausada" : "▶️ TV en Reproducción");
     broadcastControl(next ? "pause" : "resume");
     try {
-      await togglePausePlayback(slug);
+      if (next) {
+        await pausePlayback(slug);
+      } else {
+        await resumePlayback(slug);
+      }
     } catch {
       // Revert on failure
       setIsPaused(!next);
@@ -544,7 +550,11 @@ export function PanelPlaybackFooter({
     showToast(next ? "🔇 Audio TV Silenciado" : "🔊 Audio TV Activo");
     broadcastControl(next ? "mute" : "unmute");
     try {
-      await toggleMutePlayback(slug);
+      if (next) {
+        await mutePlayback(slug);
+      } else {
+        await unmutePlayback(slug);
+      }
     } catch {
       setIsMuted(!next);
     }

@@ -103,7 +103,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const sendIframeCommand = useCallback((func: string, args: unknown[] = []) => {
       if (playerRef.current) {
         try {
-          const fn = (playerRef.current as Record<string, unknown>)[func];
+          const fn = (playerRef.current as unknown as Record<string, unknown>)[func];
           if (typeof fn === "function") {
             (fn as (...a: unknown[]) => void).apply(playerRef.current, args);
           }

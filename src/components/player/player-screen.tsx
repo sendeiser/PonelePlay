@@ -959,11 +959,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               durationRef.current = Math.floor(d);
             }
             if (typeof p === "boolean") {
-              setIsPlaying(!p);
               if (p) {
-                engine.pause?.();
+                if (isPlayingRef.current) {
+                  setIsPlaying(false);
+                  engine.pause?.();
+                }
               } else {
-                void engine.play?.();
+                if (!isPlayingRef.current) {
+                  setIsPlaying(true);
+                  void engine.play?.();
+                }
               }
             }
             if (typeof vol === "number") {

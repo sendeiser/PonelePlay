@@ -305,10 +305,9 @@ fun TVPlayerApp(
                         offscreenPreRaster = false // Saves GPU texture memory on TV boxes
                         textZoom = displayZoom
                         userAgentString =
-                            "Mozilla/5.0 (Linux; Android 12; BRAVIA 4K VH2 Build/BRAVIA_VH2_UC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 Large Screen"
+                            "Mozilla/5.0 (Linux; Android 12; BRAVIA 4K VH2 Build/BRAVIA_VH2_UC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
                     }
 
-                    setLayerType(View.LAYER_TYPE_HARDWARE, null)
                     overScrollMode = View.OVER_SCROLL_NEVER
                     isVerticalScrollBarEnabled = false
                     isHorizontalScrollBarEnabled = false
@@ -349,22 +348,12 @@ fun TVPlayerApp(
                     }
 
                     webChromeClient = object : WebChromeClient() {
-                        private var customView: View? = null
-                        private var customViewCallback: CustomViewCallback? = null
-
                         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
-                            if (customView != null) {
-                                callback?.onCustomViewHidden()
-                                return
-                            }
-                            customView = view
-                            customViewCallback = callback
+                            // On TV, video playback remains inline in the DOM to avoid compositor freezes
+                            callback?.onCustomViewHidden()
                         }
 
                         override fun onHideCustomView() {
-                            customView = null
-                            customViewCallback?.onCustomViewHidden()
-                            customViewCallback = null
                         }
                     }
 
@@ -373,11 +362,7 @@ fun TVPlayerApp(
                     loadUrl(currentUrl)
                 }
             },
-            update = { webView ->
-                if (webView.url != currentUrl) {
-                    webView.loadUrl(currentUrl)
-                }
-            }
+            update = { /* Stable WebView: do not auto-reload on Compose recomposition */ }
         )
 
         // Loading Indicator Overlay
