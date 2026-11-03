@@ -20,6 +20,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
@@ -170,155 +173,157 @@ private fun TvModeVideo(
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Left Floating Glassmorphic Queue Overlay
+        // 2. Left Floating Queue (100% Invisible Transparent, no box/border, text only)
         if (feed.queue.isNotEmpty()) {
-            Box(
+            val textShadow = Shadow(
+                color = Color(0xF2000000),
+                offset = Offset(2f, 2f),
+                blurRadius = 6f
+            )
+
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 26.dp, start = 30.dp)
-                    .width(280.dp)
-                    .background(Color(0xD9090D1A), RoundedCornerShape(14.dp))
-                    .border(1.dp, Color(0x66818CF8), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .padding(top = 28.dp, start = 32.dp)
+                    .width(310.dp)
             ) {
-                Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📋 COLA EN VIVO",
+                        color = Color(0xFFA5B4FC),
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        style = TextStyle(shadow = textShadow)
+                    )
+                    Text(
+                        text = "${feed.queue.size} temas",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        style = TextStyle(shadow = textShadow)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                feed.queue.take(4).forEachIndexed { idx, item ->
+                    if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "📋 COLA EN VIVO",
-                            color = Color(0xFF818CF8),
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace
+                            text = "#${idx + 1}",
+                            color = Color(0xFFA5B4FC),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            style = TextStyle(shadow = textShadow),
+                            modifier = Modifier.width(26.dp)
                         )
-                        Text(
-                            text = "${feed.queue.size} temas",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 9.5.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    feed.queue.take(4).forEachIndexed { idx, item ->
-                        if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "#${idx + 1}",
-                                color = Color(0xFF818CF8),
-                                fontSize = 11.sp,
+                                text = item.title,
+                                color = Color.White,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.width(24.dp)
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(shadow = textShadow)
                             )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = item.title,
-                                    color = Color.White,
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Text(
-                                    text = item.artist,
-                                    color = Color(0xFF94A3B8),
-                                    fontSize = 10.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            val isBar = item.voteCount >= 9999 || item.voteCount <= 0
                             Text(
-                                text = if (isBar) "⭐ BAR" else "${item.voteCount}v",
-                                color = if (isBar) Color(0xFFA5B4FC) else Color(0xFF6EE7B7),
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
+                                text = item.artist,
+                                color = Color(0xFFCBD5E1),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(shadow = textShadow)
                             )
                         }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val isBar = item.voteCount >= 9999 || item.voteCount <= 0
+                        Text(
+                            text = if (isBar) "⭐ BAR" else "${item.voteCount}v",
+                            color = if (isBar) Color(0xFFA5B4FC) else Color(0xFF6EE7B7),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            style = TextStyle(shadow = textShadow)
+                        )
                     }
                 }
             }
         }
 
-        // 3. Right Floating Glassmorphic Proposals Overlay
+        // 3. Right Floating Proposals (100% Invisible Transparent, no box/border, text only)
         if (feed.proposals.isNotEmpty()) {
-            Box(
+            val textShadow = Shadow(
+                color = Color(0xF2000000),
+                offset = Offset(2f, 2f),
+                blurRadius = 6f
+            )
+
+            Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 26.dp, end = 30.dp)
-                    .width(280.dp)
-                    .background(Color(0xD9090D1A), RoundedCornerShape(14.dp))
-                    .border(1.dp, Color(0x6638BDF8), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .padding(top = 28.dp, end = 32.dp)
+                    .width(310.dp)
             ) {
-                Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🔥 EN VOTACIÓN",
+                        color = Color(0xFFFBBF24),
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        style = TextStyle(shadow = textShadow)
+                    )
+                    Text(
+                        text = "Pedí con QR",
+                        color = Color(0xFF38BDF8),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(shadow = textShadow)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                feed.proposals.take(4).forEachIndexed { idx, prop ->
+                    if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "🔥 EN VOTACIÓN",
-                            color = Color(0xFFF59E0B),
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace
+                            text = prop.title,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = TextStyle(shadow = textShadow),
+                            modifier = Modifier.weight(1f)
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Pedí con QR",
-                            color = Color(0xFF38BDF8),
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    feed.proposals.take(3).forEachIndexed { idx, prop ->
-                        if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = prop.title,
-                                color = Color.White,
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "${prop.voteCount}/${prop.neededVotes}",
-                                color = Color(0xFFF59E0B),
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        val prog = (prop.voteCount.toFloat() / prop.neededVotes.toFloat()).coerceIn(0f, 1f)
-                        Spacer(modifier = Modifier.height(3.dp))
-                        LinearProgressIndicator(
-                            progress = { prog },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(3.dp)
-                                .clip(RoundedCornerShape(2.dp)),
-                            color = Color(0xFFF59E0B),
-                            trackColor = Color(0x40334155)
+                            text = "${prop.voteCount}/${prop.neededVotes}v",
+                            color = Color(0xFFFBBF24),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            style = TextStyle(shadow = textShadow)
                         )
                     }
                 }
