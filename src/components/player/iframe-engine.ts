@@ -359,9 +359,9 @@ export function createIframeEngine(
     },
 
     seekTo(seconds: number): void {
-      const target = Math.max(0, Math.floor(seconds));
+      const target = Math.max(0, Math.round(seconds * 10) / 10);
       currentTime = target;
-      seekLockUntil = Date.now() + 2000;
+      seekLockUntil = Date.now() + 1500;
 
       if (ytReady && ytPlayer) {
         try {
@@ -376,7 +376,7 @@ export function createIframeEngine(
         const iframe = getIframe();
         if (iframe && currentVideoId) {
           boundIframe = null;
-          iframe.src = buildEmbedUrl(currentVideoId, target);
+          iframe.src = buildEmbedUrl(currentVideoId, Math.floor(target));
         }
       }
     },

@@ -618,6 +618,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   nowPlayingRef.current = nowPlaying;
   const lastCommandSeqRef = useRef<number | null>(null);
   const lastAdminProgressAtRef = useRef<number>(0);
+  const lastTvSeekAtRef = useRef<number>(0);
 
 
   const handleSeek = useCallback(
@@ -945,13 +946,32 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               trackId?: string;
               track?: PlayerTrack;
               isFromAdminAudio?: boolean;
+              sentAt?: number;
             };
           }) => {
             if (!active || !msg.payload) return;
-            const { currentTime, duration: d, isPaused: p, track, volume: vol, isMuted: muted } = msg.payload as Record<string, unknown>;
+            const {
+              currentTime,
+              duration: d,
+              isPaused: p,
+              track,
+              volume: vol,
+              isMuted: muted,
+              isFromAdminAudio,
+              sentAt,
+            } = msg.payload as Record<string, unknown>;
+
+            // Compensate for network transit latency if sentAt is present
+            const latency =
+              typeof sentAt === "number"
+                ? Math.max(0, Math.min(2, (Date.now() - sentAt) / 1000))
+                : 0;
+            const targetTime =
+              (typeof currentTime === "number" && !isNaN(currentTime) ? currentTime : 0) + latency;
+
             if (typeof currentTime === "number" && !isNaN(currentTime)) {
-              setElapsed(Math.floor(currentTime));
-              elapsedRef.current = Math.floor(currentTime);
+              setElapsed(Math.floor(targetTime));
+              elapsedRef.current = Math.floor(targetTime);
               lastAdminProgressAtRef.current = Date.now();
             }
             if (typeof d === "number" && !isNaN(d) && d > 0) {
@@ -971,34 +991,42 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 }
               }
             }
-            if (typeof vol === "number") {
-              setVolume(vol);
-              engine.setVolume?.(vol);
-            }
-            if (typeof muted === "boolean") {
-              setIsMuted(muted);
-              if (muted) engine.mute?.();
-              else engine.unMute?.();
+            // Only force volume & mute from progress ticks if NOT from admin audio engine,
+            // allowing the TV to stay muted in the venue if the sound is coming from Cabina
+            if (!isFromAdminAudio) {
+              if (typeof vol === "number") {
+                setVolume(vol);
+                engine.setVolume?.(vol);
+              }
+              if (typeof muted === "boolean") {
+                setIsMuted(muted);
+                if (muted) engine.mute?.();
+                else engine.unMute?.();
+              }
             }
             if (track) {
               const trk = track as PlayerTrack;
               const cur = nowPlayingRef.current;
-              const isDiff = !cur ||
+              const isDiff =
+                !cur ||
                 (trk.youtubeVideoId && cur.youtubeVideoId !== trk.youtubeVideoId) ||
                 cur.title.toLowerCase() !== trk.title.toLowerCase();
               if (isDiff) {
                 setManualNowPlaying(trk);
                 void engine.load(trk).then(() => {
-                  if (typeof currentTime === "number" && currentTime > 2) {
-                    engine.seekTo?.(currentTime);
+                  if (targetTime > 0.5) {
+                    engine.seekTo?.(targetTime);
                   }
                 });
               } else if (typeof currentTime === "number" && !isNaN(currentTime) && !p) {
-                // Keep TV video and Cabina audio tightly in sync (correct drift >= 3 seconds)
-                const currentSec = Math.floor(currentTime);
-                const drift = Math.abs(elapsedRef.current - currentSec);
-                if (drift >= 3) {
-                  engine.seekTo?.(currentSec);
+                // High-precision sync: check live TV time against Cabina target time
+                const tvSec = engine.getCurrentTime?.() ?? elapsedRef.current;
+                const drift = Math.abs(tvSec - targetTime);
+
+                // Correct drift if >= 0.8s, with 3s cooldown to prevent YouTube buffering loops
+                if (drift >= 0.8 && Date.now() - lastTvSeekAtRef.current > 3000) {
+                  lastTvSeekAtRef.current = Date.now();
+                  engine.seekTo?.(targetTime);
                 }
               }
             }

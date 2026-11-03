@@ -932,7 +932,7 @@ export function PanelPlaybackFooter({
         isMuted={isMuted}
         onTrackEnded={() => void handleSkipNext()}
         onProgress={(curr, dur) => {
-          setElapsed(curr);
+          setElapsed(Math.floor(curr));
           if (dur) setVideoDuration(dur);
           if (channelRef.current && currentTrack) {
             void channelRef.current.send({
@@ -947,6 +947,7 @@ export function PanelPlaybackFooter({
                 volume,
                 isMuted,
                 isFromAdminAudio: true,
+                sentAt: Date.now(),
               },
             });
           }

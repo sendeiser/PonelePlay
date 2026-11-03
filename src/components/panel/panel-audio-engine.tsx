@@ -92,7 +92,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         if (data.event === "infoDelivery" && data.info) {
           const info = data.info as { currentTime?: number; duration?: number };
           if (typeof info.currentTime === "number" && info.currentTime > 0) {
-            lastReportedTimeRef.current = Math.floor(info.currentTime);
+            lastReportedTimeRef.current = Math.round(info.currentTime * 10) / 10;
           }
         }
       }
@@ -419,14 +419,14 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         let duration = currentTrackRef.current?.durationSeconds ?? 210;
 
         if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
-          currentTime = Math.floor(html5AudioRef.current.currentTime || 0);
+          currentTime = Math.round((html5AudioRef.current.currentTime || 0) * 10) / 10;
           const d = Math.floor(html5AudioRef.current.duration || 0);
           if (d > 0) duration = d;
         } else if (playerRef.current && ytInitializedRef.current) {
           try {
-            const t = Math.floor(playerRef.current.getCurrentTime() || 0);
+            const t = playerRef.current.getCurrentTime() || 0;
             const d = Math.floor(playerRef.current.getDuration() || 0);
-            if (t > 0) currentTime = t;
+            if (t > 0) currentTime = Math.round(t * 10) / 10;
             if (d > 0) duration = d;
           } catch {
             // Ignore
@@ -436,12 +436,12 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         if (currentTime > 0) {
           lastReportedTimeRef.current = currentTime;
         } else {
-          lastReportedTimeRef.current += 1;
+          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.5) * 10) / 10;
           currentTime = lastReportedTimeRef.current;
         }
 
         onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
-      }, 1000);
+      }, 500);
 
       return () => {
         clearInterval(timer);
