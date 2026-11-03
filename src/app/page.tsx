@@ -63,12 +63,12 @@ export default function HomePage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-bold text-white">App Oficial para Smart TV</span>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[11px] font-mono font-bold tracking-wider">
-                  Código Downloader: 4417435
+                <span className="px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-extrabold tracking-wider shadow-sm">
+                  Código Downloader: 7792925
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Instalá la app nativa en tu televisor o TV Box con la aplicación Downloader o por pendrive.
+              <p className="text-xs text-slate-400 mt-1">
+                Abrí la app <span className="text-white font-semibold">Downloader</span> en tu Smart TV o TV Box y escribí el código <span className="text-cyan-300 font-mono font-bold">7792925</span> (descarga directa de <span className="text-slate-300 font-mono">https://poneleplay.netlify.app/tv.apk</span>).
               </p>
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function HomePage() {
           </Link>
           <span className="text-slate-700">·</span>
           <Link href="/tv.apk" download className="hover:text-slate-300 transition-colors">
-            Descargar APK (Downloader 4417435)
+            Descargar APK (Downloader 7792925)
           </Link>
           <span className="text-slate-700">·</span>
           <Link href="/login" className="hover:text-slate-300 transition-colors">

@@ -22,11 +22,11 @@ import { CopyCodeButton } from "./copy-code-button";
 export const metadata = {
   title: "Cómo Funciona & App TV | PonelePlay Jukebox",
   description:
-    "Guía completa de funcionamiento de PonelePlay para bares y restaurantes. Cómo instalar la app en Android TV con el código de Downloader 4417435 y reglas de votación.",
+    "Guía completa de funcionamiento de PonelePlay para bares y restaurantes. Cómo instalar la app en Android TV con el código de Downloader 7792925 y reglas de votación.",
 };
 
 export default function ComoFuncionaPage() {
-  const DOWNLOADER_CODE = "4417435";
+  const DOWNLOADER_CODE = "7792925";
 
   return (
     <main className="min-h-screen bg-[#090D16] text-[#dfe2ef] flex flex-col justify-between relative overflow-hidden">
