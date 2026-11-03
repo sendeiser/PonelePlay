@@ -67,6 +67,14 @@ export async function GET(
       rawCandidates,
     );
 
+    const sanitizeVoteCount = (count: unknown): number => {
+      const n = Number(count ?? 0);
+      return n >= 9999 ? 0 : Math.max(0, n);
+    };
+
+    // Clean up any legacy 99999 vote counts in DB in background
+    void admin.from("queue_items").update({ vote_count: 0 }).gte("vote_count", 9999);
+
     const host = req.headers.get("host") || "poneleplay.netlify.app";
     const proto = req.headers.get("x-forwarded-proto") || "https";
     const clientUrl = `${proto}://${host}/p/${slug}`;
@@ -96,7 +104,7 @@ export async function GET(
               youtubeVideoId: nowPlayingTrack.youtubeVideoId ? String(nowPlayingTrack.youtubeVideoId) : null,
               thumbnailUrl: nowPlayingTrack.thumbnailUrl ? String(nowPlayingTrack.thumbnailUrl) : null,
               durationSeconds: Number(nowPlayingTrack.durationSeconds ?? 210),
-              voteCount: Number(nowPlayingTrack.voteCount ?? 0),
+              voteCount: sanitizeVoteCount(nowPlayingTrack.voteCount),
               isKaraoke: Boolean(nowPlayingTrack.isKaraoke),
             }
           : null,
@@ -107,7 +115,7 @@ export async function GET(
           youtubeVideoId: item.youtubeVideoId,
           thumbnailUrl: item.thumbnailUrl,
           durationSeconds: item.durationSeconds,
-          voteCount: item.voteCount,
+          voteCount: sanitizeVoteCount(item.voteCount),
           position: idx + 1,
         })),
         proposals: candidateProposals.map((item) => ({
@@ -116,7 +124,7 @@ export async function GET(
           artist: item.artist,
           youtubeVideoId: item.youtubeVideoId,
           thumbnailUrl: item.thumbnailUrl,
-          voteCount: item.voteCount,
+          voteCount: sanitizeVoteCount(item.voteCount),
           neededVotes: MIN_VOTES_FOR_QUEUE,
         })),
         clientUrl,

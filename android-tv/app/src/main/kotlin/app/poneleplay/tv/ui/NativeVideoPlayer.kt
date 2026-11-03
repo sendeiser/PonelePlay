@@ -1,11 +1,11 @@
 package app.poneleplay.tv.ui
 
 import android.annotation.SuppressLint
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -15,7 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 
 class YouTubeBridge(
-    private val onEnded: () -> Unit
+    private val onEnded: () -> Unit,
+    private val onError: (errorCode: Int) -> Unit = {}
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -23,6 +24,18 @@ class YouTubeBridge(
     fun onStateChange(state: Int) {
         if (state == 0) { // YT.PlayerState.ENDED
             mainHandler.post { onEnded() }
+        }
+    }
+
+    @JavascriptInterface
+    fun onError(errorCode: Int) {
+        mainHandler.post {
+            onError(errorCode)
+            // If an unplayable video error occurs (e.g. 100, 101, 150, 152),
+            // auto-advance to next song after 3.5s so screen doesn't stay frozen
+            mainHandler.postDelayed({
+                onEnded()
+            }, 3500)
         }
     }
 }
@@ -108,13 +121,20 @@ fun NativeVideoPlayer(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
+                    databaseEnabled = true
                     mediaPlaybackRequiresUserGesture = false
                     cacheMode = WebSettings.LOAD_DEFAULT
                     allowContentAccess = true
-                    allowFileAccess = false
+                    allowFileAccess = true
+                    // Standard Chrome Mobile User-Agent without '; wv' prevents YouTube error 150 / 152-4 on VEVO / BBC Music videos
+                    userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                 }
 
-                webChromeClient = WebChromeClient()
+                webChromeClient = object : WebChromeClient() {
+                    override fun onPermissionRequest(request: PermissionRequest?) {
+                        request?.grant(request.resources)
+                    }
+                }
                 webViewClient = WebViewClient()
 
                 addJavascriptInterface(YouTubeBridge(onEnded), "AndroidBridge")
@@ -123,64 +143,76 @@ fun NativeVideoPlayer(
                 controller.currentVideoId = videoId
 
                 val html = buildPlayerHtml(videoId, isMuted)
-                loadDataWithBaseURL("https://www.youtube.com", html, "text/html", "UTF-8", null)
+                val originUrl = "https://poneleplay.netlify.app"
+                loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
             }
         },
         update = {
-            // Keep controller bound without full reload
             controller.webView = it
         }
     )
 }
 
 private fun buildPlayerHtml(videoId: String, isMuted: Boolean): String {
-    val muteCall = if (isMuted) "event.target.mute();" else "event.target.unMute();"
+    val muteCall = if (isMuted) "try { e.target.mute(); } catch(_){}" else "try { e.target.unMute(); } catch(_){}"
+    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
+
     return """
         <!DOCTYPE html>
         <html>
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+          <meta name="referrer" content="strict-origin-when-cross-origin">
           <style>
             * { margin: 0; padding: 0; box-sizing: border-box; background: #000; }
             html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-            #player { width: 100vw; height: 100vh; pointer-events: none; }
+            #player { width: 100vw; height: 100vh; pointer-events: none; border: none; }
           </style>
         </head>
         <body>
-          <div id="player"></div>
+          <iframe
+            id="player"
+            width="100%"
+            height="100%"
+            src="$embedUrl"
+            frameborder="0"
+            allow="autoplay; encrypted-media; gyroscope; picture-in-picture"
+            referrerpolicy="strict-origin-when-cross-origin"
+            style="width: 100vw; height: 100vh; border: none; pointer-events: none;"
+          ></iframe>
           <script>
             var tag = document.createElement('script');
-            tag.src = "https://www.youtube.com/iframe_api";
+            tag.src = "https://www.youtube-nocookie.com/iframe_api";
             var first = document.getElementsByTagName('script')[0];
             first.parentNode.insertBefore(tag, first);
 
             var player = null;
             var initialId = '$videoId';
+            var isEndedSent = false;
 
             function onYouTubeIframeAPIReady() {
               player = new YT.Player('player', {
-                width: '100%',
-                height: '100%',
-                videoId: initialId,
-                playerVars: {
-                  'autoplay': 1,
-                  'controls': 0,
-                  'disablekb': 1,
-                  'enablejsapi': 1,
-                  'fs': 0,
-                  'modestbranding': 1,
-                  'rel': 0,
-                  'playsinline': 1,
-                  'iv_load_policy': 3
-                },
                 events: {
                   'onReady': function(e) {
-                    e.target.playVideo();
-                    $muteCall
+                    try {
+                      e.target.playVideo();
+                      $muteCall
+                    } catch(err) {}
                   },
                   'onStateChange': function(e) {
-                    if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
-                      window.AndroidBridge.onStateChange(e.data);
+                    if (e.data === 0 && !isEndedSent) { // YT.PlayerState.ENDED
+                      isEndedSent = true;
+                      if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
+                        window.AndroidBridge.onStateChange(0);
+                      }
+                    } else if (e.data === 1) {
+                      isEndedSent = false;
+                    }
+                  },
+                  'onError': function(e) {
+                    console.error('YouTube Player Error:', e.data);
+                    if (window.AndroidBridge && window.AndroidBridge.onError) {
+                      window.AndroidBridge.onError(e.data);
                     }
                   }
                 }
@@ -188,22 +220,37 @@ private fun buildPlayerHtml(videoId: String, isMuted: Boolean): String {
             }
 
             function loadVideo(id) {
-              if (player && player.loadVideoById) {
-                player.loadVideoById(id);
+              isEndedSent = false;
+              if (player && typeof player.loadVideoById === 'function') {
+                try {
+                  player.loadVideoById({
+                    videoId: id,
+                    startSeconds: 0
+                  });
+                } catch(e) {
+                  updateIframe(id);
+                }
               } else {
+                updateIframe(id);
                 initialId = id;
               }
             }
 
-            function playVideo() { if (player && player.playVideo) player.playVideo(); }
-            function pauseVideo() { if (player && player.pauseVideo) player.pauseVideo(); }
-            function seekTo(sec) { if (player && player.seekTo) player.seekTo(sec, true); }
-            function setVolume(v) { if (player && player.setVolume) player.setVolume(v); }
-            function mute() { if (player && player.mute) player.mute(); }
-            function unMute() { if (player && player.unMute) player.unMute(); }
+            function updateIframe(id) {
+              var el = document.getElementById('player');
+              if (el) {
+                el.src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app";
+              }
+            }
+
+            function playVideo() { try { if (player && player.playVideo) player.playVideo(); } catch(_){} }
+            function pauseVideo() { try { if (player && player.pauseVideo) player.pauseVideo(); } catch(_){} }
+            function seekTo(sec) { try { if (player && player.seekTo) player.seekTo(sec, true); } catch(_){} }
+            function setVolume(v) { try { if (player && player.setVolume) player.setVolume(v); } catch(_){} }
+            function mute() { try { if (player && player.mute) player.mute(); } catch(_){} }
+            function unMute() { try { if (player && player.unMute) player.unMute(); } catch(_){} }
           </script>
         </body>
         </html>
     """.trimIndent()
 }
-

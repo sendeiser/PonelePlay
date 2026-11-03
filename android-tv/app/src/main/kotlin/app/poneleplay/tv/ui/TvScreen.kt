@@ -425,14 +425,16 @@ private fun TvModePlaylist(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val votes = feed.nowPlaying?.voteCount ?: 0
+                        val isBarSelection = votes >= 9999 || votes <= 0
                         Text(
-                            text = "Votado por el salón",
+                            text = if (isBarSelection) "Selección del bar" else "Votado por el salón",
                             color = Color(0xFF94A3B8),
                             fontSize = 12.sp
                         )
                         Text(
-                            text = "${feed.nowPlaying?.voteCount ?: 0} votos",
-                            color = Color(0xFFF59E0B),
+                            text = formatTvVotes(votes),
+                            color = if (isBarSelection) Color(0xFF38BDF8) else Color(0xFFF59E0B),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
@@ -643,20 +645,29 @@ private fun QueueItemRow(item: TvTrack, index: Int) {
         Spacer(modifier = Modifier.width(8.dp))
 
         // Votes Badge
+        val isBar = item.voteCount >= 9999 || item.voteCount <= 0
         Box(
             modifier = Modifier
-                .background(Color(0x334F46E5), RoundedCornerShape(6.dp))
-                .border(1.dp, Color(0x664F46E5), RoundedCornerShape(6.dp))
+                .background(if (isBar) Color(0x334F46E5) else Color(0x33059669), RoundedCornerShape(6.dp))
+                .border(1.dp, if (isBar) Color(0x664F46E5) else Color(0x66059669), RoundedCornerShape(6.dp))
                 .padding(horizontal = 8.dp, vertical = 3.dp)
         ) {
             Text(
-                text = "${item.voteCount} votos",
-                color = Color(0xFFA5B4FC),
+                text = formatTvVotes(item.voteCount),
+                color = if (isBar) Color(0xFFA5B4FC) else Color(0xFF6EE7B7),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
             )
         }
+    }
+}
+
+private fun formatTvVotes(voteCount: Int): String {
+    return when {
+        voteCount >= 9999 || voteCount <= 0 -> "⭐ Selección Bar"
+        voteCount == 1 -> "1 voto"
+        else -> "$voteCount votos"
     }
 }
 
