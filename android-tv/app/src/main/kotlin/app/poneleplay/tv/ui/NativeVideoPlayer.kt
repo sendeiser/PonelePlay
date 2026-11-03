@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
@@ -136,11 +137,11 @@ fun NativeVideoPlayer(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    databaseEnabled = true
                     mediaPlaybackRequiresUserGesture = false
                     cacheMode = WebSettings.LOAD_DEFAULT
                     allowContentAccess = true
                     allowFileAccess = true
+                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                     // Standard Chrome Mobile User-Agent without '; wv' prevents YouTube error 150 / 152-4 on VEVO / BBC Music videos
                     userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
                 }
@@ -148,6 +149,11 @@ fun NativeVideoPlayer(
                 webChromeClient = object : WebChromeClient() {
                     override fun onPermissionRequest(request: PermissionRequest?) {
                         request?.grant(request.resources)
+                    }
+
+                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                        android.util.Log.d("PonelePlayTV", "[WebView] ${consoleMessage?.message()}")
+                        return true
                     }
                 }
                 webViewClient = WebViewClient()
@@ -189,8 +195,6 @@ private fun buildPlayerHtml(
             html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
             #player { width: 100vw; height: 100vh; pointer-events: none; border: none; }
           </style>
-          <!-- Supabase Client for Sub-50ms Realtime Remote Control & Time Sync -->
-          <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
         </head>
         <body>
           <iframe
@@ -204,11 +208,6 @@ private fun buildPlayerHtml(
             style="width: 100vw; height: 100vh; border: none; pointer-events: none;"
           ></iframe>
           <script>
-            var tag = document.createElement('script');
-            tag.src = "https://www.youtube-nocookie.com/iframe_api";
-            var first = document.getElementsByTagName('script')[0];
-            first.parentNode.insertBefore(tag, first);
-
             var player = null;
             var currentVideoId = '$videoId';
             var isEndedSent = false;
@@ -217,84 +216,35 @@ private fun buildPlayerHtml(
             var currentMuted = ${if (isMuted) "true" else "false"};
             var venueSlug = '${venueSlug.ifBlank { "billar-aurora" }}';
             var lastSyncSeekAt = 0;
-            var realtimeChannel = null;
 
-            function onYouTubeIframeAPIReady() {
-              player = new YT.Player('player', {
-                events: {
-                  'onReady': function(e) {
-                    try {
-                      if (currentMuted) {
-                        e.target.mute();
-                      } else {
-                        e.target.unMute();
-                        e.target.setVolume(currentVolume);
-                      }
-                      if (!desiredPaused) {
-                        e.target.playVideo();
-                      } else {
-                        e.target.pauseVideo();
-                      }
-                    } catch(err) {}
-                  },
-                  'onStateChange': function(e) {
-                    if (e.data === 0 && !isEndedSent) { // YT.PlayerState.ENDED
-                      isEndedSent = true;
-                      if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
-                        window.AndroidBridge.onStateChange(0);
-                      }
-                    } else if (e.data === 1) { // PLAYING
-                      isEndedSent = false;
-                      if (desiredPaused) {
-                        try { e.target.pauseVideo(); } catch(_) {}
-                      }
-                    }
-                  },
-                  'onError': function(e) {
-                    console.error('YouTube Player Error:', e.data);
-                    if (window.AndroidBridge && window.AndroidBridge.onError) {
-                      window.AndroidBridge.onError(e.data);
-                    }
-                  }
+            // Send command directly to YouTube iframe via postMessage AND player instance
+            function sendCommand(func, args) {
+              try {
+                var ifr = document.getElementById('player');
+                if (ifr && ifr.contentWindow) {
+                  ifr.contentWindow.postMessage(JSON.stringify({
+                    event: 'command',
+                    func: func,
+                    args: args || []
+                  }), '*');
                 }
-              });
-            }
+              } catch(_) {}
 
-            function loadVideo(id) {
-              if (!id) return;
-              isEndedSent = false;
-              currentVideoId = id;
-              if (player && typeof player.loadVideoById === 'function') {
-                try {
-                  if (desiredPaused) {
-                    player.cueVideoById({ videoId: id, startSeconds: 0 });
-                  } else {
-                    player.loadVideoById({ videoId: id, startSeconds: 0 });
-                  }
-                } catch(e) {
-                  updateIframe(id);
+              try {
+                if (player && typeof player[func] === 'function') {
+                  player[func].apply(player, args || []);
                 }
-              } else {
-                updateIframe(id);
-              }
-            }
-
-            function updateIframe(id) {
-              var el = document.getElementById('player');
-              if (el) {
-                var auto = desiredPaused ? 0 : 1;
-                el.src = "https://www.youtube-nocookie.com/embed/" + id + "?autoplay=" + auto + "&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app";
-              }
+              } catch(_) {}
             }
 
             function playVideo() {
               desiredPaused = false;
-              try { if (player && player.playVideo) player.playVideo(); } catch(_){}
+              sendCommand('playVideo', []);
             }
 
             function pauseVideo() {
               desiredPaused = true;
-              try { if (player && player.pauseVideo) player.pauseVideo(); } catch(_){}
+              sendCommand('pauseVideo', []);
             }
 
             function togglePlayPause() {
@@ -303,146 +253,251 @@ private fun buildPlayerHtml(
 
             function seekTo(sec) {
               lastSyncSeekAt = Date.now();
-              try { if (player && player.seekTo) player.seekTo(sec, true); } catch(_){}
+              sendCommand('seekTo', [sec, true]);
             }
 
             function setVolume(v) {
               currentVolume = v;
-              try { if (player && player.setVolume) player.setVolume(v); } catch(_){}
+              sendCommand('setVolume', [v]);
             }
 
             function mute() {
               currentMuted = true;
-              try { if (player && player.mute) player.mute(); } catch(_){}
+              sendCommand('mute', []);
             }
 
             function unMute() {
               currentMuted = false;
-              try {
-                if (player && player.unMute) player.unMute();
-                if (player && player.setVolume) player.setVolume(currentVolume);
-              } catch(_){}
+              sendCommand('unMute', []);
+              sendCommand('setVolume', [currentVolume]);
             }
 
-            // --- SUPABASE REALTIME SYNC ENGINE ---
-            var SUPABASE_URL = "https://kbeljbnrnyxfjwmdpaew.supabase.co";
-            var SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWxqYm5ybnl4Zmp3bWRwYWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NjQ4MDgsImV4cCI6MjEwOTA0MDgwOH0.ykyPCpxUy9_Dqyx5PdgsdK1gYjuat82v-zMTGDrjxJU";
-
-            function connectSupabaseRealtime() {
-              if (!venueSlug || typeof window.supabase === 'undefined' || !window.supabase.createClient) {
-                return;
+            function loadVideo(id) {
+              if (!id) return;
+              isEndedSent = false;
+              currentVideoId = id;
+              if (desiredPaused) {
+                sendCommand('cueVideoById', [{ videoId: id, startSeconds: 0 }]);
+              } else {
+                sendCommand('loadVideoById', [{ videoId: id, startSeconds: 0 }]);
               }
+            }
+
+            // Capture YouTube iframe postMessage responses
+            window.addEventListener('message', function(e) {
               try {
-                var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-                var channel = client.channel('playback-control:' + venueSlug);
-
-                // 1. Instant Playback Commands (Play, Pause, Seek, Volume, Mute, Skip, Play Now)
-                channel.on('broadcast', { event: 'playback_command' }, function(msg) {
-                  if (!msg || !msg.payload) return;
-                  var cmd = msg.payload.command;
-                  var p = msg.payload.payload || {};
-
-                  if (cmd === 'pause') {
-                    pauseVideo();
-                  } else if (cmd === 'resume') {
-                    playVideo();
-                  } else if (cmd === 'toggle_pause') {
-                    togglePlayPause();
-                  } else if (cmd === 'seek') {
-                    var targetSec = Number(p.seconds || 0);
-                    seekTo(targetSec);
-                  } else if (cmd === 'set_volume') {
-                    var vol = Number(p.volume != null ? p.volume : 85);
-                    setVolume(vol);
-                    unMute();
-                  } else if (cmd === 'mute') {
-                    mute();
-                  } else if (cmd === 'unmute') {
-                    unMute();
-                  } else if (cmd === 'toggle_mute') {
-                    if (currentMuted) unMute(); else mute();
-                  } else if (cmd === 'skip') {
+                var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+                if (data && data.event === 'onStateChange') {
+                  if (data.info === 0 && !isEndedSent) { // ENDED
+                    isEndedSent = true;
                     if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
                       window.AndroidBridge.onStateChange(0);
                     }
-                  } else if (cmd === 'play_now' && p.track && p.track.youtubeVideoId) {
-                    desiredPaused = false;
-                    loadVideo(p.track.youtubeVideoId);
-                    seekTo(0);
-                    playVideo();
-                  }
-                });
-
-                // 2. Continuous Synchronization & Drift Correction (Cabina Audio -> TV Video)
-                channel.on('broadcast', { event: 'tv_playback_progress' }, function(msg) {
-                  if (!msg || !msg.payload) return;
-                  var p = msg.payload;
-                  var curr = p.currentTime;
-                  var isP = p.isPaused;
-                  var sentAt = p.sentAt;
-                  var trk = p.track;
-
-                  // Sync Pause state
-                  if (typeof isP === 'boolean') {
-                    if (isP) {
-                      if (!desiredPaused) pauseVideo();
-                    } else {
-                      if (desiredPaused) playVideo();
+                  } else if (data.info === 1) { // PLAYING
+                    isEndedSent = false;
+                    if (desiredPaused) {
+                      sendCommand('pauseVideo', []);
                     }
                   }
+                }
+              } catch(_) {}
+            });
 
-                  // Sync Track if changed
-                  if (trk && trk.youtubeVideoId && trk.youtubeVideoId !== currentVideoId) {
-                    currentVideoId = trk.youtubeVideoId;
-                    loadVideo(trk.youtubeVideoId);
-                  }
+            // YouTube Iframe API hook (if loaded)
+            var tag = document.createElement('script');
+            tag.src = "https://www.youtube-nocookie.com/iframe_api";
+            var first = document.getElementsByTagName('script')[0];
+            first.parentNode.insertBefore(tag, first);
 
-                  // High precision time sync
-                  if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused) {
-                    var latency = 0;
-                    if (typeof sentAt === 'number') {
-                      latency = Math.max(0, Math.min(1.5, (Date.now() - sentAt) / 1000));
-                    }
-                    var targetSec = curr + latency;
-                    if (player && typeof player.getCurrentTime === 'function') {
+            function onYouTubeIframeAPIReady() {
+              try {
+                player = new YT.Player('player', {
+                  events: {
+                    'onReady': function(e) {
                       try {
-                        var tvSec = player.getCurrentTime();
-                        var drift = Math.abs(tvSec - targetSec);
-                        // If drift is >= 0.7s and cooldown >= 2500ms, align TV
-                        if (drift >= 0.7 && (Date.now() - lastSyncSeekAt > 2500)) {
-                          seekTo(targetSec);
+                        if (currentMuted) {
+                          sendCommand('mute', []);
+                        } else {
+                          sendCommand('unMute', []);
+                          sendCommand('setVolume', [currentVolume]);
+                        }
+                        if (!desiredPaused) {
+                          sendCommand('playVideo', []);
+                        } else {
+                          sendCommand('pauseVideo', []);
                         }
                       } catch(_) {}
-                    }
-                  }
-
-                  // Volume & Mute if not overridden by admin audio
-                  if (!p.isFromAdminAudio) {
-                    if (typeof p.volume === 'number') setVolume(p.volume);
-                    if (typeof p.isMuted === 'boolean') {
-                      if (p.isMuted) mute(); else unMute();
+                    },
+                    'onStateChange': function(e) {
+                      if (e.data === 0 && !isEndedSent) {
+                        isEndedSent = true;
+                        if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
+                          window.AndroidBridge.onStateChange(0);
+                        }
+                      } else if (e.data === 1) {
+                        isEndedSent = false;
+                        if (desiredPaused) {
+                          sendCommand('pauseVideo', []);
+                        }
+                      }
+                    },
+                    'onError': function(e) {
+                      if (window.AndroidBridge && window.AndroidBridge.onError) {
+                        window.AndroidBridge.onError(e.data);
+                      }
                     }
                   }
                 });
-
-                channel.subscribe();
-                realtimeChannel = channel;
-              } catch(err) {
-                console.error('Realtime initialization error:', err);
-              }
+              } catch(_) {}
             }
 
-            // Poll until Supabase client is ready in window
-            var sbTries = 0;
-            function initRealtimeWhenReady() {
-              if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
-                connectSupabaseRealtime();
-              } else if (sbTries < 40) {
-                sbTries++;
-                setTimeout(initRealtimeWhenReady, 250);
-              }
+            // --- ZERO-DEPENDENCY NATIVE WEBSOCKET FOR INSTANT REALTIME (Sub-30ms) ---
+            var SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiZWxqYm5ybnl4Zmp3bWRwYWV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM0NjQ4MDgsImV4cCI6MjEwOTA0MDgwOH0.ykyPCpxUy9_Dqyx5PdgsdK1gYjuat82v-zMTGDrjxJU";
+            var ws = null;
+            var hbInterval = null;
+
+            function connectRealtimeWs() {
+              if (!venueSlug || typeof WebSocket === 'undefined') return;
+              try {
+                if (ws) {
+                  try { ws.close(); } catch(_) {}
+                }
+                var wsUrl = "wss://kbeljbnrnyxfjwmdpaew.supabase.co/realtime/v1/websocket?apikey=" + SUPABASE_KEY + "&vsn=1.0.0";
+                ws = new WebSocket(wsUrl);
+
+                ws.onopen = function() {
+                  // Join the broadcast channel for this venue
+                  ws.send(JSON.stringify({
+                    topic: "realtime:playback-control:" + venueSlug,
+                    event: "phx_join",
+                    payload: {
+                      config: {
+                        broadcast: { ack: false, self: false }
+                      }
+                    },
+                    ref: "join-tv-1"
+                  }));
+
+                  clearInterval(hbInterval);
+                  hbInterval = setInterval(function() {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                      ws.send(JSON.stringify({
+                        topic: "phoenix",
+                        event: "heartbeat",
+                        payload: {},
+                        ref: "hb"
+                      }));
+                    }
+                  }, 25000);
+                };
+
+                ws.onmessage = function(e) {
+                  try {
+                    var envelope = JSON.parse(e.data);
+                    var eventType = envelope.event;
+                    var payload = envelope.payload || {};
+
+                    // 1. Instant Playback Command from DJ Booth
+                    if (eventType === "playback_command") {
+                      var cmd = payload.command;
+                      var p = payload.payload || {};
+
+                      if (cmd === 'pause') {
+                        pauseVideo();
+                      } else if (cmd === 'resume') {
+                        playVideo();
+                      } else if (cmd === 'toggle_pause') {
+                        togglePlayPause();
+                      } else if (cmd === 'seek') {
+                        var sec = Number(p.seconds || 0);
+                        seekTo(sec);
+                      } else if (cmd === 'set_volume') {
+                        var vol = Number(p.volume != null ? p.volume : 85);
+                        setVolume(vol);
+                        unMute();
+                      } else if (cmd === 'mute') {
+                        mute();
+                      } else if (cmd === 'unmute') {
+                        unMute();
+                      } else if (cmd === 'toggle_mute') {
+                        if (currentMuted) unMute(); else mute();
+                      } else if (cmd === 'skip') {
+                        if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
+                          window.AndroidBridge.onStateChange(0);
+                        }
+                      } else if (cmd === 'play_now' && p.track && p.track.youtubeVideoId) {
+                        desiredPaused = false;
+                        loadVideo(p.track.youtubeVideoId);
+                        seekTo(0);
+                        playVideo();
+                      }
+                    } else if (eventType === "tv_playback_progress") {
+                      // 2. Strict Continuous Time Sync: The TV synchronizes to the Cabina!
+                      var curr = payload.currentTime;
+                      var isP = payload.isPaused;
+                      var sentAt = payload.sentAt;
+                      var trk = payload.track;
+
+                      // Sync Pause from master Cabina
+                      if (typeof isP === 'boolean') {
+                        if (isP) {
+                          if (!desiredPaused) pauseVideo();
+                        } else {
+                          if (desiredPaused) playVideo();
+                        }
+                      }
+
+                      // Sync Track if changed
+                      if (trk && trk.youtubeVideoId && trk.youtubeVideoId !== currentVideoId) {
+                        currentVideoId = trk.youtubeVideoId;
+                        loadVideo(trk.youtubeVideoId);
+                      }
+
+                      // Precise Drift Correction (Cabina is Master!)
+                      if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused) {
+                        var latency = 0;
+                        if (typeof sentAt === 'number') {
+                          latency = Math.max(0, Math.min(1.5, (Date.now() - sentAt) / 1000));
+                        }
+                        var targetSec = curr + latency;
+
+                        var tvSec = -1;
+                        if (player && typeof player.getCurrentTime === 'function') {
+                          try { tvSec = player.getCurrentTime() || 0; } catch(_) {}
+                        }
+                        if (tvSec >= 0) {
+                          var drift = Math.abs(tvSec - targetSec);
+                          // If drift is >= 0.7s and cooldown >= 2500ms, align TV to Cabina
+                          if (drift >= 0.7 && (Date.now() - lastSyncSeekAt > 2500)) {
+                            seekTo(targetSec);
+                          }
+                        }
+                      }
+
+                      // Volume & Mute if not overridden by admin audio
+                      if (!payload.isFromAdminAudio) {
+                        if (typeof payload.volume === 'number') setVolume(payload.volume);
+                        if (typeof payload.isMuted === 'boolean') {
+                          if (payload.isMuted) mute(); else unMute();
+                        }
+                      }
+                    }
+                  } catch(err) {}
+                };
+
+                ws.onclose = function() {
+                  clearInterval(hbInterval);
+                  setTimeout(connectRealtimeWs, 3000);
+                };
+
+                ws.onerror = function() {
+                  try { ws.close(); } catch(_) {}
+                };
+              } catch(_) {}
             }
-            initRealtimeWhenReady();
+
+            // Start WebSocket Realtime immediately
+            connectRealtimeWs();
           </script>
         </body>
         </html>

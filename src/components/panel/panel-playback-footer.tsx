@@ -82,6 +82,8 @@ export function PanelPlaybackFooter({
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const audioEngineRef = useRef<PanelAudioEngineRef>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
+  currentTrackRef.current = currentTrack;
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
@@ -333,9 +335,16 @@ export function PanelPlaybackFooter({
               isPaused?: boolean;
               trackId?: string;
               isVideoFullscreen?: boolean;
+              isFromAdminAudio?: boolean;
             };
           }) => {
             if (!active || !msg.payload) return;
+            // The Cabina is the MASTER audio authority.
+            // Under NO circumstance should loopback echo or external TV progress overwrite
+            // Cabina's local elapsed slider or pause state!
+            if (msg.payload.isFromAdminAudio) return;
+            if (currentTrackRef.current) return;
+
             const { currentTime, duration: d, isPaused: p } = msg.payload;
             if (typeof currentTime === "number" && !isNaN(currentTime)) {
               setElapsed(Math.floor(currentTime));

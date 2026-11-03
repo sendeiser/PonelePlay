@@ -323,7 +323,7 @@ fun NativeTvApp(
                     }
                 }
             }
-            delay(1200)
+            delay(1000)
         }
     }
 
