@@ -432,13 +432,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }
 
   const handleUnlockAudio = useCallback(() => {
-    // TV screen is display-only: keep muted, ensure video playback
-    engine.mute?.();
-    engine.setVolume?.(0);
     void engine.play();
     setAudioUnlocked(true);
-    setIsMuted(true);
-  }, [engine]);
+    if (isMuted) {
+      engine.mute?.();
+    } else {
+      engine.unMute?.();
+      engine.setVolume?.(volume);
+    }
+  }, [engine, isMuted, volume]);
 
   // Sync isPlaying with the player
   useEffect(() => {
@@ -449,10 +451,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     }
   }, [isPlaying, engine]);
 
-  // Ensure TV player stays muted at all times so primary audio comes exclusively from Admin Cabina
+  // Sync volume and mute with the TV engine
   useEffect(() => {
-    engine.setVolume?.(0);
-    engine.mute?.();
+    engine.setVolume?.(volume);
+    if (isMuted) {
+      engine.mute?.();
+    } else {
+      engine.unMute?.();
+    }
   }, [volume, isMuted, engine]);
 
   // Global click anywhere to ensure video playback begins smoothly
@@ -475,13 +481,29 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (key === "f" || key === "enter") {
         toggleVideoFullscreen();
       }
-      if (key === "v" || key === "m" || key === "p") {
+      if (key === "v" || key === "p") {
         toggleVideoMode();
         setLiveToast({
           icon: videoMode ? "queue_music" : "smart_display",
           message: videoMode ? "Modo: Énfasis en Playlist & Propuestas" : "Modo: Video Salón HD",
         });
         setTimeout(() => setLiveToast(null), 3000);
+      }
+      if (key === "m") {
+        setIsMuted((prev) => {
+          const next = !prev;
+          if (next) engine.mute?.();
+          else {
+            engine.unMute?.();
+            engine.setVolume?.(85);
+          }
+          setLiveToast({
+            icon: next ? "volume_off" : "volume_up",
+            message: next ? "Audio TV Silenciado" : "Audio TV Activado (85%)",
+          });
+          setTimeout(() => setLiveToast(null), 3000);
+          return next;
+        });
       }
       if (key === "h" || key === "?") {
         setShowHotkeysHelp((prev) => !prev);
@@ -950,8 +972,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 void engine.play?.();
               }
             }
-            if (track && (!nowPlayingRef.current || nowPlayingRef.current.itemId !== track.itemId)) {
+            if (track && (!nowPlayingRef.current || nowPlayingRef.current.title.toLowerCase() !== track.title.toLowerCase())) {
               setManualNowPlaying(track);
+              void engine.load(track);
             }
           },
         )
@@ -1200,14 +1223,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 <iframe
                   id="poneleplay-tv-iframe"
                   ref={iframeRef}
-                  src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+                  src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1${isMuted ? "&mute=1" : ""}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
                   title={nowPlaying?.title || "TV Player"}
                   className="w-full h-full border-0 pointer-events-none select-none object-cover"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
                   onLoad={() => {
                     engine.handshake();
-                    engine.mute?.();
+                    if (isMuted) {
+                      engine.mute?.();
+                    } else {
+                      engine.unMute?.();
+                      engine.setVolume?.(volume);
+                    }
                   }}
                 />
               )}

@@ -13,7 +13,6 @@ import type { YTPlayerInstance } from "@/types/youtube";
 import { loadYoutubeIframeApi } from "@/components/player/youtube-engine";
 import { resolveVideoId } from "@/components/player/iframe-engine";
 import { createBrowserSupabase } from "@/lib/api/supabase/browser";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 
 export interface PanelAudioEngineProps {
   slug: string;
@@ -35,7 +34,6 @@ export interface PanelAudioEngineRef {
 export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngineProps>(
   function PanelAudioEngine(
     {
-      slug,
       currentTrack,
       isPaused,
       volume,
@@ -66,24 +64,6 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     onTrackEndedRef.current = onTrackEnded;
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
-
-    // Realtime channel for broadcasting playback progress to TV
-    const channelRef = useRef<RealtimeChannel | null>(null);
-
-    useEffect(() => {
-      const supabase = createBrowserSupabase();
-      const existing = supabase.getChannels().find(
-        (c) =>
-          c.topic === `realtime:playback-control:${slug}` ||
-          c.topic === `playback-control:${slug}`,
-      );
-
-      const ch = existing ?? supabase.channel(`playback-control:${slug}`);
-      if (ch.state !== "joined" && ch.state !== "joining") {
-        ch.subscribe();
-      }
-      channelRef.current = ch;
-    }, [slug]);
 
     // Autoplay Unlock mechanism (triggers on any user click / keydown)
     const unlockAudio = useCallback(() => {
@@ -230,31 +210,29 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         return;
       }
 
-      // Initialize YouTube API and Player for the first time
+      // Initialize YouTube API and Player
       void loadYoutubeIframeApi().then(() => {
         if (!isMounted || !containerRef.current) return;
         if (playerRef.current) return;
 
         try {
           if (!window.YT || !window.YT.Player) {
-            // Adblocker or offline fallback: inject hidden iframe with postMessage
+            // Direct iframe fallback if API blocked
             const originParam =
               typeof window !== "undefined"
                 ? `&origin=${encodeURIComponent(window.location.origin)}`
                 : "";
-            containerRef.current.innerHTML = `<iframe id="admin-audio-fallback-iframe" width="320" height="180" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&enablejsapi=1&controls=0&playsinline=1${originParam}" allow="autoplay; encrypted-media" style="width:320px;height:180px;border:none;"></iframe>`;
+            containerRef.current.innerHTML = `<iframe id="admin-audio-fallback-iframe" width="160" height="90" src="https://www.youtube.com/embed/${videoId}?autoplay=1&enablejsapi=1&controls=0&playsinline=1${originParam}" allow="autoplay; encrypted-media" style="width:160px;height:90px;border:none;"></iframe>`;
             return;
           }
 
-          // Create an unmanaged child node for YT.Player so React DOM diffing isn't broken
           const host = document.createElement("div");
           host.id = "admin-audio-yt-host";
           containerRef.current.appendChild(host);
 
           playerRef.current = new window.YT.Player(host, {
-            host: "https://www.youtube-nocookie.com",
-            width: "320",
-            height: "180",
+            width: "160",
+            height: "90",
             videoId,
             playerVars: {
               autoplay: 1,
@@ -281,7 +259,6 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                     ev.target.playVideo();
                   }
                 } catch {
-                  // Autoplay blocked by browser
                   setIsBlockedState(true);
                   onAudioBlockedChange?.(true);
                 }
@@ -294,11 +271,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
               },
               onError: (event) => {
                 console.warn("YouTube audio playback error code:", event.data);
-                // 101/150: embedding restricted by owner; 2: invalid ID
                 if (event.data === 150 || event.data === 101 || event.data === 2) {
                   setTimeout(() => {
                     onTrackEndedRef.current();
-                  }, 1500);
+                  }, 800);
                 }
               },
             },
@@ -371,7 +347,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       }
     }, [volume, isMuted, currentTrack?.source]);
 
-    // Progress polling & Realtime telemetry broadcast to TV
+    // Progress polling
     useEffect(() => {
       if (typeof window === "undefined") return;
 
@@ -395,22 +371,6 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
 
         if (currentTime >= 0) {
           onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
-
-          // Broadcast to TV screen via Supabase Realtime so TV visual display stays in sync
-          if (channelRef.current && typeof channelRef.current.send === "function" && currentTrackRef.current) {
-            void channelRef.current.send({
-              type: "broadcast",
-              event: "tv_playback_progress",
-              payload: {
-                currentTime,
-                duration,
-                isPaused: isPausedRef.current,
-                trackId: currentTrackRef.current.trackId,
-                track: currentTrackRef.current,
-                isFromAdminAudio: true,
-              },
-            });
-          }
         }
       }, 1000);
 
@@ -428,7 +388,6 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           try {
             playerRef.current.seekTo(seconds, true);
           } catch {
-            // Fallback postMessage
             const directIframe = document.getElementById(
               "admin-audio-fallback-iframe",
             ) as HTMLIFrameElement | null;
@@ -449,10 +408,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       <div
         id="admin-cabina-audio-engine"
         aria-hidden="true"
-        className="fixed -top-[9999px] -left-[9999px] w-[320px] h-[180px] opacity-[0.001] pointer-events-none overflow-hidden z-[-999]"
+        className="fixed bottom-2 right-2 w-[160px] h-[90px] opacity-0 pointer-events-none overflow-hidden z-0"
         tabIndex={-1}
       >
-        {/* Unmanaged container where YouTube iframe mounts */}
+        {/* Container where YouTube iframe mounts inside viewport */}
         <div ref={containerRef} className="w-full h-full" />
         {/* HTML5 audio element for uploaded tracks */}
         <audio ref={html5AudioRef} preload="auto" className="hidden" />
@@ -460,4 +419,3 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     );
   },
 );
-

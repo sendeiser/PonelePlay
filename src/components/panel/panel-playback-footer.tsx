@@ -29,6 +29,9 @@ import { vetoItem } from "@/lib/api/panel-actions";
 import { castVote } from "@/lib/api/votes";
 import type { QueueItemView } from "@/lib/api/contracts";
 import type { PlayerTrack } from "@/lib/api/player";
+import { fetchFallback } from "@/lib/api/catalog";
+import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   fetchPlaybackState,
   togglePausePlayback,
@@ -59,6 +62,7 @@ export function PanelPlaybackFooter({
   isSidebarCollapsed = false,
 }: PanelPlaybackFooterProps) {
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
+  const [fallbackTracks, setFallbackTracks] = useState<PlayerTrack[]>([]);
   const [isPaused, setIsPaused] = useState(false);
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
@@ -75,30 +79,123 @@ export function PanelPlaybackFooter({
   const [drawerTab, setDrawerTab] = useState<"queue" | "candidates">("queue");
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const audioEngineRef = useRef<PanelAudioEngineRef>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
   const { state: nightState, refresh: refreshNightState } = useNightState(nightSource);
 
+  // Load venue fallback tracks so cabina and TV always have music playing
   useEffect(() => {
-    if (!currentTrack && nightState?.nowPlaying) {
-      setCurrentTrack({
-        itemId: nightState.nowPlaying.id,
-        trackId: nightState.nowPlaying.trackId,
-        title: nightState.nowPlaying.title,
-        artist: nightState.nowPlaying.artist,
-        source: nightState.nowPlaying.source,
-        durationSeconds: nightState.nowPlaying.durationSeconds ?? 210,
-        youtubeVideoId: nightState.nowPlaying.youtubeVideoId || undefined,
-        thumbnailUrl: nightState.nowPlaying.thumbnailUrl ?? null,
-        voteCount: nightState.nowPlaying.voteCount,
-      });
+    let active = true;
+    async function loadFallback() {
+      try {
+        const { createBrowserSupabase } = await import("@/lib/api/supabase/browser");
+        const supabase = createBrowserSupabase();
+        const { data: vData } = await supabase
+          .from("venues")
+          .select("id")
+          .eq("slug", slug)
+          .single();
+        if (vData && typeof vData === "object" && "id" in vData && active) {
+          const venueId = (vData as { id: string }).id;
+          const fbs = await fetchFallback(venueId);
+          if (active && fbs.length > 0) {
+            setFallbackTracks(
+              fbs.map((tr) => ({
+                itemId: `fb-${tr.id}`,
+                trackId: tr.id,
+                title: tr.title,
+                artist: tr.artist,
+                source: tr.source,
+                durationSeconds: tr.durationSeconds ?? 210,
+                youtubeVideoId: tr.youtubeVideoId ?? "T_FkEw27XJ0",
+                thumbnailUrl: tr.thumbnailUrl ?? null,
+                voteCount: 0,
+              }))
+            );
+          }
+        }
+      } catch {
+        // Fallback
+      }
     }
-  }, [currentTrack, nightState?.nowPlaying]);
+    void loadFallback();
+    return () => {
+      active = false;
+    };
+  }, [slug]);
 
   const { activeQueue, candidateProposals } = useMemo(() => {
     return partitionQueueAndProposals(nightState?.queue ?? [], nightState?.candidates ?? []);
   }, [nightState?.queue, nightState?.candidates]);
+
+  const effectiveFallbackTracks: PlayerTrack[] = useMemo(() => {
+    if (fallbackTracks.length > 0) return fallbackTracks;
+    return [
+      {
+        itemId: demoNowPlaying.id,
+        trackId: demoNowPlaying.id,
+        title: demoNowPlaying.title,
+        artist: demoNowPlaying.artist,
+        source: demoNowPlaying.source,
+        durationSeconds: 207,
+        youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
+        thumbnailUrl: null,
+        voteCount: demoNowPlaying.votes,
+      },
+      ...demoQueue.map((item) => ({
+        itemId: item.id,
+        trackId: item.id,
+        title: item.title,
+        artist: item.artist,
+        source: item.source,
+        durationSeconds: 252,
+        youtubeVideoId: item.youtubeVideoId,
+        thumbnailUrl: null,
+        voteCount: item.votes,
+      })),
+    ];
+  }, [fallbackTracks]);
+
+  // Synchronize currentTrack with nightState, queue, or fallback tracks
+  useEffect(() => {
+    if (nightState?.nowPlaying) {
+      const live = nightState.nowPlaying;
+      if (!currentTrack || currentTrack.itemId !== live.id) {
+        setCurrentTrack({
+          itemId: live.id,
+          trackId: live.trackId,
+          title: live.title,
+          artist: live.artist,
+          source: live.source,
+          durationSeconds: live.durationSeconds ?? 210,
+          youtubeVideoId: live.youtubeVideoId || undefined,
+          thumbnailUrl: live.thumbnailUrl ?? null,
+          voteCount: live.voteCount,
+        });
+      }
+      return;
+    }
+
+    if (!currentTrack) {
+      if (activeQueue.length > 0) {
+        setCurrentTrack({
+          itemId: activeQueue[0].id,
+          trackId: activeQueue[0].trackId,
+          title: activeQueue[0].title,
+          artist: activeQueue[0].artist,
+          source: activeQueue[0].source || "catalog",
+          durationSeconds: activeQueue[0].durationSeconds ?? 210,
+          youtubeVideoId: activeQueue[0].youtubeVideoId || undefined,
+          thumbnailUrl: activeQueue[0].thumbnailUrl ?? null,
+          voteCount: activeQueue[0].voteCount,
+        });
+      } else if (effectiveFallbackTracks.length > 0) {
+        setCurrentTrack(effectiveFallbackTracks[0]);
+      }
+    }
+  }, [currentTrack, nightState?.nowPlaying, activeQueue, effectiveFallbackTracks]);
 
   // Drawer Actions: Play now, Veto, Boost vote
   const handlePlayQueueItemNow = async (item: QueueItemView) => {
@@ -162,7 +259,7 @@ export function PanelPlaybackFooter({
   const loadState = useCallback(async () => {
     try {
       const st = await fetchPlaybackState(slug);
-      if (st.currentTrack) setCurrentTrack(st.currentTrack);
+      if (st.currentTrack && !nightState?.nowPlaying) setCurrentTrack(st.currentTrack);
       setIsPaused(st.isPaused);
       setVolume(st.volume ?? 85);
       setIsMuted(st.isMuted ?? false);
@@ -170,7 +267,7 @@ export function PanelPlaybackFooter({
     } catch {
       // Non-blocking fallback
     }
-  }, [slug]);
+  }, [slug, nightState?.nowPlaying]);
 
   useEffect(() => {
     void loadState();
@@ -263,10 +360,12 @@ export function PanelPlaybackFooter({
           },
         )
         .subscribe();
+      channelRef.current = channel;
     });
 
     return () => {
       active = false;
+      channelRef.current = null;
       if (channel) {
         void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
           const supabase = createBrowserSupabase();
@@ -287,6 +386,7 @@ export function PanelPlaybackFooter({
 
   // Handlers
   const handleTogglePlay = async () => {
+    audioEngineRef.current?.unlockAudio();
     if (!currentTrack && activeQueue.length > 0) {
       void handlePlayQueueItemNow(activeQueue[0]);
       return;
@@ -304,14 +404,72 @@ export function PanelPlaybackFooter({
 
   const handleSkipNext = async () => {
     showToast("⏭️ Salteando a la siguiente canción...");
-    try {
-      await skipPlayback(slug);
+    let nextTrack: PlayerTrack | null = null;
+    if (activeQueue.length > 0) {
+      nextTrack = {
+        itemId: activeQueue[0].id,
+        trackId: activeQueue[0].trackId,
+        title: activeQueue[0].title,
+        artist: activeQueue[0].artist,
+        source: activeQueue[0].source || "catalog",
+        durationSeconds: activeQueue[0].durationSeconds ?? 210,
+        youtubeVideoId: activeQueue[0].youtubeVideoId || undefined,
+        thumbnailUrl: activeQueue[0].thumbnailUrl ?? null,
+        voteCount: activeQueue[0].voteCount,
+      };
+    } else if (effectiveFallbackTracks.length > 0) {
+      const curIdx = effectiveFallbackTracks.findIndex(
+        (t) =>
+          t.trackId === currentTrack?.trackId ||
+          t.youtubeVideoId === currentTrack?.youtubeVideoId ||
+          t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
+      );
+      const nextIdx = curIdx >= 0 ? (curIdx + 1) % effectiveFallbackTracks.length : 1;
+      nextTrack = effectiveFallbackTracks[nextIdx];
+    }
+
+    if (nextTrack) {
+      setCurrentTrack(nextTrack);
       setElapsed(0);
-      void loadState();
-    } catch {
-      // Ignore
+      setVideoDuration(null);
+      setIsPaused(false);
+      try {
+        await sendPlaybackCommand(slug, "play_now", { track: nextTrack });
+      } catch {
+        // Non-blocking
+      }
+    } else {
+      try {
+        await skipPlayback(slug);
+        setElapsed(0);
+        void loadState();
+      } catch {
+        // Non-blocking
+      }
     }
   };
+
+  // Keyboard shortcuts in Admin panel (Space = Play/Pause, S = Skip)
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+      if (e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void handleSkipNext();
+      } else if (e.code === "Space") {
+        e.preventDefault();
+        void handleTogglePlay();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const handleRestart = async () => {
     if (currentTrack) {
@@ -719,6 +877,20 @@ export function PanelPlaybackFooter({
         onProgress={(curr, dur) => {
           setElapsed(curr);
           if (dur) setVideoDuration(dur);
+          if (channelRef.current && currentTrack) {
+            void channelRef.current.send({
+              type: "broadcast",
+              event: "tv_playback_progress",
+              payload: {
+                currentTime: curr,
+                duration: dur ?? currentTrack.durationSeconds ?? 210,
+                isPaused,
+                trackId: currentTrack.trackId,
+                track: currentTrack,
+                isFromAdminAudio: true,
+              },
+            });
+          }
         }}
         onAudioBlockedChange={(blocked) => setIsAudioBlocked(blocked)}
       />
