@@ -14,7 +14,6 @@ import {
   openNight,
   resolveVotingRound,
   setProposalsEnabled,
-  skipCurrent,
   vetoItem,
 } from "@/lib/api/panel-actions";
 import { nightPhase } from "@/lib/domain/night";
@@ -73,6 +72,13 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       setRoundSecondsLeft(state.votingRound.remainingSeconds);
     }
   }, [state?.votingRound?.remainingSeconds]);
+
+  // Auto-dismiss operational error messages after 6 seconds
+  useEffect(() => {
+    if (!errorMsg) return;
+    const timer = setTimeout(() => setErrorMsg(null), 6000);
+    return () => clearTimeout(timer);
+  }, [errorMsg]);
 
   // Local ticker for round seconds
   useEffect(() => {
@@ -254,16 +260,13 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     try {
       const { skipPlayback } = await import("@/lib/api/master-control");
       await skipPlayback(slug);
-      if (state?.nowPlaying) {
-        await skipCurrent(state.nowPlaying.id, staffToken);
-      }
       await refresh();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Error al saltear canción");
     } finally {
       setActionLoading(false);
     }
-  }, [slug, state?.nowPlaying, staffToken, refresh]);
+  }, [slug, refresh]);
 
   // Keyboard shortcuts for staff (F4: Tickets, Space: Play/Pause, S: Skip, M: Mute)
   useEffect(() => {
@@ -360,7 +363,12 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     setActionLoading(true);
     setErrorMsg(null);
     try {
-      await vetoItem(itemId, staffToken);
+      if (nowPlaying && itemId === nowPlaying.id) {
+        const { skipPlayback } = await import("@/lib/api/master-control");
+        await skipPlayback(slug);
+      } else {
+        await vetoItem(itemId, staffToken);
+      }
       setConfirmVetoId(null);
       await refresh();
     } catch (err: unknown) {
@@ -569,10 +577,20 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       {errorMsg && (
         <div
           role="alert"
-          className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2"
+          className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center justify-between gap-3 shadow-lg"
         >
-          <span className="material-symbols-outlined text-base text-red-400">error</span>
-          <span>{errorMsg}</span>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base text-red-400">error</span>
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMsg(null)}
+            className="text-red-300 hover:text-white p-1 rounded hover:bg-red-900/40 transition-colors"
+            title="Cerrar mensaje"
+          >
+            <span className="material-symbols-outlined text-base leading-none">close</span>
+          </button>
         </div>
       )}
 

@@ -93,6 +93,8 @@ function mapModerationError(code: string): string {
       return "No se encontró la canción en la cola";
     case "not_queued":
       return "Solo se pueden vetar temas que estén en cola de espera";
+    case "invalid_status":
+      return "El tema ya fue reproducido o salteado";
     case "forbidden":
       return "No tenés permisos para realizar esta acción";
     default:
@@ -104,6 +106,15 @@ export async function skipCurrent(
   queueItemId: string,
   token?: string,
 ): Promise<void> {
+  if (
+    !queueItemId ||
+    queueItemId.startsWith("fb-") ||
+    queueItemId.startsWith("demo-") ||
+    queueItemId.startsWith("manual-")
+  ) {
+    return;
+  }
+
   if (token) {
     const res = await fetch("/api/staff/action", {
       method: "POST",
@@ -131,7 +142,11 @@ export async function skipCurrent(
   }
 
   const res = data as { ok?: boolean; error?: string } | null;
-  if (res && !res.ok && res.error) {
+  if (!res || res.ok || res.error === "invalid_status") {
+    return;
+  }
+
+  if (res.error) {
     throw new Error(mapModerationError(res.error));
   }
 }
@@ -140,6 +155,15 @@ export async function vetoItem(
   queueItemId: string,
   token?: string,
 ): Promise<void> {
+  if (
+    !queueItemId ||
+    queueItemId.startsWith("fb-") ||
+    queueItemId.startsWith("demo-") ||
+    queueItemId.startsWith("manual-")
+  ) {
+    return;
+  }
+
   if (token) {
     const res = await fetch("/api/staff/action", {
       method: "POST",
@@ -162,13 +186,29 @@ export async function vetoItem(
     p_action: "veto",
   } as never);
 
-  if (error) {
-    throw new Error(error.message);
+  const res = data as { ok?: boolean; error?: string } | null;
+  if (!error && res && res.ok) {
+    return;
   }
 
-  const res = data as { ok?: boolean; error?: string } | null;
+  // Fallback for proposed items or direct owner veto: update status directly in queue_items if table query is available
+  if (typeof supabase.from === "function") {
+    const { error: directErr } = await supabase
+      .from("queue_items")
+      .update({ status: "vetoed" as never, ended_at: new Date().toISOString() })
+      .eq("id", queueItemId);
+
+    if (!directErr) {
+      return;
+    }
+  }
+
   if (res && !res.ok && res.error) {
     throw new Error(mapModerationError(res.error));
+  }
+
+  if (error) {
+    throw new Error(error.message);
   }
 }
 
