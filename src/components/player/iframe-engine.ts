@@ -47,7 +47,7 @@ export function createIframeEngine(
   let lastPlayerState: number | null = null;
 
   let desiredVolume: number | null = 85;
-  let desiredMuted: boolean | null = false;
+  let desiredMuted: boolean | null = true;
   let desiredPlaying = true;
 
   function buildEmbedUrl(videoId: string, startSeconds = 0): string {
@@ -59,7 +59,7 @@ export function createIframeEngine(
       typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : "";
     const startParam = startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : "";
     const originParam = origin ? `&origin=${origin}&widget_referrer=${origin}` : "";
-    return `https://www.youtube.com/embed/${cleanId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${startParam}${originParam}`;
+    return `https://www.youtube.com/embed/${cleanId}?autoplay=1&mute=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${startParam}${originParam}`;
   }
 
   function post(func: string, args: unknown[] = []) {

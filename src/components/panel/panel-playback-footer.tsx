@@ -405,26 +405,52 @@ export function PanelPlaybackFooter({
   const handleSkipNext = async () => {
     showToast("⏭️ Salteando a la siguiente canción...");
     let nextTrack: PlayerTrack | null = null;
+
     if (activeQueue.length > 0) {
-      nextTrack = {
-        itemId: activeQueue[0].id,
-        trackId: activeQueue[0].trackId,
-        title: activeQueue[0].title,
-        artist: activeQueue[0].artist,
-        source: activeQueue[0].source || "catalog",
-        durationSeconds: activeQueue[0].durationSeconds ?? 210,
-        youtubeVideoId: activeQueue[0].youtubeVideoId || undefined,
-        thumbnailUrl: activeQueue[0].thumbnailUrl ?? null,
-        voteCount: activeQueue[0].voteCount,
-      };
-    } else if (effectiveFallbackTracks.length > 0) {
+      const curIdx = activeQueue.findIndex(
+        (t) =>
+          t.id === currentTrack?.itemId ||
+          t.trackId === currentTrack?.trackId ||
+          t.youtubeVideoId === currentTrack?.youtubeVideoId ||
+          t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
+      );
+      if (curIdx >= 0 && curIdx < activeQueue.length - 1) {
+        const item = activeQueue[curIdx + 1];
+        nextTrack = {
+          itemId: item.id,
+          trackId: item.trackId,
+          title: item.title,
+          artist: item.artist,
+          source: item.source || "catalog",
+          durationSeconds: item.durationSeconds ?? 210,
+          youtubeVideoId: item.youtubeVideoId || undefined,
+          thumbnailUrl: item.thumbnailUrl ?? null,
+          voteCount: item.voteCount,
+        };
+      } else if (curIdx === -1) {
+        const item = activeQueue[0];
+        nextTrack = {
+          itemId: item.id,
+          trackId: item.trackId,
+          title: item.title,
+          artist: item.artist,
+          source: item.source || "catalog",
+          durationSeconds: item.durationSeconds ?? 210,
+          youtubeVideoId: item.youtubeVideoId || undefined,
+          thumbnailUrl: item.thumbnailUrl ?? null,
+          voteCount: item.voteCount,
+        };
+      }
+    }
+
+    if (!nextTrack && effectiveFallbackTracks.length > 0) {
       const curIdx = effectiveFallbackTracks.findIndex(
         (t) =>
           t.trackId === currentTrack?.trackId ||
           t.youtubeVideoId === currentTrack?.youtubeVideoId ||
           t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
       );
-      const nextIdx = curIdx >= 0 ? (curIdx + 1) % effectiveFallbackTracks.length : 1;
+      const nextIdx = curIdx >= 0 ? (curIdx + 1) % effectiveFallbackTracks.length : 0;
       nextTrack = effectiveFallbackTracks[nextIdx];
     }
 

@@ -48,6 +48,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const html5AudioRef = useRef<HTMLAudioElement>(null);
     const playerRef = useRef<YTPlayerInstance | null>(null);
     const ytInitializedRef = useRef(false);
+    const currentVideoIdRef = useRef<string>("");
     const isUnlockedRef = useRef(false);
     const [, setIsBlockedState] = useState(false);
 
@@ -191,6 +192,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
 
       // If YouTube player already initialized, load next video
       if (playerRef.current && ytInitializedRef.current) {
+        if (currentVideoIdRef.current === videoId) {
+          return;
+        }
+        currentVideoIdRef.current = videoId;
         try {
           playerRef.current.loadVideoById(videoId);
           playerRef.current.setVolume(isMutedRef.current ? 0 : volumeRef.current);
@@ -230,6 +235,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           host.id = "admin-audio-yt-host";
           containerRef.current.appendChild(host);
 
+          currentVideoIdRef.current = videoId;
           playerRef.current = new window.YT.Player(host, {
             width: "160",
             height: "90",

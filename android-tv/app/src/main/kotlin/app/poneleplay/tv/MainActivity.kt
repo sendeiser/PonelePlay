@@ -101,7 +101,8 @@ class MainActivity : ComponentActivity() {
             keyCode == KeyEvent.KEYCODE_INFO ||
             keyCode == KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK ||
             keyCode == KeyEvent.KEYCODE_V ||
-            keyCode == KeyEvent.KEYCODE_M
+            keyCode == KeyEvent.KEYCODE_M ||
+            keyCode == KeyEvent.KEYCODE_P
         ) {
             webViewInstance?.evaluateJavascript("window.toggleTvScreenMode && window.toggleTvScreenMode()", null)
             return true
@@ -280,7 +281,11 @@ fun TVPlayerApp(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { context ->
+                val cookieManager = android.webkit.CookieManager.getInstance()
+                cookieManager.setAcceptCookie(true)
+
                 WebView(context).apply {
+                    cookieManager.setAcceptThirdPartyCookies(this, true)
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -300,7 +305,7 @@ fun TVPlayerApp(
                         offscreenPreRaster = false // Saves GPU texture memory on TV boxes
                         textZoom = displayZoom
                         userAgentString =
-                            "Mozilla/5.0 (Linux; Android 14; PonelePlayTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                            "Mozilla/5.0 (Linux; Android 12; BRAVIA 4K VH2 Build/BRAVIA_VH2_UC) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 Large Screen"
                     }
 
                     setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -328,6 +333,18 @@ fun TVPlayerApp(
                                 isLoading = false
                                 hasError = true
                             }
+                        }
+
+                        override fun onRenderProcessGone(
+                            view: WebView?,
+                            detail: android.webkit.RenderProcessGoneDetail?
+                        ): Boolean {
+                            try {
+                                view?.destroy()
+                            } catch (_: Exception) {}
+                            isLoading = true
+                            hasError = true
+                            return true
                         }
                     }
 

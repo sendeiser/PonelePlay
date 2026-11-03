@@ -128,7 +128,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, []);
 
   const [volume, setVolume] = useState(85);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
@@ -622,6 +622,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const nowPlayingRef = useRef(nowPlaying);
   nowPlayingRef.current = nowPlaying;
   const lastCommandSeqRef = useRef<number | null>(null);
+  const lastAdminProgressAtRef = useRef<number>(0);
 
 
   const handleSeek = useCallback(
@@ -694,7 +695,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   useEffect(
     () =>
       engine.onEnded(() => {
-        void handleSkipNextRef.current(false);
+        if (Date.now() - lastAdminProgressAtRef.current > 12000) {
+          void handleSkipNextRef.current(false);
+        }
       }),
     [engine],
   );
@@ -954,11 +957,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             if (typeof currentTime === "number" && !isNaN(currentTime)) {
               setElapsed(Math.floor(currentTime));
               elapsedRef.current = Math.floor(currentTime);
-              // Gently synchronize TV video position if drifting from Admin sound by > 2.5s
-              const tvTime = engine.getCurrentTime?.() ?? 0;
-              if (Math.abs(tvTime - currentTime) > 2.5) {
-                engine.seekTo?.(currentTime);
-              }
+              lastAdminProgressAtRef.current = Date.now();
             }
             if (typeof d === "number" && !isNaN(d) && d > 0) {
               setVideoDuration(Math.floor(d));
@@ -972,9 +971,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 void engine.play?.();
               }
             }
-            if (track && (!nowPlayingRef.current || nowPlayingRef.current.title.toLowerCase() !== track.title.toLowerCase())) {
-              setManualNowPlaying(track);
-              void engine.load(track);
+            if (track) {
+              const cur = nowPlayingRef.current;
+              const isDiff = !cur ||
+                (track.youtubeVideoId && cur.youtubeVideoId !== track.youtubeVideoId) ||
+                cur.title.toLowerCase() !== track.title.toLowerCase();
+              if (isDiff) {
+                setManualNowPlaying(track);
+                void engine.load(track);
+              }
             }
           },
         )
