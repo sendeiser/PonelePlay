@@ -285,7 +285,7 @@ export default function ComoFuncionaPage() {
                 className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:brightness-110 text-white font-mono text-xs font-bold transition-all shadow-lg shadow-cyan-900/30 flex items-center gap-2"
               >
                 <Download className="size-4" />
-                <span>Descargar APK para Pendrive USB (11.8 MB)</span>
+                <span>Descargar APK para Pendrive USB (7.98 MB)</span>
               </a>
 
               <Link
