@@ -407,11 +407,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       isVideoFullscreenRef.current = next;
       if (next) {
         setVideoMode(true);
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        }
-      } else if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
       }
       return next;
     });
@@ -953,7 +948,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             };
           }) => {
             if (!active || !msg.payload) return;
-            const { currentTime, duration: d, isPaused: p, track } = msg.payload;
+            const { currentTime, duration: d, isPaused: p, track, volume: vol, isMuted: muted } = msg.payload as Record<string, unknown>;
             if (typeof currentTime === "number" && !isNaN(currentTime)) {
               setElapsed(Math.floor(currentTime));
               elapsedRef.current = Math.floor(currentTime);
@@ -971,14 +966,35 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 void engine.play?.();
               }
             }
+            if (typeof vol === "number") {
+              setVolume(vol);
+              engine.setVolume?.(vol);
+            }
+            if (typeof muted === "boolean") {
+              setIsMuted(muted);
+              if (muted) engine.mute?.();
+              else engine.unMute?.();
+            }
             if (track) {
+              const trk = track as PlayerTrack;
               const cur = nowPlayingRef.current;
               const isDiff = !cur ||
-                (track.youtubeVideoId && cur.youtubeVideoId !== track.youtubeVideoId) ||
-                cur.title.toLowerCase() !== track.title.toLowerCase();
+                (trk.youtubeVideoId && cur.youtubeVideoId !== trk.youtubeVideoId) ||
+                cur.title.toLowerCase() !== trk.title.toLowerCase();
               if (isDiff) {
-                setManualNowPlaying(track);
-                void engine.load(track);
+                setManualNowPlaying(trk);
+                void engine.load(trk).then(() => {
+                  if (typeof currentTime === "number" && currentTime > 2) {
+                    engine.seekTo?.(currentTime);
+                  }
+                });
+              } else if (typeof currentTime === "number" && !isNaN(currentTime) && !p) {
+                // Keep TV video and Cabina audio tightly in sync (correct drift >= 3 seconds)
+                const currentSec = Math.floor(currentTime);
+                const drift = Math.abs(elapsedRef.current - currentSec);
+                if (drift >= 3) {
+                  engine.seekTo?.(currentSec);
+                }
               }
             }
           },
@@ -1158,16 +1174,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         }
       >
         {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~58% OR FULLSCREEN 100%) ---------------- */}
-        {(isVideoFullscreen || videoMode) && (
         <section
           className={
             isVideoFullscreen
-              ? "w-full h-full p-0 m-0 border-0 rounded-none bg-black block overflow-hidden"
-              : "col-span-7 flex flex-col justify-between rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg relative overflow-hidden min-h-0"
+              ? "fixed inset-0 z-[99999] w-screen h-screen bg-black block overflow-hidden"
+              : !videoMode
+                ? "absolute -bottom-40 -right-40 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
+                : "col-span-7 flex flex-col justify-between rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg relative overflow-hidden min-h-0"
           }
         >
           {/* KARAOKE LIVE BANNER OVERLAY */}
-          {!isVideoFullscreen && (karaokeMode || nowPlaying?.isKaraoke) && (
+          {!isVideoFullscreen && videoMode && (karaokeMode || nowPlaying?.isKaraoke) && (
             <div className="w-full bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white font-mono text-xs font-black tracking-widest px-3 py-1.5 rounded-lg mb-2 shadow-lg shadow-pink-600/30 flex items-center justify-between shrink-0 animate-pulse">
               <div className="flex items-center gap-2">
                 <Mic className="size-3.5 text-yellow-300 animate-bounce" />
@@ -1180,7 +1197,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           )}
 
           {/* Header tag within card */}
-          {!isVideoFullscreen && (
+          {!isVideoFullscreen && videoMode && (
             <div className="flex items-center justify-between z-10 mb-1.5 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/40 px-2 py-0.5 rounded-md font-mono text-[10px] tracking-wider flex items-center gap-1 shadow-sm">
@@ -1224,7 +1241,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             }
           >
             <div className="w-full h-full relative">
-              {mounted && (videoMode || isVideoFullscreen) && (
+              {mounted && (
                 <iframe
                   id="poneleplay-tv-iframe"
                   ref={iframeRef}
@@ -1385,7 +1402,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           )}
 
           {/* ================= BOTTOM: CLEAN BROADCAST PROGRESS TIMELINE (NO PLAYER CONTROLS ON TV) ================= */}
-          {!isVideoFullscreen && (
+          {!isVideoFullscreen && videoMode && (
             <div className="z-10 mt-2 bg-[#0d1017] p-2.5 rounded-lg border border-[#1e2333] shadow-inner shrink-0">
               {/* Timeline Counters */}
               <div className="w-full flex items-center justify-between font-mono text-[11px] text-slate-300 mb-1">
@@ -1421,7 +1438,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           )}
         </section>
-      )}
 
         {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~42%) (HIDDEN IN FULLSCREEN) ---------------- */}
         {!isVideoFullscreen && videoMode && (

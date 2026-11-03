@@ -384,6 +384,20 @@ export function PanelPlaybackFooter({
     return () => clearInterval(timer);
   }, [isPaused]);
 
+  const broadcastControl = useCallback((command: string, payload: Record<string, unknown> = {}) => {
+    if (channelRef.current) {
+      void channelRef.current.send({
+        type: "broadcast",
+        event: "playback_command",
+        payload: {
+          command,
+          payload,
+          timestamp: Date.now(),
+        },
+      });
+    }
+  }, []);
+
   // Handlers
   const handleTogglePlay = async () => {
     audioEngineRef.current?.unlockAudio();
@@ -394,6 +408,7 @@ export function PanelPlaybackFooter({
     const next = !isPaused;
     setIsPaused(next);
     showToast(next ? "⏸️ TV Pausada" : "▶️ TV en Reproducción");
+    broadcastControl(next ? "pause" : "resume");
     try {
       await togglePausePlayback(slug);
     } catch {
@@ -501,6 +516,9 @@ export function PanelPlaybackFooter({
     if (currentTrack) {
       showToast(`⏮️ Reiniciando: ${currentTrack.title}`);
       setElapsed(0);
+      audioEngineRef.current?.seekTo(0);
+      broadcastControl("seek", { seconds: 0 });
+      broadcastControl("play_now", { track: currentTrack });
       try {
         await sendPlaybackCommand(slug, "play_now", { track: currentTrack });
       } catch {
@@ -512,6 +530,7 @@ export function PanelPlaybackFooter({
   const handleVolume = async (newVol: number) => {
     setVolume(newVol);
     if (isMuted) setIsMuted(false);
+    broadcastControl("set_volume", { volume: newVol });
     try {
       await setPlaybackVolume(slug, newVol);
     } catch {
@@ -523,6 +542,7 @@ export function PanelPlaybackFooter({
     const next = !isMuted;
     setIsMuted(next);
     showToast(next ? "🔇 Audio TV Silenciado" : "🔊 Audio TV Activo");
+    broadcastControl(next ? "mute" : "unmute");
     try {
       await toggleMutePlayback(slug);
     } catch {
@@ -549,6 +569,7 @@ export function PanelPlaybackFooter({
     setElapsed(clamped);
     audioEngineRef.current?.seekTo(clamped);
     showToast(`⏩ Posición: ${formatDuration(clamped)}`);
+    broadcastControl("seek", { seconds: clamped });
     try {
       await seekPlayback(slug, clamped);
     } catch {
@@ -913,6 +934,8 @@ export function PanelPlaybackFooter({
                 isPaused,
                 trackId: currentTrack.trackId,
                 track: currentTrack,
+                volume,
+                isMuted,
                 isFromAdminAudio: true,
               },
             });

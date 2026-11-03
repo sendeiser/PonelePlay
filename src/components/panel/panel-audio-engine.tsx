@@ -65,6 +65,77 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     onTrackEndedRef.current = onTrackEnded;
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
+    const lastReportedTimeRef = useRef<number>(0);
+    const capturedWidgetIdRef = useRef<number | string | null>(null);
+
+    // Reset elapsed timer on track change
+    useEffect(() => {
+      lastReportedTimeRef.current = 0;
+    }, [currentTrack?.itemId, currentTrack?.youtubeVideoId]);
+
+    // Capture YouTube postMessage events and widget IDs
+    useEffect(() => {
+      function onMessage(e: MessageEvent) {
+        if (typeof e.origin === "string" && !e.origin.includes("youtube.com") && !e.origin.includes("youtube-nocookie.com")) {
+          return;
+        }
+        let data: { event?: string; info?: unknown; id?: number | string } | null = null;
+        try {
+          data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        } catch {
+          return;
+        }
+        if (!data || typeof data !== "object") return;
+        if (data.id !== undefined && data.id !== null) {
+          capturedWidgetIdRef.current = data.id;
+        }
+        if (data.event === "infoDelivery" && data.info) {
+          const info = data.info as { currentTime?: number; duration?: number };
+          if (typeof info.currentTime === "number" && info.currentTime > 0) {
+            lastReportedTimeRef.current = Math.floor(info.currentTime);
+          }
+        }
+      }
+      window.addEventListener("message", onMessage);
+      return () => window.removeEventListener("message", onMessage);
+    }, []);
+
+    const sendIframeCommand = useCallback((func: string, args: unknown[] = []) => {
+      if (playerRef.current) {
+        try {
+          const fn = (playerRef.current as Record<string, unknown>)[func];
+          if (typeof fn === "function") {
+            (fn as (...a: unknown[]) => void).apply(playerRef.current, args);
+          }
+        } catch {}
+      }
+
+      // Also dispatch via postMessage to all candidate YouTube iframes in container
+      const iframes = [
+        containerRef.current?.querySelector("iframe"),
+        document.getElementById("admin-audio-yt-host") as HTMLIFrameElement,
+        document.getElementById("admin-audio-fallback-iframe") as HTMLIFrameElement,
+      ].filter(Boolean) as HTMLIFrameElement[];
+
+      for (const ifr of iframes) {
+        if (ifr.contentWindow) {
+          try {
+            ifr.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func, args }),
+              "*"
+            );
+            ifr.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func, args, id: capturedWidgetIdRef.current, channel: "widget" }),
+              "*"
+            );
+            ifr.contentWindow.postMessage(
+              JSON.stringify({ event: "command", func, args, id: ifr.id || "admin-audio-yt-host", channel: "widget" }),
+              "*"
+            );
+          } catch {}
+        }
+      }
+    }, []);
 
     // Autoplay Unlock mechanism (triggers on any user click / keydown)
     const unlockAudio = useCallback(() => {
@@ -72,16 +143,15 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       setIsBlockedState(false);
       onAudioBlockedChange?.(false);
 
-      if (playerRef.current) {
-        try {
-          playerRef.current.unMute();
-          playerRef.current.setVolume(volumeRef.current);
-          if (!isPausedRef.current) {
-            playerRef.current.playVideo();
-          }
-        } catch {
-          // Non-blocking
-        }
+      if (isMutedRef.current || volumeRef.current === 0) {
+        sendIframeCommand("mute");
+        sendIframeCommand("setVolume", [0]);
+      } else {
+        sendIframeCommand("unMute");
+        sendIframeCommand("setVolume", [volumeRef.current]);
+      }
+      if (!isPausedRef.current) {
+        sendIframeCommand("playVideo");
       }
 
       const isTestEnv = typeof process !== "undefined" && process.env?.NODE_ENV === "test";
@@ -318,17 +388,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         return;
       }
 
-      if (playerRef.current) {
-        try {
-          if (isPaused) {
-            playerRef.current.pauseVideo();
-          } else {
-            playerRef.current.playVideo();
-          }
-        } catch {
-          // Ignore
-        }
-      }
+      sendIframeCommand(isPaused ? "pauseVideo" : "playVideo");
     }, [isPaused, currentTrack?.source, onAudioBlockedChange]);
 
     // Handle volume & mute changes
@@ -339,17 +399,12 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         return;
       }
 
-      if (playerRef.current) {
-        try {
-          if (isMuted) {
-            playerRef.current.mute();
-          } else {
-            playerRef.current.unMute();
-            playerRef.current.setVolume(volume);
-          }
-        } catch {
-          // Ignore
-        }
+      if (isMuted || volume === 0) {
+        sendIframeCommand("mute");
+        sendIframeCommand("setVolume", [0]);
+      } else {
+        sendIframeCommand("unMute");
+        sendIframeCommand("setVolume", [volume]);
       }
     }, [volume, isMuted, currentTrack?.source]);
 
@@ -360,24 +415,32 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       const timer = setInterval(() => {
         if (isPausedRef.current) return;
 
-        let currentTime = 0;
-        let duration = 0;
+        let currentTime = -1;
+        let duration = currentTrackRef.current?.durationSeconds ?? 210;
 
         if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
           currentTime = Math.floor(html5AudioRef.current.currentTime || 0);
-          duration = Math.floor(html5AudioRef.current.duration || 0);
+          const d = Math.floor(html5AudioRef.current.duration || 0);
+          if (d > 0) duration = d;
         } else if (playerRef.current && ytInitializedRef.current) {
           try {
-            currentTime = Math.floor(playerRef.current.getCurrentTime() || 0);
-            duration = Math.floor(playerRef.current.getDuration() || 0);
+            const t = Math.floor(playerRef.current.getCurrentTime() || 0);
+            const d = Math.floor(playerRef.current.getDuration() || 0);
+            if (t > 0) currentTime = t;
+            if (d > 0) duration = d;
           } catch {
             // Ignore
           }
         }
 
-        if (currentTime >= 0) {
-          onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
+        if (currentTime > 0) {
+          lastReportedTimeRef.current = currentTime;
+        } else {
+          lastReportedTimeRef.current += 1;
+          currentTime = lastReportedTimeRef.current;
         }
+
+        onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
       }, 1000);
 
       return () => {
@@ -388,22 +451,11 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     // Expose imperative handle for seeking and unlocking
     useImperativeHandle(ref, () => ({
       seekTo: (seconds: number) => {
+        lastReportedTimeRef.current = seconds;
         if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
           html5AudioRef.current.currentTime = seconds;
-        } else if (playerRef.current) {
-          try {
-            playerRef.current.seekTo(seconds, true);
-          } catch {
-            const directIframe = document.getElementById(
-              "admin-audio-fallback-iframe",
-            ) as HTMLIFrameElement | null;
-            if (directIframe?.contentWindow) {
-              directIframe.contentWindow.postMessage(
-                JSON.stringify({ event: "command", func: "seekTo", args: [seconds, true] }),
-                "*",
-              );
-            }
-          }
+        } else {
+          sendIframeCommand("seekTo", [seconds, true]);
         }
       },
       unlockAudio,
