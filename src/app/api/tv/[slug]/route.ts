@@ -88,8 +88,8 @@ export async function GET(
       scale: "normal",
     };
 
-    if (deviceId) {
-      try {
+    try {
+      if (deviceId) {
         const { data: dev } = await admin
           .from("player_devices")
           .select("display_config")
@@ -100,9 +100,23 @@ export async function GET(
         if (conf && typeof conf === "object") {
           displayConfig = { ...displayConfig, ...(conf as Record<string, unknown>) };
         }
-      } catch {
-        // Fallback to default
+      } else {
+        // Fallback: check most recently updated player device in this venue
+        const { data: latestDev } = await admin
+          .from("player_devices")
+          .select("display_config")
+          .eq("venue_id", venue.id)
+          .not("display_config", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const conf = latestDev?.display_config;
+        if (conf && typeof conf === "object") {
+          displayConfig = { ...displayConfig, ...(conf as Record<string, unknown>) };
+        }
       }
+    } catch {
+      // Fallback to default
     }
 
     return NextResponse.json(

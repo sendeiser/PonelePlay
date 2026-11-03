@@ -317,6 +317,10 @@ private fun buildPlayerHtml(
               currentVideoId = id;
               var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
 
+              // Give 8-second grace period for initial buffering without seek interruptions
+              lastSyncSeekAt = Date.now() + 8000;
+              currentTvTime = sec;
+
               // Kill audio of existing video immediately
               sendCommand('pauseVideo', []);
               sendCommand('mute', []);
@@ -526,16 +530,17 @@ private fun buildPlayerHtml(
                         }
                       }
                     } else if (eventName === "tv_playback_progress" && eventPayload) {
-                      // 2. Strict Continuous Time Sync: The TV synchronizes to the Cabina!
+                      // 2. Continuous Sync: Keep TV synchronized without interrupting playback
                       var curr = eventPayload.currentTime;
                       var isP = eventPayload.isPaused;
                       var sentAt = eventPayload.sentAt;
                       var trk = eventPayload.track;
+                      var now = Date.now();
 
                       // Sync Pause from master Cabina
                       if (typeof isP === 'boolean') {
                         if (isP) {
-                          if (!desiredPaused) pauseVideo();
+                          if (!desiredPaused && now > lastSyncSeekAt) pauseVideo();
                         } else {
                           if (desiredPaused) playVideo();
                         }
@@ -548,14 +553,9 @@ private fun buildPlayerHtml(
                         return;
                       }
 
-                      // Precise Drift Correction (Cabina is Master!)
-                      if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused) {
-                        var latency = 0;
-                        if (typeof sentAt === 'number' && sentAt > 0) {
-                          latency = Math.max(0, Math.min(1.0, (Date.now() - sentAt) / 1000));
-                        }
-                        var targetSec = curr + latency;
-
+                      // Drift Correction: Only perform seek if TV is actively PLAYING (never when buffering/loading!)
+                      // and drift is noticeably large (> 2.5s, e.g. operator scrubbed the bar in Cabina)
+                      if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused && now > lastSyncSeekAt) {
                         // TV time from player or infoDelivery postMessage
                         var tvSec = -1;
                         if (player && typeof player.getCurrentTime === 'function') {
@@ -568,17 +568,17 @@ private fun buildPlayerHtml(
                           tvSec = currentTvTime;
                         }
 
-                        if (tvSec >= 0) {
-                          var drift = Math.abs(tvSec - targetSec);
-                          var now = Date.now();
-
-                          // Immediate align on major jump/seek (> 1.2s)
-                          if (drift > 1.2) {
-                            lastSyncSeekAt = now;
-                            seekTo(targetSec);
+                        // Must be PLAYING (currentTvState === 1) and past first 5s of playback
+                        if (tvSec >= 5.0 && currentTvState === 1) {
+                          var latency = 0;
+                          if (typeof sentAt === 'number' && sentAt > 0) {
+                            latency = Math.max(0, Math.min(1.0, (now - sentAt) / 1000));
                           }
-                          // Smooth 100% sync alignment for noticeable drift (>= 0.35s)
-                          else if (drift >= 0.35 && (now - lastSyncSeekAt > 1500)) {
+                          var targetSec = curr + latency;
+                          var drift = Math.abs(tvSec - targetSec);
+
+                          // Only align on substantial drift (> 2.5s) with minimum 8s cooldown
+                          if (drift > 2.5 && (now - lastSyncSeekAt > 8000)) {
                             lastSyncSeekAt = now;
                             seekTo(targetSec);
                           }

@@ -121,14 +121,16 @@ class MainActivity : ComponentActivity() {
         try {
             val obj = org.json.JSONObject(jsonStr)
             if (obj.has("mode")) {
-                val modeStr = obj.optString("mode", "VIDEO")
-                val nextMode = when (modeStr.uppercase()) {
-                    "PLAYLIST" -> TvScreenMode.PLAYLIST
-                    "CLEAN" -> TvScreenMode.CLEAN
-                    else -> TvScreenMode.VIDEO
+                val modeStr = obj.optString("mode", "")
+                if (modeStr.isNotBlank()) {
+                    val nextMode = when (modeStr.uppercase()) {
+                        "PLAYLIST" -> TvScreenMode.PLAYLIST
+                        "CLEAN" -> TvScreenMode.CLEAN
+                        else -> TvScreenMode.VIDEO
+                    }
+                    screenModeState.value = nextMode
+                    prefs.edit().putString("tv_screen_mode", nextMode.name).apply()
                 }
-                screenModeState.value = nextMode
-                prefs.edit().putString("tv_screen_mode", nextMode.name).apply()
             }
             if (obj.has("showQueue")) {
                 val sq = obj.optBoolean("showQueue", true)
@@ -141,14 +143,18 @@ class MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean("tv_show_proposals", sp).apply()
             }
             if (obj.has("theme")) {
-                val th = obj.optString("theme", "neon")
-                themeState.value = th
-                prefs.edit().putString("tv_theme", th).apply()
+                val th = obj.optString("theme", "")
+                if (th.isNotBlank()) {
+                    themeState.value = th.lowercase()
+                    prefs.edit().putString("tv_theme", th.lowercase()).apply()
+                }
             }
             if (obj.has("scale")) {
-                val sc = obj.optString("scale", "normal")
-                scaleState.value = sc
-                prefs.edit().putString("tv_scale", sc).apply()
+                val sc = obj.optString("scale", "")
+                if (sc.isNotBlank()) {
+                    scaleState.value = sc.lowercase()
+                    prefs.edit().putString("tv_scale", sc.lowercase()).apply()
+                }
             }
         } catch (e: Exception) {
             android.util.Log.e("PonelePlayTV", "Error parsing displayConfig: ${e.message}")

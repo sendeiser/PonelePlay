@@ -47,7 +47,14 @@ data class TvDesignTheme(
     val primaryColor: Color,
     val secondaryColor: Color,
     val accentColor: Color,
-    val badgeColor: Color = Color(0xFFA5B4FC)
+    val badgeColor: Color = Color(0xFFA5B4FC),
+    val cardBackground: Color = Color(0xFF101524),
+    val cardBorder: Color = Color(0xFF262F4A),
+    val qrCardBorder: Color = Color(0xFF6366F1),
+    val itemRowBackground: Color = Color(0xFF161C2E),
+    val itemRowBorder: Color = Color(0xFF262F4A),
+    val badgeBackground: Color = Color(0x334F46E5),
+    val badgeText: Color = Color(0xFFA5B4FC)
 )
 
 fun getTvDesignTheme(themeName: String): TvDesignTheme {
@@ -55,26 +62,54 @@ fun getTvDesignTheme(themeName: String): TvDesignTheme {
         "minimal" -> TvDesignTheme(
             primaryColor = Color(0xFFF8FAFC),
             secondaryColor = Color(0xFF94A3B8),
-            accentColor = Color(0xFFE2E8F0),
-            badgeColor = Color(0xFFCBD5E1)
+            accentColor = Color(0xFFCBD5E1),
+            badgeColor = Color(0xFFF8FAFC),
+            cardBackground = Color(0xFF11141C),
+            cardBorder = Color(0xFF2B3242),
+            qrCardBorder = Color(0xFF64748B),
+            itemRowBackground = Color(0xFF181C26),
+            itemRowBorder = Color(0xFF2C3446),
+            badgeBackground = Color(0x33F8FAFC),
+            badgeText = Color(0xFFF8FAFC)
         )
         "gold" -> TvDesignTheme(
             primaryColor = Color(0xFFFBBF24),
             secondaryColor = Color(0xFFF59E0B),
-            accentColor = Color(0xFFFCD34D),
-            badgeColor = Color(0xFFFBBF24)
+            accentColor = Color(0xFFFDE68A),
+            badgeColor = Color(0xFFFBBF24),
+            cardBackground = Color(0xFF181308),
+            cardBorder = Color(0xFF4A3716),
+            qrCardBorder = Color(0xFFF59E0B),
+            itemRowBackground = Color(0xFF241C0C),
+            itemRowBorder = Color(0xFF4D3B16),
+            badgeBackground = Color(0x33FBBF24),
+            badgeText = Color(0xFFFBBF24)
         )
         "emerald" -> TvDesignTheme(
             primaryColor = Color(0xFF34D399),
             secondaryColor = Color(0xFF10B981),
             accentColor = Color(0xFF6EE7B7),
-            badgeColor = Color(0xFF34D399)
+            badgeColor = Color(0xFF34D399),
+            cardBackground = Color(0xFF081812),
+            cardBorder = Color(0xFF14442F),
+            qrCardBorder = Color(0xFF10B981),
+            itemRowBackground = Color(0xFF0E271D),
+            itemRowBorder = Color(0xFF1C573F),
+            badgeBackground = Color(0x3334D399),
+            badgeText = Color(0xFF34D399)
         )
         else -> TvDesignTheme( // "neon"
-            primaryColor = Color(0xFFA5B4FC),
-            secondaryColor = Color(0xFF22D3EE),
-            accentColor = Color(0xFF818CF8),
-            badgeColor = Color(0xFFA5B4FC)
+            primaryColor = Color(0xFF00F0FF),
+            secondaryColor = Color(0xFF818CF8),
+            accentColor = Color(0xFFA855F7),
+            badgeColor = Color(0xFF00F0FF),
+            cardBackground = Color(0xFF0D1222),
+            cardBorder = Color(0xFF233054),
+            qrCardBorder = Color(0xFF6366F1),
+            itemRowBackground = Color(0xFF141A30),
+            itemRowBorder = Color(0xFF233054),
+            badgeBackground = Color(0x3300F0FF),
+            badgeText = Color(0xFF00F0FF)
         )
     }
 }
@@ -563,7 +598,7 @@ private fun TvModePlaylist(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = "• ${feed.venue.name.uppercase()}",
-                    color = Color(0xFF818CF8),
+                    color = theme.secondaryColor,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -574,20 +609,20 @@ private fun TvModePlaylist(
                 // Live Session Pill
                 Box(
                     modifier = Modifier
-                        .background(Color(0x2610B981), RoundedCornerShape(20.dp))
-                        .border(1.dp, Color(0x6610B981), RoundedCornerShape(20.dp))
+                        .background(theme.badgeBackground, RoundedCornerShape(20.dp))
+                        .border(1.dp, theme.primaryColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                         .padding(horizontal = 10.dp, vertical = 3.5.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(7.dp)
-                                .background(Color(0xFF34D399), CircleShape)
+                                .background(theme.primaryColor, CircleShape)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (feed.isOpen) "NOCHE ABIERTA" else "CERRADO",
-                            color = Color(0xFF34D399),
+                            color = theme.primaryColor,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
@@ -621,8 +656,8 @@ private fun TvModePlaylist(
                 modifier = Modifier
                     .weight(0.36f)
                     .fillMaxHeight()
-                    .background(Color(0xFF101524), RoundedCornerShape(16.dp))
-                    .border(1.5.dp, Color(0xFF262F4A), RoundedCornerShape(16.dp))
+                    .background(theme.cardBackground, RoundedCornerShape(16.dp))
+                    .border(1.5.dp, theme.cardBorder, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Column(
@@ -638,7 +673,7 @@ private fun TvModePlaylist(
                         ) {
                             Text(
                                 text = "EN AIRE • AHORA SUENA",
-                                color = Color(0xFF22D3EE),
+                                color = theme.primaryColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontFamily = FontFamily.Monospace
@@ -663,7 +698,7 @@ private fun TvModePlaylist(
                                 .fillMaxWidth()
                                 .height(180.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp))
+                                .border(1.dp, theme.cardBorder, RoundedCornerShape(12.dp))
                         ) {
                             // Offscreen or PIP Video
                             NativeVideoPlayer(
@@ -706,7 +741,8 @@ private fun TvModePlaylist(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(Color(0xFF161C2E), RoundedCornerShape(10.dp))
+                            .background(theme.itemRowBackground, RoundedCornerShape(10.dp))
+                            .border(1.dp, theme.itemRowBorder, RoundedCornerShape(10.dp))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -720,7 +756,7 @@ private fun TvModePlaylist(
                         )
                         Text(
                             text = if (isBarSelection) "⭐ BAR" else "$votes ${if (votes == 1) "voto" else "votos"}",
-                            color = if (isBarSelection) Color(0xFF38BDF8) else Color(0xFFF59E0B),
+                            color = theme.primaryColor,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
@@ -734,8 +770,8 @@ private fun TvModePlaylist(
                 modifier = Modifier
                     .weight(0.34f)
                     .fillMaxHeight()
-                    .background(Color(0xFF101524), RoundedCornerShape(16.dp))
-                    .border(1.5.dp, Color(0xFF262F4A), RoundedCornerShape(16.dp))
+                    .background(theme.cardBackground, RoundedCornerShape(16.dp))
+                    .border(1.5.dp, theme.cardBorder, RoundedCornerShape(16.dp))
                     .padding(16.dp)
             ) {
                 Column(modifier = Modifier.fillMaxSize()) {
@@ -746,14 +782,14 @@ private fun TvModePlaylist(
                     ) {
                         Text(
                             text = "COLA EN VIVO",
-                            color = Color(0xFF818CF8),
+                            color = theme.primaryColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace
                         )
                         Text(
                             text = "${feed.queue.size} en espera",
-                            color = Color(0xFF94A3B8),
+                            color = theme.secondaryColor,
                             fontSize = 10.5.sp,
                             fontFamily = FontFamily.Monospace
                         )
@@ -781,7 +817,7 @@ private fun TvModePlaylist(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(feed.queue.take(6)) { index, item ->
-                                QueueItemRow(item = item, index = index + 1)
+                                QueueItemRow(item = item, index = index + 1, theme = theme)
                             }
                         }
                     }
@@ -802,11 +838,11 @@ private fun TvModePlaylist(
                         .weight(0.55f)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(Color(0xFF1E1B4B), Color(0xFF0F172A))
+                                colors = listOf(theme.cardBackground, Color(0xFF070A13))
                             ),
                             RoundedCornerShape(16.dp)
                         )
-                        .border(1.5.dp, Color(0xFF6366F1), RoundedCornerShape(16.dp))
+                        .border(1.5.dp, theme.qrCardBorder, RoundedCornerShape(16.dp))
                         .padding(14.dp)
                 ) {
                     Column(
@@ -828,7 +864,7 @@ private fun TvModePlaylist(
                         }
                         Text(
                             text = "¡PEDÍ TU MÚSICA!",
-                            color = Color(0xFF22D3EE),
+                            color = theme.primaryColor,
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace
@@ -847,14 +883,14 @@ private fun TvModePlaylist(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(0.45f)
-                        .background(Color(0xFF101524), RoundedCornerShape(16.dp))
-                        .border(1.5.dp, Color(0xFF262F4A), RoundedCornerShape(16.dp))
+                        .background(theme.cardBackground, RoundedCornerShape(16.dp))
+                        .border(1.5.dp, theme.cardBorder, RoundedCornerShape(16.dp))
                         .padding(13.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Text(
                             text = "PROPUESTAS EN VOTACIÓN",
-                            color = Color(0xFFF59E0B),
+                            color = theme.primaryColor,
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace
@@ -878,7 +914,7 @@ private fun TvModePlaylist(
                                 modifier = Modifier.fillMaxSize()
                             ) {
                                 itemsIndexed(feed.proposals.take(4)) { _, prop ->
-                                    ProposalItemRow(proposal = prop)
+                                    ProposalItemRow(proposal = prop, theme = theme)
                                 }
                             }
                         }
@@ -890,19 +926,19 @@ private fun TvModePlaylist(
 }
 
 @Composable
-private fun QueueItemRow(item: TvTrack, index: Int) {
+private fun QueueItemRow(item: TvTrack, index: Int, theme: TvDesignTheme = getTvDesignTheme("neon")) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF161C2E), RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0xFF262F4A), RoundedCornerShape(10.dp))
+            .background(theme.itemRowBackground, RoundedCornerShape(10.dp))
+            .border(1.dp, theme.itemRowBorder, RoundedCornerShape(10.dp))
             .padding(horizontal = 10.dp, vertical = 7.5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Position Number
         Text(
             text = "#$index",
-            color = Color(0xFF818CF8),
+            color = theme.primaryColor,
             fontSize = 12.sp,
             fontWeight = FontWeight.Black,
             fontFamily = FontFamily.Monospace,
@@ -936,19 +972,19 @@ private fun QueueItemRow(item: TvTrack, index: Int) {
         Box(
             modifier = Modifier
                 .background(
-                    if (isBar) Color(0x334F46E5) else Color(0x33059669),
+                    theme.badgeBackground,
                     RoundedCornerShape(6.dp)
                 )
                 .border(
                     1.dp,
-                    if (isBar) Color(0x664F46E5) else Color(0x66059669),
+                    theme.primaryColor.copy(alpha = 0.4f),
                     RoundedCornerShape(6.dp)
                 )
                 .padding(horizontal = 6.dp, vertical = 2.5.dp)
         ) {
             Text(
                 text = if (isBar) "⭐ BAR" else "${item.voteCount} ${if (item.voteCount == 1) "voto" else "votos"}",
-                color = if (isBar) Color(0xFFA5B4FC) else Color(0xFF6EE7B7),
+                color = theme.badgeText,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
@@ -958,12 +994,12 @@ private fun QueueItemRow(item: TvTrack, index: Int) {
 }
 
 @Composable
-private fun ProposalItemRow(proposal: TvProposal) {
+private fun ProposalItemRow(proposal: TvProposal, theme: TvDesignTheme = getTvDesignTheme("neon")) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF161C2E), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0xFF262F4A), RoundedCornerShape(8.dp))
+            .background(theme.itemRowBackground, RoundedCornerShape(8.dp))
+            .border(1.dp, theme.itemRowBorder, RoundedCornerShape(8.dp))
             .padding(horizontal = 9.dp, vertical = 6.dp)
     ) {
         Row(
@@ -983,7 +1019,7 @@ private fun ProposalItemRow(proposal: TvProposal) {
             Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = "${proposal.voteCount}/${proposal.neededVotes}",
-                color = Color(0xFFF59E0B),
+                color = theme.primaryColor,
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
@@ -999,7 +1035,7 @@ private fun ProposalItemRow(proposal: TvProposal) {
                 .fillMaxWidth()
                 .height(3.5.dp)
                 .clip(RoundedCornerShape(2.dp)),
-            color = Color(0xFFF59E0B),
+            color = theme.primaryColor,
             trackColor = Color(0xFF334155)
         )
     }

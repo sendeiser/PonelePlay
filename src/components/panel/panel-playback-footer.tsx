@@ -87,6 +87,7 @@ export function PanelPlaybackFooter({
   const channelRef = useRef<RealtimeChannel | null>(null);
   const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
   currentTrackRef.current = currentTrack;
+  const lastProgressBroadcastRef = useRef<number>(0);
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
@@ -949,7 +950,9 @@ export function PanelPlaybackFooter({
         onProgress={(curr, dur) => {
           setElapsed(Math.floor(curr));
           if (dur) setVideoDuration(dur);
-          if (channelRef.current && currentTrack) {
+          const now = Date.now();
+          if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 1800) {
+            lastProgressBroadcastRef.current = now;
             void channelRef.current.send({
               type: "broadcast",
               event: "tv_playback_progress",
@@ -962,7 +965,7 @@ export function PanelPlaybackFooter({
                 volume,
                 isMuted,
                 isFromAdminAudio: true,
-                sentAt: Date.now(),
+                sentAt: now,
               },
             });
           }
