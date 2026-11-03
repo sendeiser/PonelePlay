@@ -39,21 +39,76 @@ import java.util.*
 
 enum class TvScreenMode {
     VIDEO,
-    PLAYLIST
+    PLAYLIST,
+    CLEAN
+}
+
+data class TvDesignTheme(
+    val primaryColor: Color,
+    val secondaryColor: Color,
+    val accentColor: Color,
+    val badgeColor: Color = Color(0xFFA5B4FC)
+)
+
+fun getTvDesignTheme(themeName: String): TvDesignTheme {
+    return when (themeName.lowercase()) {
+        "minimal" -> TvDesignTheme(
+            primaryColor = Color(0xFFF8FAFC),
+            secondaryColor = Color(0xFF94A3B8),
+            accentColor = Color(0xFFE2E8F0),
+            badgeColor = Color(0xFFCBD5E1)
+        )
+        "gold" -> TvDesignTheme(
+            primaryColor = Color(0xFFFBBF24),
+            secondaryColor = Color(0xFFF59E0B),
+            accentColor = Color(0xFFFCD34D),
+            badgeColor = Color(0xFFFBBF24)
+        )
+        "emerald" -> TvDesignTheme(
+            primaryColor = Color(0xFF34D399),
+            secondaryColor = Color(0xFF10B981),
+            accentColor = Color(0xFF6EE7B7),
+            badgeColor = Color(0xFF34D399)
+        )
+        else -> TvDesignTheme( // "neon"
+            primaryColor = Color(0xFFA5B4FC),
+            secondaryColor = Color(0xFF22D3EE),
+            accentColor = Color(0xFF818CF8),
+            badgeColor = Color(0xFFA5B4FC)
+        )
+    }
+}
+
+fun getTvScaleFactor(scaleName: String): Float {
+    return when (scaleName.lowercase()) {
+        "compact" -> 0.85f
+        "large" -> 1.25f
+        "xlarge" -> 1.50f
+        else -> 1.0f
+    }
 }
 
 @Composable
 fun TvScreen(
     feed: TvFeed,
     mode: TvScreenMode,
+    deviceId: String = "",
+    showQueue: Boolean = true,
+    showProposals: Boolean = true,
+    themeName: String = "neon",
+    scaleName: String = "normal",
     localIsMuted: Boolean = false,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit,
+    onDisplayConfig: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val qrBitmap = remember(feed.clientUrl) {
         QrGenerator.generate(feed.clientUrl, 320)
     }
+
+    val theme = remember(themeName) { getTvDesignTheme(themeName) }
+    val scaleFactor = remember(scaleName) { getTvScaleFactor(scaleName) }
 
     var currentTimeString by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
@@ -121,7 +176,30 @@ fun TvScreen(
                     effectiveVolume = effectiveVolume,
                     effectiveMuted = effectiveMuted,
                     videoController = videoController,
-                    onVideoEnded = onVideoEnded
+                    deviceId = deviceId,
+                    showQueue = showQueue,
+                    showProposals = showProposals,
+                    theme = theme,
+                    scaleFactor = scaleFactor,
+                    onVideoEnded = onVideoEnded,
+                    onDisplayConfig = onDisplayConfig
+                )
+            }
+            TvScreenMode.CLEAN -> {
+                TvModeVideo(
+                    feed = feed,
+                    qrBitmap = qrBitmap,
+                    currentTimeString = currentTimeString,
+                    effectiveVolume = effectiveVolume,
+                    effectiveMuted = effectiveMuted,
+                    videoController = videoController,
+                    deviceId = deviceId,
+                    showQueue = false,
+                    showProposals = false,
+                    theme = theme,
+                    scaleFactor = scaleFactor,
+                    onVideoEnded = onVideoEnded,
+                    onDisplayConfig = onDisplayConfig
                 )
             }
             TvScreenMode.PLAYLIST -> {
@@ -132,7 +210,11 @@ fun TvScreen(
                     effectiveVolume = effectiveVolume,
                     effectiveMuted = effectiveMuted,
                     videoController = videoController,
-                    onVideoEnded = onVideoEnded
+                    deviceId = deviceId,
+                    theme = theme,
+                    scaleFactor = scaleFactor,
+                    onVideoEnded = onVideoEnded,
+                    onDisplayConfig = onDisplayConfig
                 )
             }
         }
@@ -150,7 +232,13 @@ private fun TvModeVideo(
     effectiveVolume: Int,
     effectiveMuted: Boolean,
     videoController: VideoPlayerController,
-    onVideoEnded: () -> Unit
+    deviceId: String = "",
+    showQueue: Boolean = true,
+    showProposals: Boolean = true,
+    theme: TvDesignTheme = getTvDesignTheme("neon"),
+    scaleFactor: Float = 1.0f,
+    onVideoEnded: () -> Unit,
+    onDisplayConfig: (String) -> Unit = {}
 ) {
     val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
 
@@ -159,16 +247,18 @@ private fun TvModeVideo(
         NativeVideoPlayer(
             videoId = currentVideoId,
             venueSlug = feed.venue.slug,
+            deviceId = deviceId,
             isPaused = feed.playback.isPaused,
             volume = effectiveVolume,
             isMuted = effectiveMuted,
             controller = videoController,
             onEnded = onVideoEnded,
+            onDisplayConfig = onDisplayConfig,
             modifier = Modifier.fillMaxSize()
         )
 
         // 2. Left Floating Queue (100% Invisible Transparent, no box/border, text only)
-        if (feed.queue.isNotEmpty()) {
+        if (showQueue && feed.queue.isNotEmpty()) {
             val textShadow = Shadow(
                 color = Color(0xF2000000),
                 offset = Offset(2f, 2f),
@@ -178,8 +268,8 @@ private fun TvModeVideo(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(top = 28.dp, start = 32.dp)
-                    .width(310.dp)
+                    .padding(top = (28 * scaleFactor).dp, start = (32 * scaleFactor).dp)
+                    .width((310 * scaleFactor).dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -188,43 +278,43 @@ private fun TvModeVideo(
                 ) {
                     Text(
                         text = "📋 COLA EN VIVO",
-                        color = Color(0xFFA5B4FC),
-                        fontSize = 11.5.sp,
+                        color = theme.primaryColor,
+                        fontSize = (11.5f * scaleFactor).sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace,
                         style = TextStyle(shadow = textShadow)
                     )
                     Text(
                         text = "${feed.queue.size} temas",
-                        color = Color(0xFFCBD5E1),
-                        fontSize = 10.sp,
+                        color = theme.secondaryColor,
+                        fontSize = (10f * scaleFactor).sp,
                         fontFamily = FontFamily.Monospace,
                         style = TextStyle(shadow = textShadow)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height((8 * scaleFactor).dp))
 
                 feed.queue.take(4).forEachIndexed { idx, item ->
-                    if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
+                    if (idx > 0) Spacer(modifier = Modifier.height((7 * scaleFactor).dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "#${idx + 1}",
-                            color = Color(0xFFA5B4FC),
-                            fontSize = 12.sp,
+                            color = theme.primaryColor,
+                            fontSize = (12f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             style = TextStyle(shadow = textShadow),
-                            modifier = Modifier.width(26.dp)
+                            modifier = Modifier.width((26 * scaleFactor).dp)
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = item.title,
                                 color = Color.White,
-                                fontSize = 12.sp,
+                                fontSize = (12f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -233,19 +323,19 @@ private fun TvModeVideo(
                             Text(
                                 text = item.artist,
                                 color = Color(0xFFCBD5E1),
-                                fontSize = 10.5.sp,
+                                fontSize = (10.5f * scaleFactor).sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(shadow = textShadow)
                             )
                         }
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width((6 * scaleFactor).dp))
                         val isBar = item.voteCount >= 9999 || item.voteCount <= 0
                         Text(
                             text = if (isBar) "⭐ BAR" else "${item.voteCount}v",
-                            color = if (isBar) Color(0xFFA5B4FC) else Color(0xFF6EE7B7),
-                            fontSize = 10.sp,
+                            color = if (isBar) theme.badgeColor else Color(0xFF6EE7B7),
+                            fontSize = (10f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             style = TextStyle(shadow = textShadow)
@@ -256,7 +346,7 @@ private fun TvModeVideo(
         }
 
         // 3. Right Floating Proposals (100% Invisible Transparent, no box/border, text only)
-        if (feed.proposals.isNotEmpty()) {
+        if (showProposals && feed.proposals.isNotEmpty()) {
             val textShadow = Shadow(
                 color = Color(0xF2000000),
                 offset = Offset(2f, 2f),
@@ -266,8 +356,8 @@ private fun TvModeVideo(
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 28.dp, end = 32.dp)
-                    .width(310.dp)
+                    .padding(top = (28 * scaleFactor).dp, end = (32 * scaleFactor).dp)
+                    .width((310 * scaleFactor).dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -276,25 +366,25 @@ private fun TvModeVideo(
                 ) {
                     Text(
                         text = "🔥 EN VOTACIÓN",
-                        color = Color(0xFFFBBF24),
-                        fontSize = 11.5.sp,
+                        color = theme.accentColor,
+                        fontSize = (11.5f * scaleFactor).sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace,
                         style = TextStyle(shadow = textShadow)
                     )
                     Text(
                         text = "Pedí con QR",
-                        color = Color(0xFF38BDF8),
-                        fontSize = 10.sp,
+                        color = theme.secondaryColor,
+                        fontSize = (10f * scaleFactor).sp,
                         fontWeight = FontWeight.Bold,
                         style = TextStyle(shadow = textShadow)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height((8 * scaleFactor).dp))
 
                 feed.proposals.take(4).forEachIndexed { idx, prop ->
-                    if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
+                    if (idx > 0) Spacer(modifier = Modifier.height((7 * scaleFactor).dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -303,18 +393,18 @@ private fun TvModeVideo(
                         Text(
                             text = prop.title,
                             color = Color.White,
-                            fontSize = 12.sp,
+                            fontSize = (12f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             style = TextStyle(shadow = textShadow),
                             modifier = Modifier.weight(1f)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
                         Text(
                             text = "${prop.voteCount}/${prop.neededVotes}v",
-                            color = Color(0xFFFBBF24),
-                            fontSize = 11.sp,
+                            color = theme.accentColor,
+                            fontSize = (11f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             style = TextStyle(shadow = textShadow)
@@ -328,7 +418,7 @@ private fun TvModeVideo(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(170.dp)
+                .height((170 * scaleFactor).dp)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
@@ -342,7 +432,7 @@ private fun TvModeVideo(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .padding(horizontal = 32.dp, vertical = 18.dp),
+                .padding(horizontal = (32 * scaleFactor).dp, vertical = (18 * scaleFactor).dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -354,26 +444,26 @@ private fun TvModeVideo(
                 // Live Pulse Dot
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
-                        .background(Color(0xFF22D3EE), CircleShape)
+                        .size((10 * scaleFactor).dp)
+                        .background(theme.secondaryColor, CircleShape)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width((10 * scaleFactor).dp))
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "EN AIRE",
-                            color = Color(0xFF22D3EE),
-                            fontSize = 10.sp,
+                            color = theme.secondaryColor,
+                            fontSize = (10f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
                         if (feed.nowPlaying?.isKaraoke == true) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
                             Text(
                                 text = "🎤 KARAOKE",
                                 color = Color(0xFFF43F5E),
-                                fontSize = 10.sp,
+                                fontSize = (10f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
@@ -382,7 +472,7 @@ private fun TvModeVideo(
                     Text(
                         text = feed.nowPlaying?.title ?: "Esperando temas...",
                         color = Color.White,
-                        fontSize = 17.sp,
+                        fontSize = (18f * scaleFactor).sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -390,7 +480,7 @@ private fun TvModeVideo(
                     Text(
                         text = feed.nowPlaying?.artist ?: feed.venue.name,
                         color = Color(0xFF94A3B8),
-                        fontSize = 12.5.sp,
+                        fontSize = (12.5f * scaleFactor).sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1
                     )
@@ -406,24 +496,24 @@ private fun TvModeVideo(
                         bitmap = qrBitmap.asImageBitmap(),
                         contentDescription = "QR Mesas",
                         modifier = Modifier
-                            .size(64.dp)
+                            .size((64 * scaleFactor).dp)
                             .clip(RoundedCornerShape(8.dp))
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width((10 * scaleFactor).dp))
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = currentTimeString,
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = (16f * scaleFactor).sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
                         text = "Pedí tu música",
-                        color = Color(0xFF22D3EE),
-                        fontSize = 10.5.sp,
+                        color = theme.secondaryColor,
+                        fontSize = (10.5f * scaleFactor).sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -443,7 +533,11 @@ private fun TvModePlaylist(
     effectiveVolume: Int,
     effectiveMuted: Boolean,
     videoController: VideoPlayerController,
-    onVideoEnded: () -> Unit
+    deviceId: String = "",
+    theme: TvDesignTheme = getTvDesignTheme("neon"),
+    scaleFactor: Float = 1.0f,
+    onVideoEnded: () -> Unit,
+    onDisplayConfig: (String) -> Unit = {}
 ) {
     val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
 
@@ -575,11 +669,13 @@ private fun TvModePlaylist(
                             NativeVideoPlayer(
                                 videoId = currentVideoId,
                                 venueSlug = feed.venue.slug,
+                                deviceId = deviceId,
                                 isPaused = feed.playback.isPaused,
                                 volume = effectiveVolume,
                                 isMuted = effectiveMuted,
                                 controller = videoController,
                                 onEnded = onVideoEnded,
+                                onDisplayConfig = onDisplayConfig,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

@@ -15,7 +15,8 @@ data class TvPlayback(
     val karaokeMode: Boolean,
     val lastCommand: String?,
     val commandSeq: Long,
-    val positionSeconds: Float = 0f
+    val positionSeconds: Float = 0f,
+    val displayConfigJson: String? = null
 )
 
 data class TvTrack(
@@ -79,6 +80,7 @@ object TvFeedParser {
         )
 
         val playObj = root.optJSONObject("playback") ?: JSONObject()
+        val cfgObj = playObj.optJSONObject("displayConfig")
         val playback = TvPlayback(
             isPaused = playObj.optBoolean("isPaused", false),
             volume = playObj.optInt("volume", 85),
@@ -86,7 +88,8 @@ object TvFeedParser {
             karaokeMode = playObj.optBoolean("karaokeMode", false),
             lastCommand = if (playObj.isNull("lastCommand")) null else playObj.optString("lastCommand"),
             commandSeq = playObj.optLong("commandSeq", 0L),
-            positionSeconds = playObj.optDouble("positionSeconds", 0.0).toFloat()
+            positionSeconds = playObj.optDouble("positionSeconds", 0.0).toFloat(),
+            displayConfigJson = cfgObj?.toString()
         )
 
         val nowObj = root.optJSONObject("nowPlaying")

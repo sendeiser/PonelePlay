@@ -57,6 +57,10 @@ class MainActivity : ComponentActivity() {
     private val videoController = VideoPlayerController()
     private var showSettingsState = mutableStateOf(false)
     private var screenModeState = mutableStateOf(TvScreenMode.VIDEO)
+    private var showQueueState = mutableStateOf(true)
+    private var showProposalsState = mutableStateOf(true)
+    private var themeState = mutableStateOf("neon")
+    private var scaleState = mutableStateOf("normal")
     private var isMutedState = mutableStateOf(true)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,7 +78,15 @@ class MainActivity : ComponentActivity() {
         prefs = getSharedPreferences("poneleplay_tv_prefs", Context.MODE_PRIVATE)
 
         val savedMode = prefs.getString("tv_screen_mode", "VIDEO")
-        screenModeState.value = if (savedMode == "PLAYLIST") TvScreenMode.PLAYLIST else TvScreenMode.VIDEO
+        screenModeState.value = when (savedMode?.uppercase()) {
+            "PLAYLIST" -> TvScreenMode.PLAYLIST
+            "CLEAN" -> TvScreenMode.CLEAN
+            else -> TvScreenMode.VIDEO
+        }
+        showQueueState.value = prefs.getBoolean("tv_show_queue", true)
+        showProposalsState.value = prefs.getBoolean("tv_show_proposals", true)
+        themeState.value = prefs.getString("tv_theme", "neon") ?: "neon"
+        scaleState.value = prefs.getString("tv_scale", "normal") ?: "normal"
         isMutedState.value = prefs.getBoolean("tv_is_muted", true)
 
         setContent {
@@ -86,6 +98,10 @@ class MainActivity : ComponentActivity() {
                     NativeTvApp(
                         prefs = prefs,
                         screenMode = screenModeState.value,
+                        showQueue = showQueueState.value,
+                        showProposals = showProposalsState.value,
+                        themeName = themeState.value,
+                        scaleName = scaleState.value,
                         isMuted = isMutedState.value,
                         showSettings = showSettingsState.value,
                         videoController = videoController,
@@ -93,10 +109,49 @@ class MainActivity : ComponentActivity() {
                         onOpenSettings = { showSettingsState.value = true },
                         onToggleMode = { toggleMode() },
                         onToggleMute = { toggleMute() },
+                        onDisplayConfig = { applyDisplayConfig(it) },
                         onExitApp = { finish() }
                     )
                 }
             }
+        }
+    }
+
+    private fun applyDisplayConfig(jsonStr: String) {
+        try {
+            val obj = org.json.JSONObject(jsonStr)
+            if (obj.has("mode")) {
+                val modeStr = obj.optString("mode", "VIDEO")
+                val nextMode = when (modeStr.uppercase()) {
+                    "PLAYLIST" -> TvScreenMode.PLAYLIST
+                    "CLEAN" -> TvScreenMode.CLEAN
+                    else -> TvScreenMode.VIDEO
+                }
+                screenModeState.value = nextMode
+                prefs.edit().putString("tv_screen_mode", nextMode.name).apply()
+            }
+            if (obj.has("showQueue")) {
+                val sq = obj.optBoolean("showQueue", true)
+                showQueueState.value = sq
+                prefs.edit().putBoolean("tv_show_queue", sq).apply()
+            }
+            if (obj.has("showProposals")) {
+                val sp = obj.optBoolean("showProposals", true)
+                showProposalsState.value = sp
+                prefs.edit().putBoolean("tv_show_proposals", sp).apply()
+            }
+            if (obj.has("theme")) {
+                val th = obj.optString("theme", "neon")
+                themeState.value = th
+                prefs.edit().putString("tv_theme", th).apply()
+            }
+            if (obj.has("scale")) {
+                val sc = obj.optString("scale", "normal")
+                scaleState.value = sc
+                prefs.edit().putString("tv_scale", sc).apply()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PonelePlayTV", "Error parsing displayConfig: ${e.message}")
         }
     }
 
@@ -241,6 +296,10 @@ fun TVButton(
 fun NativeTvApp(
     prefs: SharedPreferences,
     screenMode: TvScreenMode,
+    showQueue: Boolean,
+    showProposals: Boolean,
+    themeName: String,
+    scaleName: String,
     isMuted: Boolean,
     showSettings: Boolean,
     videoController: VideoPlayerController,
@@ -248,6 +307,7 @@ fun NativeTvApp(
     onOpenSettings: () -> Unit,
     onToggleMode: () -> Unit,
     onToggleMute: () -> Unit,
+    onDisplayConfig: (String) -> Unit,
     onExitApp: () -> Unit
 ) {
     val defaultCloud = "https://poneleplay.netlify.app"
@@ -288,7 +348,9 @@ fun NativeTvApp(
         while (isActive) {
             withContext(Dispatchers.IO) {
                 try {
-                    val endpoint = "${serverUrl.trimEnd('/')}/api/tv/${venueSlug.trim()}"
+                    val devId = prefs.getString("tv_device_id", "") ?: ""
+                    val query = if (devId.isNotBlank()) "?device_id=${java.net.URLEncoder.encode(devId, "UTF-8")}" else ""
+                    val endpoint = "${serverUrl.trimEnd('/')}/api/tv/${venueSlug.trim()}$query"
                     val url = URL(endpoint)
                     val conn = url.openConnection() as HttpURLConnection
                     conn.connectTimeout = 4000
@@ -304,6 +366,9 @@ fun NativeTvApp(
                             hasError = false
                             errorMessage = null
                             isLoading = false
+                            if (parsed.playback.displayConfigJson != null) {
+                                onDisplayConfig(parsed.playback.displayConfigJson)
+                            }
                         }
                     } else {
                         withContext(Dispatchers.Main) {
@@ -353,11 +418,17 @@ fun NativeTvApp(
                 TvScreen(
                     feed = currentFeed,
                     mode = screenMode,
+                    deviceId = prefs.getString("tv_device_id", "") ?: "",
+                    showQueue = showQueue,
+                    showProposals = showProposals,
+                    themeName = themeName,
+                    scaleName = scaleName,
                     localIsMuted = isMuted,
                     videoController = videoController,
                     onVideoEnded = {
                         // Handled automatically via polling
                     },
+                    onDisplayConfig = onDisplayConfig,
                     modifier = Modifier.fillMaxSize()
                 )
             } else if (hasError) {

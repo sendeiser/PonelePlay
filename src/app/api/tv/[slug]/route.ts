@@ -79,6 +79,31 @@ export async function GET(
     const proto = req.headers.get("x-forwarded-proto") || "https";
     const clientUrl = `${proto}://${host}/p/${slug}`;
 
+    const deviceId = req.nextUrl.searchParams.get("device_id") || req.headers.get("x-device-id");
+    let displayConfig = {
+      mode: "VIDEO",
+      showQueue: true,
+      showProposals: true,
+      theme: "neon",
+      scale: "normal",
+    };
+
+    if (deviceId) {
+      try {
+        const { data: dev } = await admin
+          .from("player_devices")
+          .select("display_config")
+          .eq("id", deviceId)
+          .eq("venue_id", venue.id)
+          .maybeSingle();
+        if (dev?.display_config && typeof dev.display_config === "object") {
+          displayConfig = { ...displayConfig, ...dev.display_config };
+        }
+      } catch {
+        // Fallback to default
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -96,6 +121,7 @@ export async function GET(
           lastCommand: playState?.last_command ?? null,
           commandSeq: playState?.command_seq ?? 0,
           positionSeconds: Number((playState?.current_track as Record<string, unknown>)?.positionSeconds ?? 0),
+          displayConfig,
         },
         nowPlaying: nowPlayingTrack
           ? {

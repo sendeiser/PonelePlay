@@ -17,7 +17,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 
 class YouTubeBridge(
     private val onEnded: () -> Unit,
-    private val onError: (errorCode: Int) -> Unit = {}
+    private val onError: (errorCode: Int) -> Unit = {},
+    private val getDeviceId: () -> String = { "" },
+    private val onDisplayConfig: (String) -> Unit = {}
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -38,6 +40,14 @@ class YouTubeBridge(
                 onEnded()
             }, 3500)
         }
+    }
+
+    @JavascriptInterface
+    fun getDeviceId(): String = getDeviceId()
+
+    @JavascriptInterface
+    fun onDisplayConfig(jsonStr: String) {
+        mainHandler.post { onDisplayConfig(jsonStr) }
     }
 }
 
@@ -94,12 +104,14 @@ class VideoPlayerController {
 fun NativeVideoPlayer(
     videoId: String,
     venueSlug: String = "billar-aurora",
+    deviceId: String = "",
     isPaused: Boolean = false,
     volume: Int = 85,
     isMuted: Boolean = false,
     controller: VideoPlayerController,
     modifier: Modifier = Modifier,
-    onEnded: () -> Unit = {}
+    onEnded: () -> Unit = {},
+    onDisplayConfig: (String) -> Unit = {}
 ) {
     // React to video changes
     LaunchedEffect(videoId) {
@@ -153,12 +165,19 @@ fun NativeVideoPlayer(
                 }
                 webViewClient = WebViewClient()
 
-                addJavascriptInterface(YouTubeBridge(onEnded), "AndroidBridge")
+                addJavascriptInterface(
+                    YouTubeBridge(
+                        onEnded = onEnded,
+                        getDeviceId = { deviceId },
+                        onDisplayConfig = onDisplayConfig
+                    ),
+                    "AndroidBridge"
+                )
 
                 controller.webView = this
                 controller.currentVideoId = videoId
 
-                val html = buildPlayerHtml(videoId, venueSlug, isPaused, volume, isMuted)
+                val html = buildPlayerHtml(videoId, venueSlug, deviceId, isPaused, volume, isMuted)
                 val originUrl = "https://poneleplay.netlify.app"
                 loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
             }
@@ -172,6 +191,7 @@ fun NativeVideoPlayer(
 private fun buildPlayerHtml(
     videoId: String,
     venueSlug: String,
+    deviceId: String,
     isPaused: Boolean,
     volume: Int,
     isMuted: Boolean
@@ -205,6 +225,7 @@ private fun buildPlayerHtml(
           <script>
             var player = null;
             var currentVideoId = '$videoId';
+            var myDeviceId = '$deviceId';
             var isEndedSent = false;
             var desiredPaused = ${if (isPaused) "true" else "false"};
             var currentVolume = ${if (isMuted) 0 else volume};
@@ -448,6 +469,24 @@ private fun buildPlayerHtml(
                     } else {
                       eventName = envelope.event;
                       eventPayload = envelope.payload || {};
+                    }
+
+                    // 0. Display Configuration Event from Cabina (Individual per TV or All)
+                    if (eventName === "tv_display_config" || (eventName === "playback_command" && eventPayload && eventPayload.command === "set_tv_display")) {
+                      var p = eventPayload.payload || eventPayload;
+                      var target = p.targetDeviceId || eventPayload.targetDeviceId;
+                      var cfg = p.config || p.displayConfig || eventPayload.config;
+                      if (cfg) {
+                        var devId = myDeviceId;
+                        if (!devId && window.AndroidBridge && window.AndroidBridge.getDeviceId) {
+                          try { devId = window.AndroidBridge.getDeviceId(); } catch(_) {}
+                        }
+                        if (!target || target === 'all' || target === devId) {
+                          if (window.AndroidBridge && window.AndroidBridge.onDisplayConfig) {
+                            window.AndroidBridge.onDisplayConfig(typeof cfg === 'string' ? cfg : JSON.stringify(cfg));
+                          }
+                        }
+                      }
                     }
 
                     // 1. Instant Playback Command from DJ Booth

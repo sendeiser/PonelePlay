@@ -20,6 +20,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  Tv,
   X,
 } from "lucide-react";
 import { createNightStateSource } from "@/lib/api/night-state";
@@ -45,6 +46,7 @@ import {
   sendPlaybackCommand,
 } from "@/lib/api/master-control";
 import { ManualPlaybackModal } from "./manual-playback-modal";
+import { TvDevicesManagerModal } from "./tv-devices-manager-modal";
 import { PanelAudioEngine, type PanelAudioEngineRef } from "./panel-audio-engine";
 
 interface PanelPlaybackFooterProps {
@@ -74,6 +76,7 @@ export function PanelPlaybackFooter({
 
   // Modals
   const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [tvManagerOpen, setTvManagerOpen] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   // Expandable Queue & Remote Deck Drawer
@@ -856,22 +859,15 @@ export function PanelPlaybackFooter({
 
           {/* RIGHT: Volume & Karaoke Toggle (Clean audio controls, no TV clutter) */}
           <div className="flex items-center justify-end gap-3 justify-self-end">
-            {/* TV Screen Mode Remote Switcher */}
+            {/* TV Screen & Display Remote Manager */}
             <button
               type="button"
-              onClick={async () => {
-                try {
-                  await sendPlaybackCommand(slug, "toggle_video_mode");
-                  showToast("📺 Modo de Pantalla TV alternado");
-                } catch {
-                  showToast("Error al cambiar modo de TV");
-                }
-              }}
-              className="hidden lg:flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-[#232b42] bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
-              title="Alternar vista en la TV: Video vs Énfasis en Playlist y Votación"
+              onClick={() => setTvManagerOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#232b42] bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+              title="Administrar pantallas TV: cambiar modos, ocultar/mostrar listas, temas y tamaños desde la cabina"
             >
-              <span className="material-symbols-outlined text-[13px] text-cyan-400">tv</span>
-              <span>Modo TV</span>
+              <Tv className="size-3.5 text-cyan-400" />
+              <span>Pantallas TV</span>
             </button>
 
             {/* Karaoke Mode Toggle Button */}
@@ -981,6 +977,13 @@ export function PanelPlaybackFooter({
         slug={slug}
         defaultKaraoke={karaokeMode}
         onActionComplete={() => void loadState()}
+      />
+
+      {/* Modern Smart TV Devices & Display Manager Modal */}
+      <TvDevicesManagerModal
+        isOpen={tvManagerOpen}
+        onClose={() => setTvManagerOpen(false)}
+        slug={slug}
       />
 
       {/* ==================== EXPANDABLE QUEUE & REMOTE PLAYER DRAWER ==================== */}

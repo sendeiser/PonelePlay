@@ -25,6 +25,22 @@ export interface TvPairingStatusResponse {
   error?: string;
 }
 
+export interface TvDisplayConfig {
+  mode: "VIDEO" | "PLAYLIST" | "CLEAN";
+  showQueue: boolean;
+  showProposals: boolean;
+  theme: "neon" | "minimal" | "gold" | "emerald";
+  scale: "compact" | "normal" | "large" | "xlarge";
+}
+
+export const DEFAULT_TV_DISPLAY_CONFIG: TvDisplayConfig = {
+  mode: "VIDEO",
+  showQueue: true,
+  showProposals: true,
+  theme: "neon",
+  scale: "normal",
+};
+
 export interface PlayerDeviceItem {
   id: string;
   name: string;
@@ -32,6 +48,7 @@ export interface PlayerDeviceItem {
   lastSeenAt: string | null;
   revokedAt: string | null;
   isOnline: boolean;
+  displayConfig?: TvDisplayConfig;
 }
 
 export async function requestTvPairingCode(
@@ -152,5 +169,68 @@ export async function revokePlayerDevice(deviceId: string): Promise<boolean> {
   if (error) {
     throw new Error(error.message);
   }
+  return true;
+}
+
+export async function updateTvDeviceDisplay(
+  slug: string,
+  deviceId: string | null,
+  config: Partial<TvDisplayConfig>,
+): Promise<boolean> {
+  const supabase = createBrowserSupabase();
+
+  // 1. Broadcast immediately to WebSocket for sub-30ms instant reaction on the TV
+  try {
+    const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
+    const existing = channels.find(
+      (c: { topic?: string }) =>
+        c.topic === `playback-control:${slug}` ||
+        c.topic === `realtime:playback-control:${slug}`,
+    );
+    const channel = existing ?? supabase.channel(`playback-control:${slug}`);
+    if (channel && typeof channel.send === "function") {
+      void channel.send({
+        type: "broadcast",
+        event: "tv_display_config",
+        payload: {
+          targetDeviceId: deviceId || "all",
+          config,
+          timestamp: Date.now(),
+        },
+      });
+      void channel.send({
+        type: "broadcast",
+        event: "playback_command",
+        payload: {
+          command: "set_tv_display",
+          payload: {
+            targetDeviceId: deviceId || "all",
+            config,
+          },
+          timestamp: Date.now(),
+        },
+      });
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+
+  // 2. Persist in database
+  try {
+    const { error } = await supabase.rpc("update_tv_device_display" as never, {
+      p_venue_slug: slug,
+      p_device_id: deviceId || null,
+      p_display_config: config,
+    } as never);
+    if (error && deviceId) {
+      await supabase
+        .from("player_devices")
+        .update({ display_config: config })
+        .eq("id", deviceId);
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+
   return true;
 }
