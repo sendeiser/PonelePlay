@@ -22,11 +22,11 @@ import { CopyCodeButton } from "./copy-code-button";
 export const metadata = {
   title: "Cómo Funciona & App TV | PonelePlay Jukebox",
   description:
-    "Guía completa de funcionamiento de PonelePlay para bares y restaurantes. Cómo instalar la app en Android TV con el código de Downloader 7792925 y reglas de votación.",
+    "Guía completa de funcionamiento de PonelePlay para bares y restaurantes. Cómo instalar la app en Android TV con el código de Downloader 4062401 y reglas de votación.",
 };
 
 export default function ComoFuncionaPage() {
-  const DOWNLOADER_CODE = "7792925";
+  const DOWNLOADER_CODE = "4062401";
 
   return (
     <main className="min-h-screen bg-[#090D16] text-[#dfe2ef] flex flex-col justify-between relative overflow-hidden">
@@ -280,12 +280,12 @@ export default function ComoFuncionaPage() {
             {/* Alternative Methods Buttons */}
             <div className="pt-2 flex flex-wrap items-center gap-3">
               <a
-                href="/poneleplay-tv.apk"
-                download="poneleplay-tv.apk"
+                href="https://poneleplay.netlify.app/tv.apk"
+                download="tv.apk"
                 className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:brightness-110 text-white font-mono text-xs font-bold transition-all shadow-lg shadow-cyan-900/30 flex items-center gap-2"
               >
                 <Download className="size-4" />
-                <span>Descargar APK para Pendrive USB (7.98 MB)</span>
+                <span>Descargar APK Directo / Pendrive USB</span>
               </a>
 
               <Link

@@ -63,18 +63,18 @@ export default function HomePage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-bold text-white">App Oficial para Smart TV</span>
-                <span className="px-2.5 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-extrabold tracking-wider shadow-sm">
-                  Código Downloader: 7792925
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-mono font-extrabold tracking-wider animate-pulse">
+                  Código Downloader: 4062401
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Abrí la app <span className="text-white font-semibold">Downloader</span> en tu Smart TV o TV Box y escribí el código <span className="text-cyan-300 font-mono font-bold">7792925</span> (descarga directa de <span className="text-slate-300 font-mono">https://poneleplay.netlify.app/tv.apk</span>).
+              <p className="text-xs text-slate-400 mt-0.5">
+                Ingresá el código <strong className="text-cyan-300 font-mono font-bold">4062401</strong> en la app Downloader de tu Smart TV o TV Box para descargar e instalar directamente.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end">
             <Link
-              href="/tv.apk"
+              href="https://poneleplay.netlify.app/tv.apk"
               download
               className="px-3.5 py-2 rounded-xl bg-[#1E2333] hover:bg-[#283046] border border-[#2A3147] text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
             >
@@ -173,8 +173,8 @@ export default function HomePage() {
             Cómo Funciona & App TV
           </Link>
           <span className="text-slate-700">·</span>
-          <Link href="/tv.apk" download className="hover:text-slate-300 transition-colors">
-            Descargar APK (Downloader 7792925)
+          <Link href="https://poneleplay.netlify.app/tv.apk" download className="hover:text-slate-300 transition-colors">
+            Descargar APK (Downloader 4062401)
           </Link>
           <span className="text-slate-700">·</span>
           <Link href="/login" className="hover:text-slate-300 transition-colors">
