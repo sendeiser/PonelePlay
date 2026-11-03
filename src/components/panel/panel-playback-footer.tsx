@@ -205,18 +205,24 @@ export function PanelPlaybackFooter({
   const handlePlayQueueItemNow = async (item: QueueItemView) => {
     setPendingActionId(item.id);
     try {
+      const selectedTrack = {
+        itemId: item.id,
+        trackId: item.trackId,
+        title: item.title,
+        artist: item.artist,
+        youtubeVideoId: item.youtubeVideoId,
+        thumbnailUrl: item.thumbnailUrl,
+        durationSeconds: item.durationSeconds,
+        source: item.source || "catalog",
+        voteCount: item.voteCount,
+      };
+      setIsPaused(false);
+      setElapsed(0);
+      setVideoDuration(null);
+      audioEngineRef.current?.unlockAudio();
+      broadcastControl("play_now", { track: selectedTrack });
       await sendPlaybackCommand(slug, "play_now", {
-        track: {
-          itemId: item.id,
-          trackId: item.trackId,
-          title: item.title,
-          artist: item.artist,
-          youtubeVideoId: item.youtubeVideoId,
-          thumbnailUrl: item.thumbnailUrl,
-          durationSeconds: item.durationSeconds,
-          source: item.source || "catalog",
-          voteCount: item.voteCount,
-        },
+        track: selectedTrack,
       });
       showToast(`Poniendo en TV: "${item.title}"`);
       await refreshNightState();
@@ -489,6 +495,8 @@ export function PanelPlaybackFooter({
       setElapsed(0);
       setVideoDuration(null);
       setIsPaused(false);
+      audioEngineRef.current?.unlockAudio();
+      broadcastControl("play_now", { track: nextTrack });
       try {
         await sendPlaybackCommand(slug, "play_now", { track: nextTrack });
       } catch {
@@ -531,6 +539,8 @@ export function PanelPlaybackFooter({
     if (currentTrack) {
       showToast(`⏮️ Reiniciando: ${currentTrack.title}`);
       setElapsed(0);
+      setIsPaused(false);
+      audioEngineRef.current?.unlockAudio();
       audioEngineRef.current?.seekTo(0);
       broadcastControl("seek", { seconds: 0 });
       broadcastControl("play_now", { track: currentTrack });

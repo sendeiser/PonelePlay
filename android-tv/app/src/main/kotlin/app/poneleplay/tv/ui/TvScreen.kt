@@ -76,9 +76,7 @@ fun TvScreen(
             when (feed.playback.lastCommand) {
                 "pause" -> videoController.pause()
                 "resume" -> videoController.play()
-                "toggle_pause" -> {
-                    if (feed.playback.isPaused) videoController.pause() else videoController.play()
-                }
+                "toggle_pause" -> videoController.togglePlayPause()
                 "seek" -> {
                     // Only seek if positionSeconds is explicitly positive (prevents unwanted reset to 0)
                     if (feed.playback.positionSeconds > 0f) {
@@ -98,10 +96,6 @@ fun TvScreen(
                 "skip" -> onVideoEnded()
             }
         }
-    }
-
-    LaunchedEffect(feed.playback.isPaused) {
-        if (feed.playback.isPaused) videoController.pause() else videoController.play()
     }
 
     LaunchedEffect(effectiveMuted, effectiveVolume) {

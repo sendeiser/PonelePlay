@@ -108,11 +108,6 @@ fun NativeVideoPlayer(
         }
     }
 
-    // React to pause/play
-    LaunchedEffect(isPaused) {
-        if (isPaused) controller.pause() else controller.play()
-    }
-
     // React to mute
     LaunchedEffect(isMuted) {
         if (isMuted) controller.mute() else controller.unMute()
@@ -142,8 +137,8 @@ fun NativeVideoPlayer(
                     allowContentAccess = true
                     allowFileAccess = true
                     mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    // Standard Chrome Mobile User-Agent without '; wv' prevents YouTube error 150 / 152-4 on VEVO / BBC Music videos
-                    userAgentString = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                    // Desktop Chrome User-Agent without '; wv' prevents mobile touch play-pause overlay and bypasses error 150/152-4
+                    userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
                 }
 
                 webChromeClient = object : WebChromeClient() {
@@ -182,7 +177,7 @@ private fun buildPlayerHtml(
     isMuted: Boolean
 ): String {
     val autoPlayParam = if (isPaused) 0 else 1
-    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayParam&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
+    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayParam&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
 
     return """
         <!DOCTYPE html>
@@ -216,6 +211,8 @@ private fun buildPlayerHtml(
             var currentMuted = ${if (isMuted) "true" else "false"};
             var venueSlug = '${venueSlug.ifBlank { "billar-aurora" }}';
             var lastSyncSeekAt = 0;
+            var currentTvTime = 0;
+            var currentTvState = -1;
 
             // Send command directly to YouTube iframe via postMessage AND player instance
             function sendCommand(func, args) {
@@ -237,9 +234,26 @@ private fun buildPlayerHtml(
               } catch(_) {}
             }
 
+            function pingListening() {
+              try {
+                var ifr = document.getElementById('player');
+                if (ifr && ifr.contentWindow) {
+                  ifr.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*');
+                }
+              } catch(_) {}
+            }
+
+            // Continuously request infoDelivery from YouTube iframe so currentTvTime is always live
+            setInterval(pingListening, 1500);
+            setTimeout(pingListening, 400);
+
             function playVideo() {
               desiredPaused = false;
               sendCommand('playVideo', []);
+              if (!currentMuted) {
+                sendCommand('unMute', []);
+                sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
+              }
             }
 
             function pauseVideo() {
@@ -275,22 +289,46 @@ private fun buildPlayerHtml(
               sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
             }
 
-            function loadVideo(id) {
+            // Load video cleanly: immediately pause/mute old video so it NEVER leaks or replays at 0s!
+            function loadVideo(id, startSec) {
               if (!id) return;
               isEndedSent = false;
               currentVideoId = id;
+              var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
+
+              // Kill audio of existing video immediately
+              sendCommand('pauseVideo', []);
+              sendCommand('mute', []);
+
               if (desiredPaused) {
-                sendCommand('cueVideoById', [{ videoId: id, startSeconds: 0 }]);
+                sendCommand('cueVideoById', [{ videoId: id, startSeconds: sec }]);
               } else {
-                sendCommand('loadVideoById', [{ videoId: id, startSeconds: 0 }]);
+                sendCommand('loadVideoById', [{ videoId: id, startSeconds: sec }]);
+                sendCommand('playVideo', []);
+                if (!currentMuted) {
+                  sendCommand('unMute', []);
+                  sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
+                }
               }
             }
 
-            // Capture YouTube iframe postMessage responses
+            // Capture YouTube iframe postMessage responses (infoDelivery gives exact currentTime!)
             window.addEventListener('message', function(e) {
               try {
                 var data = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
-                if (data && data.event === 'onStateChange') {
+                if (!data || typeof data !== 'object') return;
+
+                if (data.event === 'infoDelivery' && data.info) {
+                  if (typeof data.info.currentTime === 'number') {
+                    currentTvTime = data.info.currentTime;
+                  }
+                  if (typeof data.info.playerState === 'number') {
+                    currentTvState = data.info.playerState;
+                  }
+                }
+
+                if (data.event === 'onStateChange') {
+                  currentTvState = data.info;
                   if (data.info === 0 && !isEndedSent) { // ENDED
                     isEndedSent = true;
                     if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
@@ -318,6 +356,7 @@ private fun buildPlayerHtml(
                   events: {
                     'onReady': function(e) {
                       try {
+                        pingListening();
                         if (currentMuted) {
                           sendCommand('mute', []);
                           sendCommand('setVolume', [0]);
@@ -333,6 +372,7 @@ private fun buildPlayerHtml(
                       } catch(_) {}
                     },
                     'onStateChange': function(e) {
+                      currentTvState = e.data;
                       if (e.data === 0 && !isEndedSent) {
                         isEndedSent = true;
                         if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
@@ -442,9 +482,8 @@ private fun buildPlayerHtml(
                         var trk = p.track || eventPayload.track;
                         if (trk && trk.youtubeVideoId) {
                           desiredPaused = false;
-                          loadVideo(trk.youtubeVideoId);
-                          seekTo(0);
-                          playVideo();
+                          currentVideoId = trk.youtubeVideoId;
+                          loadVideo(trk.youtubeVideoId, 0);
                         }
                       }
                     } else if (eventName === "tv_playback_progress" && eventPayload) {
@@ -466,25 +505,42 @@ private fun buildPlayerHtml(
                       // Sync Track if changed
                       if (trk && trk.youtubeVideoId && trk.youtubeVideoId !== currentVideoId) {
                         currentVideoId = trk.youtubeVideoId;
-                        loadVideo(trk.youtubeVideoId);
+                        loadVideo(trk.youtubeVideoId, typeof curr === 'number' && curr > 0 ? curr : 0);
+                        return;
                       }
 
                       // Precise Drift Correction (Cabina is Master!)
                       if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused) {
                         var latency = 0;
-                        if (typeof sentAt === 'number') {
-                          latency = Math.max(0, Math.min(1.5, (Date.now() - sentAt) / 1000));
+                        if (typeof sentAt === 'number' && sentAt > 0) {
+                          latency = Math.max(0, Math.min(1.0, (Date.now() - sentAt) / 1000));
                         }
                         var targetSec = curr + latency;
 
+                        // TV time from player or infoDelivery postMessage
                         var tvSec = -1;
                         if (player && typeof player.getCurrentTime === 'function') {
-                          try { tvSec = player.getCurrentTime() || 0; } catch(_) {}
+                          try {
+                            var pt = player.getCurrentTime();
+                            if (typeof pt === 'number' && pt >= 0) tvSec = pt;
+                          } catch(_) {}
                         }
+                        if (tvSec < 0 && typeof currentTvTime === 'number' && currentTvTime >= 0) {
+                          tvSec = currentTvTime;
+                        }
+
                         if (tvSec >= 0) {
                           var drift = Math.abs(tvSec - targetSec);
-                          // If drift is >= 0.7s and cooldown >= 2500ms, align TV to Cabina
-                          if (drift >= 0.7 && (Date.now() - lastSyncSeekAt > 2500)) {
+                          var now = Date.now();
+
+                          // Immediate align on major jump/seek (> 1.2s)
+                          if (drift > 1.2) {
+                            lastSyncSeekAt = now;
+                            seekTo(targetSec);
+                          }
+                          // Smooth 100% sync alignment for noticeable drift (>= 0.35s)
+                          else if (drift >= 0.35 && (now - lastSyncSeekAt > 1500)) {
+                            lastSyncSeekAt = now;
                             seekTo(targetSec);
                           }
                         }
