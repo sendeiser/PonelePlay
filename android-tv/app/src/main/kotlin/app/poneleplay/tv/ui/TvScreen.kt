@@ -197,88 +197,14 @@ fun TvScreen(
         }
     }
 
+    val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(Color(0xFF070A13))
     ) {
-        when (mode) {
-            TvScreenMode.VIDEO -> {
-                TvModeVideo(
-                    feed = feed,
-                    qrBitmap = qrBitmap,
-                    currentTimeString = currentTimeString,
-                    effectiveVolume = effectiveVolume,
-                    effectiveMuted = effectiveMuted,
-                    videoController = videoController,
-                    deviceId = deviceId,
-                    showQueue = showQueue,
-                    showProposals = showProposals,
-                    theme = theme,
-                    scaleFactor = scaleFactor,
-                    onVideoEnded = onVideoEnded,
-                    onDisplayConfig = onDisplayConfig
-                )
-            }
-            TvScreenMode.CLEAN -> {
-                TvModeVideo(
-                    feed = feed,
-                    qrBitmap = qrBitmap,
-                    currentTimeString = currentTimeString,
-                    effectiveVolume = effectiveVolume,
-                    effectiveMuted = effectiveMuted,
-                    videoController = videoController,
-                    deviceId = deviceId,
-                    showQueue = false,
-                    showProposals = false,
-                    theme = theme,
-                    scaleFactor = scaleFactor,
-                    onVideoEnded = onVideoEnded,
-                    onDisplayConfig = onDisplayConfig
-                )
-            }
-            TvScreenMode.PLAYLIST -> {
-                TvModePlaylist(
-                    feed = feed,
-                    qrBitmap = qrBitmap,
-                    currentTimeString = currentTimeString,
-                    effectiveVolume = effectiveVolume,
-                    effectiveMuted = effectiveMuted,
-                    videoController = videoController,
-                    deviceId = deviceId,
-                    theme = theme,
-                    scaleFactor = scaleFactor,
-                    onVideoEnded = onVideoEnded,
-                    onDisplayConfig = onDisplayConfig
-                )
-            }
-        }
-    }
-}
-
-/**
- * MODE 1: Fullscreen Video Player with Left Transparent Queue + Right Transparent Proposals + Bottom HUD.
- */
-@Composable
-private fun TvModeVideo(
-    feed: TvFeed,
-    qrBitmap: Bitmap?,
-    currentTimeString: String,
-    effectiveVolume: Int,
-    effectiveMuted: Boolean,
-    videoController: VideoPlayerController,
-    deviceId: String = "",
-    showQueue: Boolean = true,
-    showProposals: Boolean = true,
-    theme: TvDesignTheme = getTvDesignTheme("neon"),
-    scaleFactor: Float = 1.0f,
-    onVideoEnded: () -> Unit,
-    onDisplayConfig: (String) -> Unit = {}
-) {
-    val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Fullscreen Video Player (Center Background)
+        // 1. Persistent Fullscreen Video Player (Stays mounted ALWAYS across all mode/theme changes!)
         NativeVideoPlayer(
             videoId = currentVideoId,
             venueSlug = feed.venue.slug,
@@ -291,6 +217,58 @@ private fun TvModeVideo(
             onDisplayConfig = onDisplayConfig,
             modifier = Modifier.fillMaxSize()
         )
+
+        // 2. Overlays depending on mode
+        when (mode) {
+            TvScreenMode.VIDEO -> {
+                TvModeVideoOverlays(
+                    feed = feed,
+                    qrBitmap = qrBitmap,
+                    currentTimeString = currentTimeString,
+                    showQueue = showQueue,
+                    showProposals = showProposals,
+                    theme = theme,
+                    scaleFactor = scaleFactor
+                )
+            }
+            TvScreenMode.CLEAN -> {
+                TvModeVideoOverlays(
+                    feed = feed,
+                    qrBitmap = qrBitmap,
+                    currentTimeString = currentTimeString,
+                    showQueue = false,
+                    showProposals = false,
+                    theme = theme,
+                    scaleFactor = scaleFactor
+                )
+            }
+            TvScreenMode.PLAYLIST -> {
+                TvModePlaylistOverlays(
+                    feed = feed,
+                    qrBitmap = qrBitmap,
+                    currentTimeString = currentTimeString,
+                    theme = theme,
+                    scaleFactor = scaleFactor
+                )
+            }
+        }
+    }
+}
+
+/**
+ * MODE 1: Fullscreen Video Player Overlays (Left Transparent Queue + Right Transparent Proposals + Bottom HUD).
+ */
+@Composable
+private fun TvModeVideoOverlays(
+    feed: TvFeed,
+    qrBitmap: Bitmap?,
+    currentTimeString: String,
+    showQueue: Boolean = true,
+    showProposals: Boolean = true,
+    theme: TvDesignTheme = getTvDesignTheme("neon"),
+    scaleFactor: Float = 1.0f
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
 
         // 2. Left Floating Queue (100% Invisible Transparent, no box/border, text only)
         if (showQueue && feed.queue.isNotEmpty()) {
@@ -558,184 +536,199 @@ private fun TvModeVideo(
 }
 
 /**
- * MODE 2: Party & Queue Emphasis (Split screen: Hero card + Queue + Proposals + Big QR).
+ * MODE 2: Party & Queue Emphasis Overlays (Split screen: Hero card + Queue + Proposals + Big QR).
  */
 @Composable
-private fun TvModePlaylist(
+private fun TvModePlaylistOverlays(
     feed: TvFeed,
     qrBitmap: Bitmap?,
     currentTimeString: String,
-    effectiveVolume: Int,
-    effectiveMuted: Boolean,
-    videoController: VideoPlayerController,
-    deviceId: String = "",
     theme: TvDesignTheme = getTvDesignTheme("neon"),
-    scaleFactor: Float = 1.0f,
-    onVideoEnded: () -> Unit,
-    onDisplayConfig: (String) -> Unit = {}
+    scaleFactor: Float = 1.0f
 ) {
-    val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
-
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 28.dp, vertical = 18.dp)
+            .background(Color(0xE6070A13))
     ) {
-        // ================= TOP HEADER BAR =================
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 28.dp, vertical = 18.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "PONELEPLAY",
-                    color = Color.White,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "• ${feed.venue.name.uppercase()}",
-                    color = theme.secondaryColor,
-                    fontSize = 12.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Live Session Pill
-                Box(
-                    modifier = Modifier
-                        .background(theme.badgeBackground, RoundedCornerShape(20.dp))
-                        .border(1.dp, theme.primaryColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                        .padding(horizontal = 10.dp, vertical = 3.5.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .background(theme.primaryColor, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (feed.isOpen) "NOCHE ABIERTA" else "CERRADO",
-                            color = theme.primaryColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
+            // ================= TOP HEADER BAR =================
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "PONELEPLAY",
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "• ${feed.venue.name.uppercase()}",
+                        color = theme.secondaryColor,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
 
-                Spacer(modifier = Modifier.width(14.dp))
-
-                Text(
-                    text = currentTimeString,
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // ================= 3-COLUMN CENTRAL AREA =================
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            // ----- COLUMN 1: NOW PLAYING HERO CARD (36%) -----
-            Box(
-                modifier = Modifier
-                    .weight(0.36f)
-                    .fillMaxHeight()
-                    .background(theme.cardBackground, RoundedCornerShape(16.dp))
-                    .border(1.5.dp, theme.cardBorder, RoundedCornerShape(16.dp))
-                    .padding(16.dp)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        // Badge
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Live Session Pill
+                    Box(
+                        modifier = Modifier
+                            .background(theme.badgeBackground, RoundedCornerShape(20.dp))
+                            .border(1.dp, theme.primaryColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 10.dp, vertical = 3.5.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .background(theme.primaryColor, CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "EN AIRE • AHORA SUENA",
+                                text = if (feed.isOpen) "NOCHE ABIERTA" else "CERRADO",
                                 color = theme.primaryColor,
                                 fontSize = 10.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
+                        }
+                    }
 
-                            if (feed.nowPlaying?.isKaraoke == true) {
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Text(
+                        text = currentTimeString,
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // ================= 3-COLUMN CENTRAL AREA =================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // ----- COLUMN 1: NOW PLAYING HERO CARD (36%) -----
+                Box(
+                    modifier = Modifier
+                        .weight(0.36f)
+                        .fillMaxHeight()
+                        .background(theme.cardBackground, RoundedCornerShape(16.dp))
+                        .border(1.5.dp, theme.cardBorder, RoundedCornerShape(16.dp))
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            // Badge
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "🎤 KARAOKE",
-                                    color = Color(0xFFF43F5E),
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
+                                    text = "EN AIRE • AHORA SUENA",
+                                    color = theme.primaryColor,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
                                     fontFamily = FontFamily.Monospace
                                 )
+
+                                if (feed.nowPlaying?.isKaraoke == true) {
+                                    Text(
+                                        text = "🎤 KARAOKE",
+                                        color = Color(0xFFF43F5E),
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
                             }
-                        }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
-                        // Large Thumbnail or Mini Video
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .border(1.dp, theme.cardBorder, RoundedCornerShape(12.dp))
-                        ) {
-                            // Offscreen or PIP Video
-                            NativeVideoPlayer(
-                                videoId = currentVideoId,
-                                venueSlug = feed.venue.slug,
-                                deviceId = deviceId,
-                                isPaused = feed.playback.isPaused,
-                                volume = effectiveVolume,
-                                isMuted = effectiveMuted,
-                                controller = videoController,
-                                onEnded = onVideoEnded,
-                                onDisplayConfig = onDisplayConfig,
-                                modifier = Modifier.fillMaxSize()
+                            // Live Audio / Video Indicator Card
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color(0xFF0F1424))
+                                    .border(1.dp, theme.cardBorder, RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                        verticalAlignment = Alignment.Bottom,
+                                        modifier = Modifier.height(42.dp)
+                                    ) {
+                                        val bars = listOf(28.dp, 16.dp, 36.dp, 22.dp, 40.dp, 18.dp, 32.dp, 14.dp)
+                                        bars.forEach { h ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .width(5.dp)
+                                                    .height(h)
+                                                    .background(theme.primaryColor, RoundedCornerShape(2.dp))
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "EN VIVO • VIDEO ACTIVO",
+                                        color = theme.primaryColor,
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        letterSpacing = 1.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            Text(
+                                text = feed.nowPlaying?.title ?: "Esperando temas...",
+                                color = Color.White,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 22.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = feed.nowPlaying?.artist ?: "PonelePlay",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = feed.nowPlaying?.title ?: "Esperando temas...",
-                            color = Color.White,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            lineHeight = 22.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = feed.nowPlaying?.artist ?: "PonelePlay",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
 
                     // Bottom: Live Votes for Now Playing
                     Row(
@@ -923,6 +916,7 @@ private fun TvModePlaylist(
             }
         }
     }
+}
 }
 
 @Composable

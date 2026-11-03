@@ -268,11 +268,20 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         currentVideoIdRef.current = videoId;
         try {
           playerRef.current.loadVideoById(videoId);
-          playerRef.current.setVolume(isMutedRef.current ? 0 : volumeRef.current);
+          playerRef.current.setVolume(0);
           if (isMutedRef.current) {
             playerRef.current.mute();
           } else {
             playerRef.current.unMute();
+            const targetVol = volumeRef.current;
+            const steps = 5;
+            for (let s = 1; s <= steps; s++) {
+              setTimeout(() => {
+                if (!isMutedRef.current && playerRef.current) {
+                  playerRef.current.setVolume(Math.round((targetVol / steps) * s));
+                }
+              }, s * 300);
+            }
           }
           if (isPausedRef.current) {
             playerRef.current.pauseVideo();
@@ -438,6 +447,16 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         } else {
           lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.5) * 10) / 10;
           currentTime = lastReportedTimeRef.current;
+        }
+
+        // Gentle volume fade-out over last 2.5s before end
+        if (duration > 0 && currentTime > 0) {
+          const rem = duration - currentTime;
+          if (rem <= 2.5 && rem > 0.2 && !isMutedRef.current && !isPausedRef.current) {
+            const fadeVol = Math.max(0, Math.round(volumeRef.current * (rem / 2.5)));
+            if (playerRef.current) playerRef.current.setVolume(fadeVol);
+            if (html5AudioRef.current) html5AudioRef.current.volume = fadeVol / 100;
+          }
         }
 
         onProgressRef.current?.(currentTime, duration > 0 ? duration : null);

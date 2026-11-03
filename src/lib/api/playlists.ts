@@ -19,6 +19,7 @@ export async function fetchPlaylists(venueId: string): Promise<VenuePlaylist[]> 
     .from("venue_playlists")
     .select("*, playlist_tracks(count)")
     .eq("venue_id", venueId)
+    .neq("name", "__tv_display_config__")
     .order("is_active", { ascending: false })
     .order("created_at", { ascending: true });
 

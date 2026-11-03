@@ -31,6 +31,11 @@ class YouTubeBridge(
     }
 
     @JavascriptInterface
+    fun onTrackNearEnd(remainingSec: Int) {
+        // Preload notification from web player
+    }
+
+    @JavascriptInterface
     fun onError(errorCode: Int) {
         mainHandler.post {
             onError(errorCode)
@@ -233,7 +238,11 @@ private fun buildPlayerHtml(
             var venueSlug = '${venueSlug.ifBlank { "billar-aurora" }}';
             var lastSyncSeekAt = 0;
             var currentTvTime = 0;
+            var currentDuration = 0;
             var currentTvState = -1;
+            var isPreloadSent = false;
+            var isFadingOut = false;
+            var originalVolume = currentVolume > 0 ? currentVolume : 85;
 
             // Send command directly to YouTube iframe via postMessage AND player instance
             function sendCommand(func, args) {
@@ -294,6 +303,7 @@ private fun buildPlayerHtml(
             function setVolume(v) {
               if (!currentMuted) {
                 currentVolume = v;
+                originalVolume = v;
                 sendCommand('setVolume', [v]);
               }
             }
@@ -310,10 +320,12 @@ private fun buildPlayerHtml(
               sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
             }
 
-            // Load video cleanly: immediately pause/mute old video so it NEVER leaks or replays at 0s!
+            // Load video cleanly: start at volume 0 and smoothly fade in over 1.5s!
             function loadVideo(id, startSec) {
               if (!id) return;
               isEndedSent = false;
+              isPreloadSent = false;
+              isFadingOut = false;
               currentVideoId = id;
               var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
 
@@ -321,9 +333,10 @@ private fun buildPlayerHtml(
               lastSyncSeekAt = Date.now() + 8000;
               currentTvTime = sec;
 
-              // Kill audio of existing video immediately
+              // Kill audio of existing video immediately with 0 volume
               sendCommand('pauseVideo', []);
               sendCommand('mute', []);
+              sendCommand('setVolume', [0]);
 
               if (desiredPaused) {
                 sendCommand('cueVideoById', [{ videoId: id, startSeconds: sec }]);
@@ -332,7 +345,19 @@ private fun buildPlayerHtml(
                 sendCommand('playVideo', []);
                 if (!currentMuted) {
                   sendCommand('unMute', []);
-                  sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
+                  // Smooth 5-step fade-in from 0 to originalVolume over 1500ms
+                  var targetVol = currentVolume > 0 ? currentVolume : 85;
+                  originalVolume = targetVol;
+                  var steps = 5;
+                  for (var s = 1; s <= steps; s++) {
+                    (function(step) {
+                      setTimeout(function() {
+                        if (!isFadingOut && !currentMuted) {
+                          sendCommand('setVolume', [Math.round((targetVol / steps) * step)]);
+                        }
+                      }, step * 300);
+                    })(s);
+                  }
                 }
               }
             }
@@ -347,8 +372,42 @@ private fun buildPlayerHtml(
                   if (typeof data.info.currentTime === 'number') {
                     currentTvTime = data.info.currentTime;
                   }
+                  if (typeof data.info.duration === 'number' && data.info.duration > 0) {
+                    currentDuration = data.info.duration;
+                  }
                   if (typeof data.info.playerState === 'number') {
                     currentTvState = data.info.playerState;
+                  }
+
+                  // Preload next track 10-15s before end & crossfade audio
+                  if (currentDuration > 0 && currentTvTime > 0) {
+                    var remaining = currentDuration - currentTvTime;
+
+                    // 15 seconds before end: notify AndroidBridge to preload next track
+                    if (remaining <= 15 && remaining > 0 && !isPreloadSent) {
+                      isPreloadSent = true;
+                      if (window.AndroidBridge && window.AndroidBridge.onTrackNearEnd) {
+                        window.AndroidBridge.onTrackNearEnd(Math.round(remaining));
+                      }
+                    }
+
+                    // Last 3.0 seconds: gentle fade out audio down to 0
+                    if (remaining <= 3.0 && remaining > 0.3 && !currentMuted && !desiredPaused) {
+                      isFadingOut = true;
+                      var targetVol = originalVolume > 0 ? originalVolume : 85;
+                      var fadeVol = Math.max(0, Math.min(targetVol, Math.round(targetVol * (remaining / 3.0))));
+                      sendCommand('setVolume', [fadeVol]);
+                    }
+
+                    // Track reached end (within 0.35s): stop immediately and trigger next track so it NEVER loops!
+                    if (remaining <= 0.35 && !isEndedSent) {
+                      isEndedSent = true;
+                      sendCommand('pauseVideo', []);
+                      sendCommand('mute', []);
+                      if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
+                        window.AndroidBridge.onStateChange(0);
+                      }
+                    }
                   }
                 }
 
@@ -485,7 +544,7 @@ private fun buildPlayerHtml(
                         if (!devId && window.AndroidBridge && window.AndroidBridge.getDeviceId) {
                           try { devId = window.AndroidBridge.getDeviceId(); } catch(_) {}
                         }
-                        if (!target || target === 'all' || target === devId) {
+                        if (!target || target === 'all' || target === devId || !devId) {
                           if (window.AndroidBridge && window.AndroidBridge.onDisplayConfig) {
                             window.AndroidBridge.onDisplayConfig(typeof cfg === 'string' ? cfg : JSON.stringify(cfg));
                           }

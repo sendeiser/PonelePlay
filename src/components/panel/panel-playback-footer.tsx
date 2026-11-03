@@ -88,6 +88,8 @@ export function PanelPlaybackFooter({
   const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
   currentTrackRef.current = currentTrack;
   const lastProgressBroadcastRef = useRef<number>(0);
+  const isSkippingRef = useRef(false);
+  const hasPreloadedRef = useRef(false);
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
@@ -442,7 +444,18 @@ export function PanelPlaybackFooter({
     }
   };
 
+  // Reset preloaded tracker on track change
+  useEffect(() => {
+    hasPreloadedRef.current = false;
+  }, [currentTrack?.itemId, currentTrack?.youtubeVideoId]);
+
   const handleSkipNext = async () => {
+    if (isSkippingRef.current) return;
+    isSkippingRef.current = true;
+    setTimeout(() => {
+      isSkippingRef.current = false;
+    }, 2500);
+
     showToast("⏭️ Salteando a la siguiente canción...");
     let nextTrack: PlayerTrack | null = null;
 
@@ -950,6 +963,70 @@ export function PanelPlaybackFooter({
         onProgress={(curr, dur) => {
           setElapsed(Math.floor(curr));
           if (dur) setVideoDuration(dur);
+
+          // Preload next track 10-15 seconds before current track ends
+          const remaining = dur && dur > 0 ? dur - curr : 999;
+          if (remaining <= 15 && remaining > 0 && !hasPreloadedRef.current) {
+            hasPreloadedRef.current = true;
+            let nextTrack: PlayerTrack | null = null;
+            if (activeQueue.length > 0) {
+              const curIdx = activeQueue.findIndex(
+                (t) =>
+                  t.id === currentTrack?.itemId ||
+                  t.trackId === currentTrack?.trackId ||
+                  t.youtubeVideoId === currentTrack?.youtubeVideoId ||
+                  t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
+              );
+              if (curIdx >= 0 && curIdx < activeQueue.length - 1) {
+                const item = activeQueue[curIdx + 1];
+                nextTrack = {
+                  itemId: item.id,
+                  trackId: item.trackId,
+                  title: item.title,
+                  artist: item.artist,
+                  source: item.source || "catalog",
+                  durationSeconds: item.durationSeconds ?? 210,
+                  youtubeVideoId: item.youtubeVideoId || undefined,
+                  thumbnailUrl: item.thumbnailUrl ?? null,
+                  voteCount: item.voteCount,
+                };
+              } else if (curIdx === -1 && activeQueue.length > 0) {
+                const item = activeQueue[0];
+                nextTrack = {
+                  itemId: item.id,
+                  trackId: item.trackId,
+                  title: item.title,
+                  artist: item.artist,
+                  source: item.source || "catalog",
+                  durationSeconds: item.durationSeconds ?? 210,
+                  youtubeVideoId: item.youtubeVideoId || undefined,
+                  thumbnailUrl: item.thumbnailUrl ?? null,
+                  voteCount: item.voteCount,
+                };
+              }
+            }
+            if (!nextTrack && effectiveFallbackTracks.length > 0) {
+              const curIdx = effectiveFallbackTracks.findIndex(
+                (t) =>
+                  t.trackId === currentTrack?.trackId ||
+                  t.youtubeVideoId === currentTrack?.youtubeVideoId ||
+                  t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
+              );
+              const nextIdx = curIdx >= 0 ? (curIdx + 1) % effectiveFallbackTracks.length : 0;
+              nextTrack = effectiveFallbackTracks[nextIdx];
+            }
+            if (nextTrack && channelRef.current) {
+              void channelRef.current.send({
+                type: "broadcast",
+                event: "track_preloading",
+                payload: {
+                  nextTrack,
+                  remainingSeconds: Math.round(remaining),
+                },
+              });
+            }
+          }
+
           const now = Date.now();
           if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 1800) {
             lastProgressBroadcastRef.current = now;

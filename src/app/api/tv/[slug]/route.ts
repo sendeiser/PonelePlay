@@ -89,31 +89,22 @@ export async function GET(
     };
 
     try {
-      if (deviceId) {
-        const { data: dev } = await admin
-          .from("player_devices")
-          .select("display_config")
-          .eq("id", deviceId)
-          .eq("venue_id", venue.id)
-          .maybeSingle();
-        const conf = dev?.display_config;
-        if (conf && typeof conf === "object") {
-          displayConfig = { ...displayConfig, ...(conf as Record<string, unknown>) };
-        }
-      } else {
-        // Fallback: check most recently updated player device in this venue
-        const { data: latestDev } = await admin
-          .from("player_devices")
-          .select("display_config")
-          .eq("venue_id", venue.id)
-          .not("display_config", "is", null)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const conf = latestDev?.display_config;
-        if (conf && typeof conf === "object") {
-          displayConfig = { ...displayConfig, ...(conf as Record<string, unknown>) };
-        }
+      const { data: storedRow } = await admin
+        .from("venue_playlists")
+        .select("description")
+        .eq("venue_id", venue.id)
+        .eq("name", "__tv_display_config__")
+        .maybeSingle();
+
+      if (storedRow?.description) {
+        const parsed = JSON.parse(storedRow.description);
+        const globalCfg = parsed.global || parsed;
+        const devCfg = deviceId && parsed.devices ? parsed.devices[deviceId] : null;
+        displayConfig = {
+          ...displayConfig,
+          ...globalCfg,
+          ...(devCfg || {}),
+        };
       }
     } catch {
       // Fallback to default

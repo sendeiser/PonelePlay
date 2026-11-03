@@ -156,7 +156,39 @@ export async function listVenuePlayerDevices(
     throw new Error(res.error || "Error al listar pantallas TV");
   }
 
-  return res.devices || [];
+  const devices = res.devices || [];
+
+  // Fetch stored display configs to populate per-device configs
+  try {
+    const { data: v } = await supabase.from("venues").select("id").eq("slug", slug).maybeSingle();
+    if (v?.id) {
+      const { data: cfgRow } = await supabase
+        .from("venue_playlists")
+        .select("description")
+        .eq("venue_id", v.id)
+        .eq("name", "__tv_display_config__")
+        .maybeSingle();
+
+      if (cfgRow?.description) {
+        const parsed = JSON.parse(cfgRow.description);
+        const globalCfg = parsed.global || parsed;
+        const devMap = (parsed.devices || {}) as Record<string, Partial<TvDisplayConfig>>;
+
+        return devices.map((d) => ({
+          ...d,
+          displayConfig: {
+            ...DEFAULT_TV_DISPLAY_CONFIG,
+            ...globalCfg,
+            ...(devMap[d.id] || {}),
+          },
+        }));
+      }
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+
+  return devices;
 }
 
 export async function revokePlayerDevice(deviceId: string): Promise<boolean> {
@@ -182,14 +214,14 @@ export async function updateTvDeviceDisplay(
   // 1. Broadcast immediately to WebSocket for sub-30ms instant reaction on the TV
   try {
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
-    const existing = channels.find(
-      (c: { topic?: string }) =>
-        c.topic === `playback-control:${slug}` ||
-        c.topic === `realtime:playback-control:${slug}`,
+    const active = channels.find(
+      (c: { topic?: string; state?: string }) =>
+        (c.topic === `playback-control:${slug}` ||
+          c.topic === `realtime:playback-control:${slug}`) &&
+        c.state === "joined",
     );
-    const channel = existing ?? supabase.channel(`playback-control:${slug}`);
-    if (channel && typeof channel.send === "function") {
-      void channel.send({
+    if (active && typeof active.send === "function") {
+      void active.send({
         type: "broadcast",
         event: "tv_display_config",
         payload: {
@@ -198,7 +230,7 @@ export async function updateTvDeviceDisplay(
           timestamp: Date.now(),
         },
       });
-      void channel.send({
+      void active.send({
         type: "broadcast",
         event: "playback_command",
         payload: {
@@ -215,22 +247,15 @@ export async function updateTvDeviceDisplay(
     // Non-blocking fallback
   }
 
-  // 2. Persist in database
+  // 2. Persist in database and broadcast via server route
   try {
-    const { error } = await supabase.rpc("update_tv_device_display" as never, {
-      p_venue_slug: slug,
-      p_device_id: deviceId || null,
-      p_display_config: config,
-    } as never);
-    if (error && deviceId) {
-      await supabase
-        .from("player_devices")
-        .update({ display_config: config })
-        .eq("id", deviceId);
-    }
+    const res = await fetch("/api/tv/display-config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, deviceId, config }),
+    });
+    return res.ok;
   } catch {
-    // Non-blocking fallback
+    return false;
   }
-
-  return true;
 }
