@@ -157,7 +157,7 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white font-mono text-xs font-bold shadow-lg shadow-red-600/30 transition-all active:scale-95"
           >
             <span className="material-symbols-outlined text-[18px]">smart_display</span>
-            <span>Buscar en YouTube</span>
+            <span>Buscar o Importar Playlist</span>
           </button>
         </div>
       </section>
@@ -293,7 +293,7 @@ export function CatalogManager({ slug, venueId: propVenueId }: CatalogManagerPro
                 className="px-3.5 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
               >
                 <span className="material-symbols-outlined text-sm">smart_display</span>
-                <span>Buscar en YouTube</span>
+                <span>Buscar o Importar Playlist</span>
               </button>
 
               <button

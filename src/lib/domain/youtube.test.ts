@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { parseYoutubeVideoId, validateYoutubeMeta, youtubeDedupeKey } from "./youtube";
+import {
+  parseYoutubeVideoId,
+  parseYoutubePlaylistId,
+  validateYoutubeMeta,
+  youtubeDedupeKey,
+} from "./youtube";
 
 describe("YouTube URL parsing", () => {
   it("normalizes every supported YouTube URL shape", () => {
     expect(parseYoutubeVideoId("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
     expect(parseYoutubeVideoId("https://youtu.be/dQw4w9WgXcQ?t=10")).toBe("dQw4w9WgXcQ");
     expect(parseYoutubeVideoId("https://youtube.com/shorts/dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
+    expect(parseYoutubeVideoId("https://music.youtube.com/watch?v=dQw4w9WgXcQ")).toBe("dQw4w9WgXcQ");
     expect(parseYoutubeVideoId("https://vimeo.com/123")).toBeNull();
     expect(youtubeDedupeKey("dQw4w9WgXcQ")).toBe("yt:dQw4w9WgXcQ");
   });
@@ -33,6 +39,54 @@ describe("YouTube URL parsing", () => {
     expect(parseYoutubeVideoId("https://youtu.be/dQw4w9WgXcQ/extra")).toBeNull();
     expect(parseYoutubeVideoId("https://youtube.com/shorts/dQw4w9WgXcQ/extra")).toBeNull();
     expect(parseYoutubeVideoId("not a url")).toBeNull();
+  });
+});
+
+describe("YouTube Playlist URL parsing", () => {
+  it("extracts playlist IDs from various valid YouTube playlist URLs", () => {
+    expect(
+      parseYoutubePlaylistId(
+        "https://www.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
+      ),
+    ).toBe("PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj");
+    expect(
+      parseYoutubePlaylistId(
+        "https://music.youtube.com/playlist?list=OLAK5uy_k1234567890abcdef",
+      ),
+    ).toBe("OLAK5uy_k1234567890abcdef");
+    expect(
+      parseYoutubePlaylistId(
+        "https://m.youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
+      ),
+    ).toBe("PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj");
+    expect(
+      parseYoutubePlaylistId(
+        "https://www.youtube.com/watch?v=kPa7bsKwL-c&list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj&index=1",
+      ),
+    ).toBe("PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj");
+    expect(
+      parseYoutubePlaylistId(
+        "https://youtu.be/kPa7bsKwL-c?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
+      ),
+    ).toBe("PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj");
+    expect(parseYoutubePlaylistId("PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj")).toBe(
+      "PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
+    );
+    expect(parseYoutubePlaylistId("OLAK5uy_k1234567890abcdef")).toBe(
+      "OLAK5uy_k1234567890abcdef",
+    );
+    expect(
+      parseYoutubePlaylistId(
+        "youtube.com/playlist?list=PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj",
+      ),
+    ).toBe("PLMC9KNkIncKtPzgY-5rmhvj7fax8fdxoj");
+  });
+
+  it("returns null for non-playlist inputs", () => {
+    expect(parseYoutubePlaylistId("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBeNull();
+    expect(parseYoutubePlaylistId("https://spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M")).toBeNull();
+    expect(parseYoutubePlaylistId("random search query")).toBeNull();
+    expect(parseYoutubePlaylistId("")).toBeNull();
   });
 });
 

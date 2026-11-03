@@ -204,3 +204,55 @@ export async function proposeTrack(
     voteCount: res.voteCount ?? 0,
   };
 }
+
+export interface YouTubePlaylistInfo {
+  id: string;
+  title: string;
+  author: string;
+  trackCount: number;
+  thumbnailUrl?: string;
+  tracks: SearchResult[];
+}
+
+export interface YouTubeSearchResultPayload {
+  results: SearchResult[];
+  playlist?: YouTubePlaylistInfo;
+  singleVideo?: SearchResult;
+}
+
+export async function searchYouTubeWithDetails(
+  query: string,
+  isKaraoke: boolean = false,
+): Promise<YouTubeSearchResultPayload> {
+  const trimmed = query.trim();
+  if (!trimmed) return { results: [] };
+
+  try {
+    const karaokeParam = isKaraoke ? '&karaoke=true' : '';
+    const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(trimmed)}${karaokeParam}`);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        results: Array.isArray(data.results) ? data.results : [],
+        playlist: data.playlist,
+        singleVideo: data.singleVideo,
+      };
+    }
+  } catch {}
+
+  const standardResults = await searchYouTube(query, isKaraoke);
+  return { results: standardResults };
+}
+
+export async function fetchYouTubePlaylist(
+  playlistIdOrUrl: string,
+): Promise<YouTubePlaylistInfo | null> {
+  try {
+    const res = await fetch(`/api/youtube/playlist?id=${encodeURIComponent(playlistIdOrUrl)}`);
+    if (res.ok) {
+      const data = await res.json();
+      return data.playlist || null;
+    }
+  } catch {}
+  return null;
+}

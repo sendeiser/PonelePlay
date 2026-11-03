@@ -2,6 +2,7 @@ export const ALLOWED_HOSTS = [
   "youtube.com",
   "www.youtube.com",
   "m.youtube.com",
+  "music.youtube.com",
   "youtu.be",
 ] as const;
 
@@ -45,6 +46,41 @@ export function parseYoutubeVideoId(input: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function parseYoutubePlaylistId(input: string): string | null {
+  if (!input || typeof input !== "string") return null;
+  const trimmed = input.trim();
+
+  // 1. Direct ID format (e.g. PL..., OLAK5uy_..., RD..., UU..., FL...)
+  if (/^(PL|OLAK5uy_|UU|FL|RD|TL|LL)[A-Za-z0-9_-]{8,}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // 2. Standard URL parsing
+  try {
+    const rawUrl = trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed}`;
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase().replace(/^(www\.|m\.|music\.)/, "");
+    if (host === "youtube.com" || host === "youtu.be") {
+      const list = url.searchParams.get("list");
+      if (list && /^[A-Za-z0-9_-]{8,}$/.test(list)) {
+        return list;
+      }
+    }
+  } catch {
+    // Ignore URL parse error and fallback to regex below
+  }
+
+  // 3. Fallback regex search for 'list=' in query string or fragment
+  const match = trimmed.match(/[?&]list=([A-Za-z0-9_-]{8,})/);
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return null;
 }
 
 export function youtubeDedupeKey(videoId: string): string {

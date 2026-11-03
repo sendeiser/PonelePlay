@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
-import { parseYoutubeVideoId } from "@/lib/domain/youtube";
+import { parseYoutubeVideoId, parseYoutubePlaylistId } from "@/lib/domain/youtube";
 import { demoSearchCatalog } from "@/lib/demo-data";
+import { fetchYouTubePlaylistServer, type YouTubeSearchResult } from "@/lib/server/youtube-playlist";
+
+export type { YouTubeSearchResult };
 
 interface CacheEntry {
   timestamp: number;
@@ -28,18 +31,6 @@ function setServerCached(key: string, results: YouTubeSearchResult[]) {
     if (oldestKey) serverSearchCache.delete(oldestKey);
   }
   serverSearchCache.set(key, { timestamp: Date.now(), results });
-}
-
-export interface YouTubeSearchResult {
-  videoId: string;
-  title: string;
-  artist: string;
-  duration: string;
-  durationSeconds: number;
-  thumbnailUrl: string;
-  isKaraoke?: boolean;
-  views?: string;
-  viewsCount?: number;
 }
 
 function parseDurationString(str?: string): number {
@@ -165,7 +156,6 @@ async function searchViaScrape(query: string, isKaraoke: boolean): Promise<YouTu
         `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`;
 
       if (title) {
-        // In Karaoke mode, only accept authentic karaoke versions
         if (isKaraoke && !isKaraokeVideo(title, channel)) {
           continue;
         }
@@ -187,7 +177,6 @@ async function searchViaScrape(query: string, isKaraoke: boolean): Promise<YouTu
     if (results.length >= (isKaraoke ? 15 : 8)) break;
   }
 
-  // Sort karaoke results strictly by most viewed descending
   if (isKaraoke) {
     results.sort((a, b) => (b.viewsCount || 0) - (a.viewsCount || 0));
   }
@@ -269,7 +258,51 @@ export async function GET(request: Request) {
     return NextResponse.json({ results: cached, cached: true });
   }
 
-  // 1. Direct YouTube link or 11-char ID
+  // 1. YouTube Playlist link or ID check
+  const playlistId = parseYoutubePlaylistId(q);
+  if (playlistId) {
+    const playlist = await fetchYouTubePlaylistServer(playlistId);
+    if (playlist && playlist.tracks.length > 0) {
+      const directVideoId = parseYoutubeVideoId(q);
+      let singleVideo: YouTubeSearchResult | undefined = undefined;
+      if (directVideoId) {
+        const found = playlist.tracks.find((t) => t.videoId === directVideoId);
+        if (found) {
+          singleVideo = found;
+        } else {
+          try {
+            const oembedRes = await fetch(
+              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${directVideoId}&format=json`,
+            );
+            if (oembedRes.ok) {
+              const oembed = await oembedRes.json();
+              singleVideo = {
+                videoId: directVideoId,
+                title: oembed.title || `Video de YouTube (${directVideoId})`,
+                artist: oembed.author_name || "YouTube",
+                duration: "3:45",
+                durationSeconds: 225,
+                thumbnailUrl:
+                  oembed.thumbnail_url ||
+                  `https://img.youtube.com/vi/${directVideoId}/hqdefault.jpg`,
+              };
+            }
+          } catch {
+            // Ignore oembed error
+          }
+        }
+      }
+
+      setServerCached(cacheKey, playlist.tracks);
+      return NextResponse.json({
+        results: playlist.tracks,
+        playlist,
+        singleVideo,
+      });
+    }
+  }
+
+  // 2. Direct YouTube link or 11-char ID
   const directId = parseYoutubeVideoId(q);
   if (directId) {
     try {
@@ -314,7 +347,7 @@ export async function GET(request: Request) {
     });
   }
 
-  // 2. Search query via API or Scrape
+  // 3. Search query via API or Scrape
   try {
     const apiKey = process.env.YOUTUBE_API_KEY;
     if (apiKey) {
@@ -338,23 +371,23 @@ export async function GET(request: Request) {
     // Fallback to local catalog
   }
 
-  // 3. Fallback matching against demo catalog
+  // 4. Fallback matching against demo catalog
   const term = q.toLowerCase();
   const matched = demoSearchCatalog.filter((item) =>
     `${item.title} ${item.artist}`.toLowerCase().includes(term),
   );
 
   const fallbackResults = matched.map((item) => ({
-      videoId: `demo-${item.id}`,
-      title: isKaraoke ? `${item.title} (Karaoke Letra)` : item.title,
-      artist: isKaraoke ? `${item.artist} · Karaoke Oficial` : item.artist,
-      duration: item.duration,
-      durationSeconds: 210,
-      thumbnailUrl: "",
-      isKaraoke,
-      views: isKaraoke ? "2.4 M visualizaciones" : undefined,
-      viewsCount: isKaraoke ? 2400000 : undefined,
-    }));
+    videoId: `demo-${item.id}`,
+    title: isKaraoke ? `${item.title} (Karaoke Letra)` : item.title,
+    artist: isKaraoke ? `${item.artist} · Karaoke Oficial` : item.artist,
+    duration: item.duration,
+    durationSeconds: 210,
+    thumbnailUrl: "",
+    isKaraoke,
+    views: isKaraoke ? "2.4 M visualizaciones" : undefined,
+    viewsCount: isKaraoke ? 2400000 : undefined,
+  }));
   setServerCached(cacheKey, fallbackResults);
   return NextResponse.json({ results: fallbackResults });
 }

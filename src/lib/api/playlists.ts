@@ -404,3 +404,31 @@ export async function addYouTubeTrackToVenue(
   return trackRow;
 }
 
+export async function addYouTubePlaylistToVenue(
+  venueId: string,
+  tracks: Array<{
+    videoId: string;
+    title: string;
+    artist: string;
+    durationSeconds?: number;
+    thumbnailUrl?: string;
+  }>,
+  playlistId?: string,
+  onProgress?: (completed: number, total: number) => void,
+): Promise<{ added: number; errors: number }> {
+  let added = 0;
+  let errors = 0;
+
+  for (let i = 0; i < tracks.length; i++) {
+    const item = tracks[i];
+    try {
+      await addYouTubeTrackToVenue(venueId, item, playlistId);
+      added++;
+    } catch {
+      errors++;
+    }
+    onProgress?.(i + 1, tracks.length);
+  }
+
+  return { added, errors };
+}

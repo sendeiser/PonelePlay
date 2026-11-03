@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Music2, Search, Sparkles, X } from "lucide-react";
+import { Music2, Search, Sparkles, X, ClipboardPaste } from "lucide-react";
 import { demoSearchSuggestions } from "@/lib/demo-data";
 import { messageForApiError } from "@/lib/api/error-messages";
 import {
@@ -74,6 +74,18 @@ export function ProposalSearch({
     }, 1000);
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
+
+  async function handlePaste() {
+    try {
+      const clip = await navigator.clipboard.readText();
+      if (clip) {
+        setQuery(clip.trim());
+        onNotify("Enlace pegado", "info");
+      }
+    } catch {
+      // Permission blocked or not available
+    }
+  }
 
   // Debounced Search (350ms)
   useEffect(() => {
@@ -225,20 +237,33 @@ export function ProposalSearch({
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Artista, canción o link de YouTube..."
+          placeholder="Artista, canción o link de YouTube/playlist..."
           disabled={!proposalsEnabled}
-          className="w-full bg-[#181b25] text-white placeholder-slate-500 text-sm rounded-xl pl-10 pr-10 py-3.5 border border-[#232b42] focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+          className="w-full bg-[#181b25] text-white placeholder-slate-500 text-sm rounded-xl pl-10 pr-24 py-3.5 border border-[#232b42] focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
         />
         <Search className="absolute left-3.5 top-4 size-4 text-slate-400 pointer-events-none" />
-        {query && (
-          <button
-            type="button"
-            onClick={() => setQuery("")}
-            className="absolute right-3.5 top-4 text-slate-400 hover:text-white"
-          >
-            <X className="size-4" />
-          </button>
-        )}
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="text-slate-400 hover:text-white p-1"
+            >
+              <X className="size-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handlePaste()}
+              disabled={!proposalsEnabled}
+              title="Pegar link del portapapeles"
+              className="px-2 py-1 rounded-lg bg-[#232b42] hover:bg-indigo-600/40 text-slate-300 hover:text-white font-mono text-[11px] flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+            >
+              <ClipboardPaste className="size-3.5 text-indigo-400" />
+              <span>Pegar</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Chips */}
