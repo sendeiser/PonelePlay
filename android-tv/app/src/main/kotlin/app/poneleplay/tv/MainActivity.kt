@@ -38,6 +38,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import app.poneleplay.tv.data.TvFeed
 import app.poneleplay.tv.data.TvFeedParser
 import app.poneleplay.tv.ui.NativeVideoPlayer
+import app.poneleplay.tv.ui.TvPairingScreen
 import app.poneleplay.tv.ui.TvScreen
 import app.poneleplay.tv.ui.TvScreenMode
 import app.poneleplay.tv.ui.TvSettingsDialog
@@ -253,6 +254,10 @@ fun NativeTvApp(
         mutableStateOf(prefs.getString("venue_slug", "billar-aurora") ?: "billar-aurora")
     }
 
+    var isPaired by remember {
+        mutableStateOf(prefs.getBoolean("is_tv_paired", false))
+    }
+
     var feed by remember { mutableStateOf<TvFeed?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var hasError by remember { mutableStateOf(false) }
@@ -267,8 +272,10 @@ fun NativeTvApp(
         }
     }
 
-    // Background Telemetry Poller: fetches /api/tv/[slug] every 3.5s
-    LaunchedEffect(serverUrl, venueSlug) {
+    // Background Telemetry Poller: fetches /api/tv/[slug] every 3.5s when paired
+    LaunchedEffect(serverUrl, venueSlug, isPaired) {
+        if (!isPaired) return@LaunchedEffect
+
         isLoading = feed == null
         while (isActive) {
             withContext(Dispatchers.IO) {
@@ -313,66 +320,87 @@ fun NativeTvApp(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        val currentFeed = feed
-        if (currentFeed != null) {
-            TvScreen(
-                feed = currentFeed,
-                mode = screenMode,
-                videoController = videoController,
-                onVideoEnded = {
-                    // Handled automatically via polling
+        if (!isPaired) {
+            TvPairingScreen(
+                serverUrl = serverUrl,
+                venueSlug = venueSlug,
+                onPaired = { token, deviceId ->
+                    prefs.edit()
+                        .putBoolean("is_tv_paired", true)
+                        .putString("tv_player_token", token)
+                        .putString("tv_device_id", deviceId)
+                        .apply()
+                    isPaired = true
+                },
+                onOpenSettings = onOpenSettings,
+                onBypass = {
+                    prefs.edit().putBoolean("is_tv_paired", true).apply()
+                    isPaired = true
                 },
                 modifier = Modifier.fillMaxSize()
             )
-        } else if (hasError) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF070A13)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+        } else {
+            val currentFeed = feed
+            if (currentFeed != null) {
+                TvScreen(
+                    feed = currentFeed,
+                    mode = screenMode,
+                    videoController = videoController,
+                    onVideoEnded = {
+                        // Handled automatically via polling
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else if (hasError) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF070A13)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "⚠️ NO SE PUDO CONECTAR AL LOCAL",
-                        color = Color(0xFFF43F5E),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = errorMessage ?: "Verificá la conexión a Internet o el slug del local",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 14.sp
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TVButton(
-                            text = "Abrir Ajustes",
-                            onClick = onOpenSettings,
-                            isPrimary = true
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ NO SE PUDO CONECTAR AL LOCAL",
+                            color = Color(0xFFF43F5E),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
                         )
+                        Text(
+                            text = errorMessage ?: "Verificá la conexión a Internet o el slug del local",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 14.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            TVButton(
+                                text = "Abrir Ajustes",
+                                onClick = onOpenSettings,
+                                isPrimary = true
+                            )
+                        }
                     }
                 }
-            }
-        } else {
-            // Initial loading
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color(0xFF070A13)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+            } else {
+                // Initial loading
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF070A13)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color(0xFF22D3EE))
-                    Text(
-                        text = "Cargando PonelePlay TV...",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 14.sp
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator(color = Color(0xFF22D3EE))
+                        Text(
+                            text = "Cargando PonelePlay TV...",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }
@@ -385,8 +413,13 @@ fun NativeTvApp(
             currentMode = screenMode,
             isMuted = isMuted,
             onSelectSlug = { newSlug ->
-                venueSlug = newSlug
-                prefs.edit().putString("venue_slug", newSlug).apply()
+                if (venueSlug != newSlug) {
+                    venueSlug = newSlug
+                    prefs.edit().putString("venue_slug", newSlug).apply()
+                    isPaired = false
+                    prefs.edit().putBoolean("is_tv_paired", false).apply()
+                    feed = null
+                }
             },
             onSelectServer = { newServer ->
                 serverUrl = newServer
@@ -394,6 +427,12 @@ fun NativeTvApp(
             },
             onToggleMode = onToggleMode,
             onToggleMute = onToggleMute,
+            onUnpair = {
+                prefs.edit().putBoolean("is_tv_paired", false).remove("tv_player_token").apply()
+                isPaired = false
+                feed = null
+                onDismissSettings()
+            },
             onReload = {
                 feed = null
                 isLoading = true

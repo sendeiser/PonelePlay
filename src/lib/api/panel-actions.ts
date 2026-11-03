@@ -115,6 +115,20 @@ export async function skipCurrent(
     return;
   }
 
+  // 1. Try server API route first for 100% reliable execution
+  try {
+    const res = await fetch("/api/panel/queue/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "skip", itemId: queueItemId }),
+    });
+    if (res.ok) {
+      return;
+    }
+  } catch {
+    // Fall back to client RPC
+  }
+
   if (token) {
     const res = await fetch("/api/staff/action", {
       method: "POST",
@@ -162,6 +176,20 @@ export async function vetoItem(
     queueItemId.startsWith("manual-")
   ) {
     return;
+  }
+
+  // 1. Try server API route first for 100% reliable execution (works for queued and proposed)
+  try {
+    const res = await fetch("/api/panel/queue/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "veto", itemId: queueItemId }),
+    });
+    if (res.ok) {
+      return;
+    }
+  } catch {
+    // Fall back to client RPC
   }
 
   if (token) {

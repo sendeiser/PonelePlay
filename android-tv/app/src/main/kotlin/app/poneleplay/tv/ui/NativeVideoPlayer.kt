@@ -206,3 +206,4 @@ private fun buildPlayerHtml(videoId: String, isMuted: Boolean): String {
         </html>
     """.trimIndent()
 }
+

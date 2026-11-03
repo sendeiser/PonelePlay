@@ -28,6 +28,7 @@ fun TvSettingsDialog(
     onSelectServer: (String) -> Unit,
     onToggleMode: () -> Unit,
     onToggleMute: () -> Unit,
+    onUnpair: () -> Unit,
     onReload: () -> Unit,
     onDismiss: () -> Unit,
     onExitApp: () -> Unit
@@ -157,6 +158,15 @@ fun TvSettingsDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Unpair / PIN Linking Button
+                TVButton(
+                    text = "🔑 Desvincular Pantalla / Vincular por PIN",
+                    onClick = onUnpair,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Spacer(modifier = Modifier.height(6.dp))
 
                 // Action Buttons
@@ -184,3 +194,4 @@ fun TvSettingsDialog(
         }
     }
 }
+

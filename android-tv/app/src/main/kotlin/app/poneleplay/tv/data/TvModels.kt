@@ -51,6 +51,22 @@ data class TvFeed(
     val serverTime: String
 )
 
+data class TvPairingInfo(
+    val ok: Boolean,
+    val code: String,
+    val pairUrl: String,
+    val expiresInSeconds: Int,
+    val error: String? = null
+)
+
+data class TvPairingCheck(
+    val ok: Boolean,
+    val paired: Boolean,
+    val token: String? = null,
+    val deviceId: String? = null,
+    val error: String? = null
+)
+
 object TvFeedParser {
     fun parse(jsonString: String): TvFeed {
         val root = JSONObject(jsonString)
@@ -139,3 +155,4 @@ object TvFeedParser {
         )
     }
 }
+
