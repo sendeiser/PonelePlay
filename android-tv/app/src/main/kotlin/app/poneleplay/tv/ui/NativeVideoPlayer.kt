@@ -212,7 +212,7 @@ private fun buildPlayerHtml(
             var currentVideoId = '$videoId';
             var isEndedSent = false;
             var desiredPaused = ${if (isPaused) "true" else "false"};
-            var currentVolume = $volume;
+            var currentVolume = ${if (isMuted) 0 else volume};
             var currentMuted = ${if (isMuted) "true" else "false"};
             var venueSlug = '${venueSlug.ifBlank { "billar-aurora" }}';
             var lastSyncSeekAt = 0;
@@ -257,19 +257,22 @@ private fun buildPlayerHtml(
             }
 
             function setVolume(v) {
-              currentVolume = v;
-              sendCommand('setVolume', [v]);
+              if (!currentMuted) {
+                currentVolume = v;
+                sendCommand('setVolume', [v]);
+              }
             }
 
             function mute() {
               currentMuted = true;
               sendCommand('mute', []);
+              sendCommand('setVolume', [0]);
             }
 
             function unMute() {
               currentMuted = false;
               sendCommand('unMute', []);
-              sendCommand('setVolume', [currentVolume]);
+              sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
             }
 
             function loadVideo(id) {
@@ -317,9 +320,10 @@ private fun buildPlayerHtml(
                       try {
                         if (currentMuted) {
                           sendCommand('mute', []);
+                          sendCommand('setVolume', [0]);
                         } else {
                           sendCommand('unMute', []);
-                          sendCommand('setVolume', [currentVolume]);
+                          sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
                         }
                         if (!desiredPaused) {
                           sendCommand('playVideo', []);
@@ -394,13 +398,22 @@ private fun buildPlayerHtml(
                 ws.onmessage = function(e) {
                   try {
                     var envelope = JSON.parse(e.data);
-                    var eventType = envelope.event;
-                    var payload = envelope.payload || {};
+                    var eventName = null;
+                    var eventPayload = null;
+
+                    // Support Phoenix Realtime broadcast wrapper envelope
+                    if (envelope.event === "broadcast" && envelope.payload) {
+                      eventName = envelope.payload.event;
+                      eventPayload = envelope.payload.payload || envelope.payload;
+                    } else {
+                      eventName = envelope.event;
+                      eventPayload = envelope.payload || {};
+                    }
 
                     // 1. Instant Playback Command from DJ Booth
-                    if (eventType === "playback_command") {
-                      var cmd = payload.command;
-                      var p = payload.payload || {};
+                    if (eventName === "playback_command" && eventPayload) {
+                      var cmd = eventPayload.command;
+                      var p = eventPayload.payload || eventPayload;
 
                       if (cmd === 'pause') {
                         pauseVideo();
@@ -409,10 +422,10 @@ private fun buildPlayerHtml(
                       } else if (cmd === 'toggle_pause') {
                         togglePlayPause();
                       } else if (cmd === 'seek') {
-                        var sec = Number(p.seconds || 0);
+                        var sec = Number(p.seconds != null ? p.seconds : (eventPayload.seconds != null ? eventPayload.seconds : 0));
                         seekTo(sec);
                       } else if (cmd === 'set_volume') {
-                        var vol = Number(p.volume != null ? p.volume : 85);
+                        var vol = Number(p.volume != null ? p.volume : (eventPayload.volume != null ? eventPayload.volume : 85));
                         setVolume(vol);
                         unMute();
                       } else if (cmd === 'mute') {
@@ -425,18 +438,21 @@ private fun buildPlayerHtml(
                         if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
                           window.AndroidBridge.onStateChange(0);
                         }
-                      } else if (cmd === 'play_now' && p.track && p.track.youtubeVideoId) {
-                        desiredPaused = false;
-                        loadVideo(p.track.youtubeVideoId);
-                        seekTo(0);
-                        playVideo();
+                      } else if (cmd === 'play_now') {
+                        var trk = p.track || eventPayload.track;
+                        if (trk && trk.youtubeVideoId) {
+                          desiredPaused = false;
+                          loadVideo(trk.youtubeVideoId);
+                          seekTo(0);
+                          playVideo();
+                        }
                       }
-                    } else if (eventType === "tv_playback_progress") {
+                    } else if (eventName === "tv_playback_progress" && eventPayload) {
                       // 2. Strict Continuous Time Sync: The TV synchronizes to the Cabina!
-                      var curr = payload.currentTime;
-                      var isP = payload.isPaused;
-                      var sentAt = payload.sentAt;
-                      var trk = payload.track;
+                      var curr = eventPayload.currentTime;
+                      var isP = eventPayload.isPaused;
+                      var sentAt = eventPayload.sentAt;
+                      var trk = eventPayload.track;
 
                       // Sync Pause from master Cabina
                       if (typeof isP === 'boolean') {
@@ -474,12 +490,9 @@ private fun buildPlayerHtml(
                         }
                       }
 
-                      // Volume & Mute if not overridden by admin audio
-                      if (!payload.isFromAdminAudio) {
-                        if (typeof payload.volume === 'number') setVolume(payload.volume);
-                        if (typeof payload.isMuted === 'boolean') {
-                          if (payload.isMuted) mute(); else unMute();
-                        }
+                      // Volume & Mute if not overridden by local mute
+                      if (!eventPayload.isFromAdminAudio && !currentMuted) {
+                        if (typeof eventPayload.volume === 'number') setVolume(eventPayload.volume);
                       }
                     }
                   } catch(err) {}

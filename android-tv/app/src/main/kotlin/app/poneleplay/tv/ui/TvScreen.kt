@@ -43,6 +43,7 @@ enum class TvScreenMode {
 fun TvScreen(
     feed: TvFeed,
     mode: TvScreenMode,
+    localIsMuted: Boolean = false,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit,
     modifier: Modifier = Modifier
@@ -60,6 +61,10 @@ fun TvScreen(
         }
     }
 
+    // Effective mute and volume state: TV local mute always takes precedence over server
+    val effectiveMuted = localIsMuted || feed.playback.isMuted
+    val effectiveVolume = if (localIsMuted) 0 else feed.playback.volume
+
     // Reactive Control: React to master control commands from DJ booth (Cabina)
     var lastExecutedSeq by remember { mutableStateOf(feed.playback.commandSeq) }
     LaunchedEffect(feed.playback.commandSeq) {
@@ -71,13 +76,22 @@ fun TvScreen(
                 "toggle_pause" -> {
                     if (feed.playback.isPaused) videoController.pause() else videoController.play()
                 }
-                "seek" -> videoController.seekTo(feed.playback.positionSeconds)
+                "seek" -> {
+                    // Only seek if positionSeconds is explicitly positive (prevents unwanted reset to 0)
+                    if (feed.playback.positionSeconds > 0f) {
+                        videoController.seekTo(feed.playback.positionSeconds)
+                    }
+                }
                 "set_volume" -> {
-                    videoController.setVolume(feed.playback.volume)
-                    videoController.unMute()
+                    if (!localIsMuted) {
+                        videoController.setVolume(feed.playback.volume)
+                        videoController.unMute()
+                    }
                 }
                 "mute" -> videoController.mute()
-                "unmute" -> videoController.unMute()
+                "unmute" -> {
+                    if (!localIsMuted) videoController.unMute()
+                }
                 "skip" -> onVideoEnded()
             }
         }
@@ -87,12 +101,13 @@ fun TvScreen(
         if (feed.playback.isPaused) videoController.pause() else videoController.play()
     }
 
-    LaunchedEffect(feed.playback.volume) {
-        videoController.setVolume(feed.playback.volume)
-    }
-
-    LaunchedEffect(feed.playback.isMuted) {
-        if (feed.playback.isMuted) videoController.mute() else videoController.unMute()
+    LaunchedEffect(effectiveMuted, effectiveVolume) {
+        if (effectiveMuted) {
+            videoController.mute()
+        } else {
+            videoController.unMute()
+            videoController.setVolume(effectiveVolume)
+        }
     }
 
     Box(
@@ -106,6 +121,8 @@ fun TvScreen(
                     feed = feed,
                     qrBitmap = qrBitmap,
                     currentTimeString = currentTimeString,
+                    effectiveVolume = effectiveVolume,
+                    effectiveMuted = effectiveMuted,
                     videoController = videoController,
                     onVideoEnded = onVideoEnded
                 )
@@ -115,6 +132,8 @@ fun TvScreen(
                     feed = feed,
                     qrBitmap = qrBitmap,
                     currentTimeString = currentTimeString,
+                    effectiveVolume = effectiveVolume,
+                    effectiveMuted = effectiveMuted,
                     videoController = videoController,
                     onVideoEnded = onVideoEnded
                 )
@@ -124,39 +143,121 @@ fun TvScreen(
 }
 
 /**
- * MODE 1: Fullscreen Video Player with clean bottom HUD + Floating Transparent Proposals Overlay.
+ * MODE 1: Fullscreen Video Player with Left Transparent Queue + Right Transparent Proposals + Bottom HUD.
  */
 @Composable
 private fun TvModeVideo(
     feed: TvFeed,
     qrBitmap: Bitmap?,
     currentTimeString: String,
+    effectiveVolume: Int,
+    effectiveMuted: Boolean,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit
 ) {
     val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 1. Fullscreen Video Player
+        // 1. Fullscreen Video Player (Center Background)
         NativeVideoPlayer(
             videoId = currentVideoId,
             venueSlug = feed.venue.slug,
             isPaused = feed.playback.isPaused,
-            volume = feed.playback.volume,
-            isMuted = feed.playback.isMuted,
+            volume = effectiveVolume,
+            isMuted = effectiveMuted,
             controller = videoController,
             onEnded = onVideoEnded,
             modifier = Modifier.fillMaxSize()
         )
 
-        // 2. Floating Transparent Proposals Card (Top-Right over Video)
+        // 2. Left Floating Glassmorphic Queue Overlay
+        if (feed.queue.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 26.dp, start = 30.dp)
+                    .width(280.dp)
+                    .background(Color(0xD9090D1A), RoundedCornerShape(14.dp))
+                    .border(1.dp, Color(0x66818CF8), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📋 COLA EN VIVO",
+                            color = Color(0xFF818CF8),
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "${feed.queue.size} temas",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 9.5.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    feed.queue.take(4).forEachIndexed { idx, item ->
+                        if (idx > 0) Spacer(modifier = Modifier.height(7.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "#${idx + 1}",
+                                color = Color(0xFF818CF8),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.width(24.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.title,
+                                    color = Color.White,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = item.artist,
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            val isBar = item.voteCount >= 9999 || item.voteCount <= 0
+                            Text(
+                                text = if (isBar) "⭐ BAR" else "${item.voteCount}v",
+                                color = if (isBar) Color(0xFFA5B4FC) else Color(0xFF6EE7B7),
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Right Floating Glassmorphic Proposals Overlay
         if (feed.proposals.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 26.dp, end = 32.dp)
+                    .padding(top = 26.dp, end = 30.dp)
                     .width(280.dp)
-                    .background(Color(0xCC090D1A), RoundedCornerShape(14.dp))
+                    .background(Color(0xD9090D1A), RoundedCornerShape(14.dp))
                     .border(1.dp, Color(0x6638BDF8), RoundedCornerShape(14.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
@@ -224,7 +325,7 @@ private fun TvModeVideo(
             }
         }
 
-        // 3. Subtle Dark Gradient at Bottom for HUD Readability
+        // 4. Subtle Dark Gradient at Bottom for HUD Readability
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -237,7 +338,7 @@ private fun TvModeVideo(
                 )
         )
 
-        // 4. Bottom HUD Overlay (Responsive Balanced Typography)
+        // 5. Bottom HUD Overlay (Responsive Balanced Typography)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -297,34 +398,6 @@ private fun TvModeVideo(
                 }
             }
 
-            // Center: Next Up Snippet
-            if (feed.queue.isNotEmpty()) {
-                val next = feed.queue.first()
-                Column(
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp)
-                        .background(Color(0x99141824), RoundedCornerShape(10.dp))
-                        .border(1.dp, Color(0x40334155), RoundedCornerShape(10.dp))
-                        .padding(horizontal = 14.dp, vertical = 7.dp)
-                ) {
-                    Text(
-                        text = "A CONTINUACIÓN",
-                        color = Color(0xFF818CF8),
-                        fontSize = 9.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        text = next.title,
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-
             // Right: Table QR Code + Clock
             Row(
                 verticalAlignment = Alignment.CenterVertically
@@ -368,6 +441,8 @@ private fun TvModePlaylist(
     feed: TvFeed,
     qrBitmap: Bitmap?,
     currentTimeString: String,
+    effectiveVolume: Int,
+    effectiveMuted: Boolean,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit
 ) {
@@ -502,8 +577,8 @@ private fun TvModePlaylist(
                                 videoId = currentVideoId,
                                 venueSlug = feed.venue.slug,
                                 isPaused = feed.playback.isPaused,
-                                volume = feed.playback.volume,
-                                isMuted = feed.playback.isMuted,
+                                volume = effectiveVolume,
+                                isMuted = effectiveMuted,
                                 controller = videoController,
                                 onEnded = onVideoEnded,
                                 modifier = Modifier.fillMaxSize()

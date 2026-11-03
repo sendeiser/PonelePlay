@@ -353,6 +353,7 @@ fun NativeTvApp(
                 TvScreen(
                     feed = currentFeed,
                     mode = screenMode,
+                    localIsMuted = isMuted,
                     videoController = videoController,
                     onVideoEnded = {
                         // Handled automatically via polling

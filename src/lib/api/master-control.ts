@@ -58,23 +58,7 @@ export async function sendPlaybackCommand(
 ): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
 
-  // 1. Send via Supabase RPC for persistence & database updates
-  const { data, error } = await supabase.rpc("send_playback_command" as never, {
-    p_venue_slug: slug,
-    p_command: command,
-    p_payload: payload,
-  } as never);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const res = data as PlaybackState;
-  if (!res.ok) {
-    throw new Error(res.error || "Error al enviar comando al reproductor");
-  }
-
-  // 1b. If command is seek, persist positionSeconds into venue_playback_state.current_track
+  // 1a. If command is seek, persist positionSeconds into venue_playback_state.current_track FIRST
   if (command === "seek" && typeof payload.seconds === "number") {
     try {
       const { data: v } = await supabase
@@ -100,6 +84,22 @@ export async function sendPlaybackCommand(
     } catch {
       // Non-blocking fallback
     }
+  }
+
+  // 1. Send via Supabase RPC for persistence & database updates
+  const { data, error } = await supabase.rpc("send_playback_command" as never, {
+    p_venue_slug: slug,
+    p_command: command,
+    p_payload: payload,
+  } as never);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const res = data as PlaybackState;
+  if (!res.ok) {
+    throw new Error(res.error || "Error al enviar comando al reproductor");
   }
 
   // 2. Broadcast via realtime channel for sub-50ms instant TV reaction

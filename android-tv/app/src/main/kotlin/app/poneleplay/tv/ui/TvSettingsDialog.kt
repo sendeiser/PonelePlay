@@ -95,36 +95,47 @@ fun TvSettingsDialog(
 
                 // Mute Toggle Button
                 TVButton(
-                    text = if (isMuted) "🔇 Sonido TV: SILENCIADO (Recomendado para Cabina)" else "🔊 Sonido TV: ACTIVO",
+                    text = if (isMuted) "🔇 Sonido TV: SILENCIADO (Audio en Cabina)" else "🔊 Sonido TV: ACTIVO (Audio en TV)",
                     onClick = onToggleMute,
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Presets for Venue Slug
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "LOCAL VINCULADO (SLUG):",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-
+                // Currently Linked Venue Info (Linked via PIN)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF141A2E), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFF263252), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TVButton(
-                            text = "billar-aurora",
-                            onClick = { onSelectSlug("billar-aurora") },
-                            modifier = Modifier.weight(1f),
-                            isPrimary = currentSlug == "billar-aurora"
-                        )
-                        TVButton(
-                            text = "barpub-nova",
-                            onClick = { onSelectSlug("barpub-nova") },
-                            modifier = Modifier.weight(1f),
-                            isPrimary = currentSlug == "barpub-nova"
+                        Column {
+                            Text(
+                                text = "LOCAL VINCULADO:",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = currentSlug.ifBlank { "Sin vincular" }.uppercase(),
+                                color = Color(0xFF38BDF8),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Text(
+                            text = "✅ Vinculado por PIN",
+                            color = Color(0xFF34D399),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
