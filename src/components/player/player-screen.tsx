@@ -956,15 +956,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               void engine.load(st.current_track);
               engine.seekTo?.(0);
               void engine.play();
-            } else if (cmd === "set_tv_display") {
-              const cfg = (p.config || p.displayConfig || {}) as Record<string, unknown>;
-              if (cfg.mode === "VIDEO") {
-                setVideoMode(true);
-              } else if (cfg.mode === "PLAYLIST") {
-                setVideoMode(false);
-              }
-              setHudMessage("📺 Pantalla Actualizada desde Cabina");
-              setTimeout(() => setHudMessage(null), 3000);
             }
           },
         )
@@ -1077,15 +1068,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   engine.seekTo?.(targetTime);
                 }
               }
-            } else if (cmd === "set_tv_display") {
-              const cfg = (p.config || p.displayConfig || {}) as Record<string, unknown>;
-              if (cfg.mode === "VIDEO") {
-                setVideoMode(true);
-              } else if (cfg.mode === "PLAYLIST") {
-                setVideoMode(false);
-              }
-              setHudMessage("📺 Pantalla Actualizada desde Cabina");
-              setTimeout(() => setHudMessage(null), 3000);
             }
           },
         )

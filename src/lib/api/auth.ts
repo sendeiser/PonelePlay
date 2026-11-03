@@ -80,74 +80,74 @@ export async function signUpOwner(input: {
   const cleanVenueName = input.venueName.trim();
   const cleanSlug = input.slug.trim().toLowerCase();
 
-  const supabase = createBrowserSupabase();
-
   try {
-    // 1. Check if slug is already taken
-    const { data: existingVenue } = await supabase
-      .from("venues")
-      .select("id")
-      .eq("slug", cleanSlug)
-      .limit(1)
-      .maybeSingle();
-
-    if (existingVenue) {
-      return {
-        error: `El identificador «${cleanSlug}» ya está en uso. Elegí otro nombre o personalizá el enlace del bar.`,
-      };
-    }
-
-    // 2. Sign up owner with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: cleanPassword,
-      options: {
-        data: {
-          venue_name: cleanVenueName,
-          venue_slug: cleanSlug,
-        },
+    // 1. Call server-side registration endpoint (runs with admin privileges to avoid RLS errors)
+    const res = await fetch("/api/auth/register-owner", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        email: cleanEmail,
+        password: cleanPassword,
+        venueName: cleanVenueName,
+        slug: cleanSlug,
+      }),
     });
 
-    if (authError) {
-      return { error: translateAuthError(authError.message) };
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok || !data?.ok) {
+      const errorMsg = data?.error || "Error al registrar el bar. Intentá nuevamente.";
+      return { error: translateAuthError(errorMsg) };
     }
 
-    // 3. Insert venue row linked to the newly created user
-    if (authData.user) {
-      const { data: newVenue, error: venueError } = await supabase
-        .from("venues")
-        .insert({
+    // 2. Automatically sign in with browser supabase client so cookies and local session are active
+    const supabase = createBrowserSupabase();
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: cleanPassword,
+    });
+
+    if (signInErr) {
+      console.warn("Auto sign-in warning after registration:", signInErr.message);
+    }
+
+    return { slug: data.slug || cleanSlug };
+  } catch (err: unknown) {
+    // Fallback: If network error or running in testing environment without HTTP endpoint
+    const supabase = createBrowserSupabase();
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: cleanPassword,
+        options: {
+          data: {
+            venue_name: cleanVenueName,
+            venue_slug: cleanSlug,
+          },
+        },
+      });
+
+      if (authError) {
+        return { error: translateAuthError(authError.message) };
+      }
+
+      if (authData.user) {
+        await supabase.from("venues").insert({
           owner_id: authData.user.id,
           name: cleanVenueName,
           slug: cleanSlug,
           accent_color: "#6366F1",
           join_message: "¡Bienvenido! Escaneá el QR para pedir y votar canciones.",
-        } as never)
-        .select()
-        .single();
-
-      if (venueError && !venueError.message.includes("duplicate key")) {
-        // If venue creation had an issue but user was created, return friendly feedback
-        return { error: `Cuenta creada, pero ocurrió un problema al registrar el bar: ${venueError.message}`, slug: cleanSlug };
-      }
-
-      // 4. Create initial open night session for the venue
-      if (newVenue && (newVenue as Record<string, unknown>).id) {
-        const venueId = String((newVenue as Record<string, unknown>).id);
-        void supabase.from("night_sessions").insert({
-          venue_id: venueId,
-          status: "open",
-          opened_by_kind: "owner",
-          opened_by_id: authData.user.id,
         } as never);
       }
-    }
 
-    return { slug: cleanSlug };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Error inesperado al crear la cuenta.";
-    return { error: translateAuthError(msg) };
+      return { slug: cleanSlug };
+    } catch {
+      const msg = err instanceof Error ? err.message : "Error inesperado al crear la cuenta.";
+      return { error: translateAuthError(msg) };
+    }
   }
 }
 

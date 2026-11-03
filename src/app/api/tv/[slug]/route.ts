@@ -96,8 +96,9 @@ export async function GET(
           .eq("id", deviceId)
           .eq("venue_id", venue.id)
           .maybeSingle();
-        if (dev?.display_config && typeof dev.display_config === "object") {
-          displayConfig = { ...displayConfig, ...dev.display_config };
+        const conf = dev?.display_config;
+        if (conf && typeof conf === "object") {
+          displayConfig = { ...displayConfig, ...(conf as Record<string, unknown>) };
         }
       } catch {
         // Fallback to default

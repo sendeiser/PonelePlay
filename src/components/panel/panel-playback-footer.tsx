@@ -740,9 +740,9 @@ export function PanelPlaybackFooter({
         </div>
 
         {/* ==================== DESKTOP CONTROLS ROW (>= md) ==================== */}
-        <div className="hidden md:grid grid-cols-[1fr_auto_1fr] items-center gap-3 w-full px-4">
+        <div className="hidden md:flex items-center justify-between gap-3 lg:gap-6 w-full px-4">
           {/* LEFT: Currently Playing Track Details + Cola Trigger + Poner Tema */}
-          <div className="flex items-center gap-2.5 min-w-0 overflow-hidden justify-start">
+          <div className="flex items-center gap-2.5 min-w-0 max-w-[320px] lg:max-w-[380px] shrink justify-start">
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
@@ -785,12 +785,12 @@ export function PanelPlaybackFooter({
             <button
               type="button"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className="shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600/25 to-violet-600/25 hover:from-indigo-600/35 hover:to-violet-600/35 text-indigo-300 hover:text-white px-2.5 py-1.5 rounded-xl border border-indigo-500/40 font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+              className="shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600/25 to-violet-600/25 hover:from-indigo-600/35 hover:to-violet-600/35 text-indigo-300 hover:text-white px-2.5 py-1.5 rounded-xl border border-indigo-500/40 font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm whitespace-nowrap"
               title="Abrir la cola de reproducción y gestionar temas"
             >
-              <ListMusic className="size-3.5 text-cyan-400" />
+              <ListMusic className="size-3.5 text-cyan-400 shrink-0" />
               <span>Cola ({activeQueue.length})</span>
-              <ChevronUp className="size-3 text-indigo-400" />
+              <ChevronUp className="size-3 text-indigo-400 shrink-0" />
             </button>
 
             {/* Quick Button: Elegir Canción (YouTube) */}
@@ -805,7 +805,7 @@ export function PanelPlaybackFooter({
           </div>
 
           {/* CENTER: Main Playback Transport Buttons */}
-          <div className="flex items-center justify-center gap-2 shrink-0 justify-self-center">
+          <div className="flex items-center justify-center gap-1.5 lg:gap-2 shrink-0">
             {/* Prev / Restart */}
             <button
               type="button"
@@ -857,16 +857,16 @@ export function PanelPlaybackFooter({
             </button>
           </div>
 
-          {/* RIGHT: Volume & Karaoke Toggle (Clean audio controls, no TV clutter) */}
-          <div className="flex items-center justify-end gap-3 justify-self-end">
+          {/* RIGHT: Volume & Display Remote Manager */}
+          <div className="flex items-center justify-end gap-2 lg:gap-2.5 shrink-0">
             {/* TV Screen & Display Remote Manager */}
             <button
               type="button"
               onClick={() => setTvManagerOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#232b42] bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm"
+              className="h-8 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border border-[#232b42] bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm whitespace-nowrap"
               title="Administrar pantallas TV: cambiar modos, ocultar/mostrar listas, temas y tamaños desde la cabina"
             >
-              <Tv className="size-3.5 text-cyan-400" />
+              <Tv className="size-3.5 text-cyan-400 shrink-0" />
               <span>Pantallas TV</span>
             </button>
 
@@ -874,14 +874,14 @@ export function PanelPlaybackFooter({
             <button
               type="button"
               onClick={() => void handleToggleKaraoke()}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-mono text-[11px] font-bold transition-all ${
+              className={`h-8 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border font-mono text-[11px] font-bold transition-all whitespace-nowrap ${
                 karaokeMode
                   ? "bg-gradient-to-r from-pink-500/25 to-purple-500/25 text-pink-300 border-pink-500/50 shadow-[0_0_12px_rgba(236,72,153,0.3)] animate-pulse"
                   : "bg-[#131722] text-slate-400 border-[#232b42] hover:text-white"
               }`}
               title="Alternar Modo Karaoke en el salón"
             >
-              <Mic className="size-3.5 text-pink-400" />
+              <Mic className="size-3.5 text-pink-400 shrink-0" />
               <span>{karaokeMode ? "Karaoke ON" : "Karaoke"}</span>
             </button>
 
@@ -890,28 +890,28 @@ export function PanelPlaybackFooter({
               <button
                 type="button"
                 onClick={() => audioEngineRef.current?.unlockAudio()}
-                className="flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-2.5 py-1.5 rounded-lg font-mono text-[11px] font-bold active:scale-95 transition-all shadow-sm shrink-0"
+                className="h-8 shrink-0 flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-2.5 rounded-lg font-mono text-[11px] font-bold active:scale-95 transition-all shadow-sm whitespace-nowrap"
                 title="Clic para habilitar sonido en la cabina del local"
               >
-                <VolumeX className="size-3.5 text-amber-400 animate-pulse" />
+                <VolumeX className="size-3.5 text-amber-400 animate-pulse shrink-0" />
                 <span>Habilitar Sonido</span>
               </button>
             ) : (
               <div
-                className="hidden xl:flex items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2.5 py-1.5 rounded-lg font-mono text-[11px] font-bold shrink-0"
+                className="hidden 2xl:flex h-8 shrink-0 items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2 rounded-lg font-mono text-[11px] font-bold whitespace-nowrap"
                 title="Sonido principal del salón activo desde esta cabina (Solo sonido, sin video)"
               >
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="size-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
                 <span>Audio Cabina</span>
               </div>
             )}
 
             {/* Volume Control */}
-            <div className="flex items-center gap-2 bg-[#131722] px-2.5 py-1.5 rounded-lg border border-[#232b42]">
+            <div className="h-8 shrink-0 flex items-center gap-2 bg-[#131722] px-2.5 rounded-lg border border-[#232b42]">
               <button
                 type="button"
                 onClick={() => void handleToggleMute()}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors shrink-0"
                 title="Silenciar / Activar sonido (M)"
               >
                 {isMuted || volume === 0 ? (
@@ -926,10 +926,10 @@ export function PanelPlaybackFooter({
                 max="100"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => void handleVolume(Number(e.target.value))}
-                className="w-18 accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer"
-                title={`Volumen: ${volume}%`}
+                className="w-16 lg:w-20 xl:w-24 h-1.5 accent-indigo-500 bg-[#232b42] rounded-lg appearance-none cursor-pointer"
+                title={`Volumen cabina: ${volume}%`}
               />
-              <span className="font-mono text-[11px] text-slate-300 w-8 text-right">
+              <span className="text-[10px] font-mono text-slate-400 w-7 text-right shrink-0">
                 {isMuted ? "0%" : `${volume}%`}
               </span>
             </div>

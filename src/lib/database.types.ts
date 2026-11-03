@@ -131,6 +131,7 @@ export interface Database {
         paired_by_owner_id: string;
         last_seen_at: string | null;
         revoked_at: string | null;
+        display_config?: Record<string, unknown> | null;
         created_at: string;
       }>;
       venue_playlists: TableDefinition<{
