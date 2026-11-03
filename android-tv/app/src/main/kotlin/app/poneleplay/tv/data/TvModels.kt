@@ -14,7 +14,8 @@ data class TvPlayback(
     val isMuted: Boolean,
     val karaokeMode: Boolean,
     val lastCommand: String?,
-    val commandSeq: Long
+    val commandSeq: Long,
+    val positionSeconds: Float = 0f
 )
 
 data class TvTrack(
@@ -83,8 +84,9 @@ object TvFeedParser {
             volume = playObj.optInt("volume", 85),
             isMuted = playObj.optBoolean("isMuted", false),
             karaokeMode = playObj.optBoolean("karaokeMode", false),
-            lastCommand = playObj.optString("lastCommand", null),
-            commandSeq = playObj.optLong("commandSeq", 0L)
+            lastCommand = if (playObj.isNull("lastCommand")) null else playObj.optString("lastCommand"),
+            commandSeq = playObj.optLong("commandSeq", 0L),
+            positionSeconds = playObj.optDouble("positionSeconds", 0.0).toFloat()
         )
 
         val nowObj = root.optJSONObject("nowPlaying")

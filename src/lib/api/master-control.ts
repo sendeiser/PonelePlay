@@ -74,6 +74,34 @@ export async function sendPlaybackCommand(
     throw new Error(res.error || "Error al enviar comando al reproductor");
   }
 
+  // 1b. If command is seek, persist positionSeconds into venue_playback_state.current_track
+  if (command === "seek" && typeof payload.seconds === "number") {
+    try {
+      const { data: v } = await supabase
+        .from("venues")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+      if (v?.id) {
+        const { data: cur } = await supabase
+          .from("venue_playback_state")
+          .select("current_track")
+          .eq("venue_id", v.id)
+          .maybeSingle();
+        const updatedTrack = {
+          ...((cur?.current_track as Record<string, unknown>) || {}),
+          positionSeconds: payload.seconds,
+        };
+        await supabase
+          .from("venue_playback_state")
+          .update({ current_track: updatedTrack })
+          .eq("venue_id", v.id);
+      }
+    } catch {
+      // Non-blocking fallback
+    }
+  }
+
   // 2. Broadcast via realtime channel for sub-50ms instant TV reaction
   try {
     const channels = supabase.getChannels();

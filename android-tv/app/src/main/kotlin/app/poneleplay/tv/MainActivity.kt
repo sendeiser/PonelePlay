@@ -142,9 +142,17 @@ class MainActivity : ComponentActivity() {
             return true
         }
 
-        // TV Remote Space / Play-Pause key
+        // TV Remote Space / Play-Pause / Play / Pause keys
         if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_SPACE) {
+            videoController.togglePlayPause()
+            return true
+        }
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY) {
             videoController.play()
+            return true
+        }
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE) {
+            videoController.pause()
             return true
         }
 
@@ -315,7 +323,7 @@ fun NativeTvApp(
                     }
                 }
             }
-            delay(3500)
+            delay(1200)
         }
     }
 

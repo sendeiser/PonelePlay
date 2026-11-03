@@ -95,6 +95,7 @@ export async function GET(
           karaokeMode: Boolean(playState?.karaoke_mode),
           lastCommand: playState?.last_command ?? null,
           commandSeq: playState?.command_seq ?? 0,
+          positionSeconds: Number((playState?.current_track as Record<string, unknown>)?.positionSeconds ?? 0),
         },
         nowPlaying: nowPlayingTrack
           ? {

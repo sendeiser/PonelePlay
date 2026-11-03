@@ -60,6 +60,41 @@ fun TvScreen(
         }
     }
 
+    // Reactive Control: React to master control commands from DJ booth (Cabina)
+    var lastExecutedSeq by remember { mutableStateOf(feed.playback.commandSeq) }
+    LaunchedEffect(feed.playback.commandSeq) {
+        if (feed.playback.commandSeq > lastExecutedSeq) {
+            lastExecutedSeq = feed.playback.commandSeq
+            when (feed.playback.lastCommand) {
+                "pause" -> videoController.pause()
+                "resume" -> videoController.play()
+                "toggle_pause" -> {
+                    if (feed.playback.isPaused) videoController.pause() else videoController.play()
+                }
+                "seek" -> videoController.seekTo(feed.playback.positionSeconds)
+                "set_volume" -> {
+                    videoController.setVolume(feed.playback.volume)
+                    videoController.unMute()
+                }
+                "mute" -> videoController.mute()
+                "unmute" -> videoController.unMute()
+                "skip" -> onVideoEnded()
+            }
+        }
+    }
+
+    LaunchedEffect(feed.playback.isPaused) {
+        if (feed.playback.isPaused) videoController.pause() else videoController.play()
+    }
+
+    LaunchedEffect(feed.playback.volume) {
+        videoController.setVolume(feed.playback.volume)
+    }
+
+    LaunchedEffect(feed.playback.isMuted) {
+        if (feed.playback.isMuted) videoController.mute() else videoController.unMute()
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -105,7 +140,9 @@ private fun TvModeVideo(
         // 1. Fullscreen Video Player
         NativeVideoPlayer(
             videoId = currentVideoId,
+            venueSlug = feed.venue.slug,
             isPaused = feed.playback.isPaused,
+            volume = feed.playback.volume,
             isMuted = feed.playback.isMuted,
             controller = videoController,
             onEnded = onVideoEnded,
@@ -388,7 +425,9 @@ private fun TvModePlaylist(
                             // Offscreen or PIP Video
                             NativeVideoPlayer(
                                 videoId = currentVideoId,
+                                venueSlug = feed.venue.slug,
                                 isPaused = feed.playback.isPaused,
+                                volume = feed.playback.volume,
                                 isMuted = feed.playback.isMuted,
                                 controller = videoController,
                                 onEnded = onVideoEnded,
