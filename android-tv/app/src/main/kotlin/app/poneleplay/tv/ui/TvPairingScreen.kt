@@ -54,8 +54,27 @@ fun TvPairingScreen(
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSuccess by remember { mutableStateOf(false) }
+    var isPairedToken by remember { mutableStateOf<Pair<String, String>?>(null) }
 
     val firstFocusRequester = remember { FocusRequester() }
+    val successFocusRequester = remember { FocusRequester() }
+
+    // When pairing is confirmed, automatically transition after 1.2s delay
+    LaunchedEffect(isPairedToken) {
+        val pair = isPairedToken ?: return@LaunchedEffect
+        delay(1200)
+        onPaired(pair.first, pair.second)
+    }
+
+    // Auto-focus success button if paired
+    LaunchedEffect(isSuccess) {
+        if (isSuccess) {
+            delay(150)
+            try {
+                successFocusRequester.requestFocus()
+            } catch (_: Exception) {}
+        }
+    }
 
     // Real-time clock formatted HH:mm
     var currentTime by remember { mutableStateOf("") }
@@ -155,11 +174,10 @@ fun TvPairingScreen(
     }
 
     // Status polling loop: checks every 2500ms
-    LaunchedEffect(pairingCode, isSuccess) {
+    LaunchedEffect(pairingCode) {
         val currentCode = pairingCode ?: return@LaunchedEffect
-        if (isSuccess) return@LaunchedEffect
 
-        while (isActive && !isSuccess) {
+        while (isActive && isPairedToken == null) {
             delay(2500)
             withContext(Dispatchers.IO) {
                 try {
@@ -185,16 +203,14 @@ fun TvPairingScreen(
                         val responseText = conn.inputStream.bufferedReader().use { it.readText() }
                         val json = JSONObject(responseText)
                         val isPaired = json.optBoolean("paired", false)
-                        val token = json.optString("token", "")
+                        val rawToken = json.optString("token", "")
                         val deviceId = json.optString("deviceId", "")
+                        val finalToken = if (rawToken.isNotBlank()) rawToken else "tv-session-$venueSlug"
 
-                        if (isPaired && token.isNotBlank()) {
+                        if (isPaired) {
                             withContext(Dispatchers.Main) {
                                 isSuccess = true
-                            }
-                            delay(1200)
-                            withContext(Dispatchers.Main) {
-                                onPaired(token, deviceId)
+                                isPairedToken = Pair(finalToken, deviceId)
                             }
                         }
                     }
@@ -329,6 +345,18 @@ fun TvPairingScreen(
                             text = "Iniciando reproductor y sincronización en vivo...",
                             color = Color(0xFF94A3B8),
                             fontSize = 16.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        TVButton(
+                            text = "▶️ Entrar al Reproductor Ahora",
+                            onClick = {
+                                val pair = isPairedToken
+                                onPaired(pair?.first ?: "tv-session-$venueSlug", pair?.second ?: "")
+                            },
+                            isPrimary = true,
+                            focusRequester = successFocusRequester
                         )
                     }
                 }
@@ -663,3 +691,4 @@ private fun InstructionStep(num: String, text: String) {
         )
     }
 }
+
