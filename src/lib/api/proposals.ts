@@ -148,6 +148,9 @@ export interface ProposeInput {
   youtubeVideoId?: string;
   thumbnailUrl?: string;
   dedupeKey?: string;
+  guestName?: string | null;
+  dedication?: string | null;
+  isKaraoke?: boolean;
 }
 
 export interface ProposeResult {
@@ -168,7 +171,7 @@ export async function proposeTrack(
       ? youtubeDedupeKey(input.youtubeVideoId)
       : `title:${input.title.toLowerCase()}`);
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     title: input.title,
     artist: input.artist,
     durationSeconds: input.durationSeconds,
@@ -176,6 +179,10 @@ export async function proposeTrack(
     thumbnailUrl: input.thumbnailUrl,
     dedupeKey,
   };
+
+  if (input.guestName) payload.guestName = input.guestName;
+  if (input.dedication) payload.dedication = input.dedication;
+  if (typeof input.isKaraoke === "boolean") payload.isKaraoke = input.isKaraoke;
 
   const { data, error } = await supabase.rpc("propose_track" as never, {
     p_track: payload,
