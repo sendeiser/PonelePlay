@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Music2 } from "lucide-react";
+import { Music2, SkipForward } from "lucide-react";
 import type { QueueItemView } from "@/lib/api/contracts";
+import type { PartySkipVoteState } from "@/lib/domain/party";
 
 interface NowPlayingCardProps {
   item: QueueItemView | null;
   slug?: string;
+  skipVoteEnabled?: boolean;
+  skipVotesThreshold?: number;
+  activeSkipVote?: PartySkipVoteState | null;
+  hasVotedSkip?: boolean;
+  skipPending?: boolean;
+  onVoteSkip?: () => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -17,7 +24,16 @@ function formatDuration(seconds: number | null): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-export function NowPlayingCard({ item, slug }: NowPlayingCardProps) {
+export function NowPlayingCard({
+  item,
+  slug,
+  skipVoteEnabled = true,
+  skipVotesThreshold = 3,
+  activeSkipVote,
+  hasVotedSkip = false,
+  skipPending = false,
+  onVoteSkip,
+}: NowPlayingCardProps) {
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [isPaused, setIsPaused] = useState(false);
@@ -277,6 +293,72 @@ export function NowPlayingCard({ item, slug }: NowPlayingCardProps) {
           </span>
           <span>{formatDuration(duration)}</span>
         </div>
+
+        {/* Vote-to-Skip Live Section */}
+        {skipVoteEnabled && onVoteSkip && (
+          <div className="pt-2.5 mt-2 border-t border-[#1E2538]/70">
+            {(() => {
+              const currentKey = item.trackId || item.id;
+              const isMatchingSkip =
+                activeSkipVote &&
+                (activeSkipVote.trackId === currentKey ||
+                  activeSkipVote.trackId === item.id ||
+                  activeSkipVote.title === item.title);
+              const votes = isMatchingSkip ? activeSkipVote.votes : 0;
+              const threshold = Math.max(
+                1,
+                isMatchingSkip ? activeSkipVote.threshold : skipVotesThreshold,
+              );
+              const skipPct = Math.min(100, Math.round((votes / threshold) * 100));
+
+              return (
+                <div className="rounded-xl bg-[#0D1220]/90 border border-rose-500/30 p-2.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="block font-mono text-[11px] font-bold text-rose-200 truncate">
+                        {votes > 0
+                          ? `🗳️ Votación para cambiar tema: ${votes}/${threshold}`
+                          : "⏭️ ¿Querés cambiar la canción actual?"}
+                      </span>
+                      <span className="block text-[10px] text-slate-400">
+                        {votes > 0
+                          ? `Con ${threshold} votos pasa automáticamente al siguiente tema`
+                          : `Iniciá una votación en vivo (${threshold} votos para saltar)`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={skipPending || hasVotedSkip}
+                      onClick={onVoteSkip}
+                      className={`shrink-0 px-3 py-1.5 rounded-lg font-mono text-[11px] font-extrabold flex items-center gap-1.5 transition-all active:scale-95 ${
+                        hasVotedSkip
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default"
+                          : "bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white shadow-md shadow-rose-600/20"
+                      }`}
+                    >
+                      <SkipForward className="size-3.5" />
+                      <span>
+                        {hasVotedSkip
+                          ? "✓ Votado"
+                          : votes > 0
+                          ? "+1 Cambiar"
+                          : "Iniciar Votación"}
+                      </span>
+                    </button>
+                  </div>
+                  {votes > 0 && (
+                    <div className="w-full h-1.5 rounded-full bg-[#161C2E] overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-rose-500 to-amber-400 transition-all duration-300"
+                        style={{ width: `${skipPct}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
     </section>
   );

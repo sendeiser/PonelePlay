@@ -2,6 +2,12 @@ package app.poneleplay.tv.ui
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
@@ -17,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -25,13 +32,17 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.poneleplay.tv.data.TvDuel
 import app.poneleplay.tv.data.TvFeed
 import app.poneleplay.tv.data.TvProposal
+import app.poneleplay.tv.data.TvRoulette
+import app.poneleplay.tv.data.TvSkipVote
 import app.poneleplay.tv.data.TvTrack
 import app.poneleplay.tv.util.QrGenerator
 import java.text.SimpleDateFormat
@@ -154,9 +165,9 @@ fun TvScreen(
         }
     }
 
-    // Effective mute and volume state: TV local mute always takes precedence over server
-    val effectiveMuted = localIsMuted || feed.playback.isMuted
-    val effectiveVolume = if (localIsMuted) 0 else feed.playback.volume
+    // Effective mute and volume state: TV local mute or Cabina tvMuted takes precedence
+    val effectiveMuted = localIsMuted || feed.playback.isMuted || feed.playback.tvMuted
+    val effectiveVolume = if (effectiveMuted) 0 else feed.playback.volume
 
     // Reactive Control: React to master control commands from DJ booth (Cabina)
     var lastExecutedSeq by remember { mutableStateOf(feed.playback.commandSeq) }
@@ -204,7 +215,7 @@ fun TvScreen(
             .fillMaxSize()
             .background(Color(0xFF070A13))
     ) {
-        // 1. Persistent Fullscreen Video Player (Stays mounted ALWAYS across all mode/theme changes!)
+        // 1. Persistent Fullscreen Video Player (Hidden visually in PLAYLIST mode so video never bleeds behind)
         NativeVideoPlayer(
             videoId = currentVideoId,
             venueSlug = feed.venue.slug,
@@ -215,7 +226,11 @@ fun TvScreen(
             controller = videoController,
             onEnded = onVideoEnded,
             onDisplayConfig = onDisplayConfig,
-            modifier = Modifier.fillMaxSize()
+            modifier = if (mode == TvScreenMode.PLAYLIST) {
+                Modifier.size(1.dp).alpha(0f)
+            } else {
+                Modifier.fillMaxSize()
+            }
         )
 
         // 2. Overlays depending on mode
@@ -252,6 +267,47 @@ fun TvScreen(
                 )
             }
         }
+
+        // 3. Horizontal Marquee across the middle of the screen (Left to Right) for Dedications
+        val dedicationText = feed.nowPlaying?.dedication
+        if (!dedicationText.isNullOrBlank()) {
+            DedicationHorizontalMarquee(
+                dedication = dedicationText,
+                guestName = feed.nowPlaying?.guestName,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
+        // 4. Vote-to-Skip Live Indicator Badge
+        val skipVote = feed.activeSkipVote
+        if (skipVote != null && skipVote.votes > 0) {
+            TvSkipVoteBadge(
+                skipVote = skipVote,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 18.dp)
+            )
+        }
+
+        // 5. Live 1vs1 Duel Overlay
+        val activeDuel = feed.activeDuel
+        if (activeDuel != null) {
+            TvDuelOverlay(
+                duel = activeDuel,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 36.dp, vertical = 28.dp)
+            )
+        }
+
+        // 6. Live Roulette Overlay
+        val activeRoulette = feed.activeRoulette
+        if (activeRoulette != null) {
+            TvRouletteOverlay(
+                roulette = activeRoulette,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
     }
 }
 
@@ -268,7 +324,8 @@ private fun TvModeVideoOverlays(
     theme: TvDesignTheme = getTvDesignTheme("neon"),
     scaleFactor: Float = 1.0f
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxFloatingItems = ((maxHeight.value - 205f) / (38f * scaleFactor)).toInt().coerceAtLeast(4)
 
         // 2. Left Floating Queue (100% Invisible Transparent, no box/border, text only)
         if (showQueue && feed.queue.isNotEmpty()) {
@@ -308,7 +365,7 @@ private fun TvModeVideoOverlays(
 
                 Spacer(modifier = Modifier.height((8 * scaleFactor).dp))
 
-                feed.queue.take(4).forEachIndexed { idx, item ->
+                feed.queue.take(maxFloatingItems).forEachIndexed { idx, item ->
                     if (idx > 0) Spacer(modifier = Modifier.height((7 * scaleFactor).dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -401,7 +458,7 @@ private fun TvModeVideoOverlays(
 
                 Spacer(modifier = Modifier.height((8 * scaleFactor).dp))
 
-                feed.proposals.take(4).forEachIndexed { idx, prop ->
+                feed.proposals.take(maxFloatingItems).forEachIndexed { idx, prop ->
                     if (idx > 0) Spacer(modifier = Modifier.height((7 * scaleFactor).dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -594,7 +651,7 @@ private fun TvModePlaylistOverlays(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xE6070A13))
+            .background(Color(0xFF070A13))
     ) {
         Column(
             modifier = Modifier
@@ -886,12 +943,15 @@ private fun TvModePlaylistOverlays(
                             )
                         }
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            itemsIndexed(feed.queue.take(6)) { index, item ->
-                                QueueItemRow(item = item, index = index + 1, theme = theme)
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            val maxQueueFit = (maxHeight.value / 50f).toInt().coerceAtLeast(5)
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                itemsIndexed(feed.queue.take(maxQueueFit)) { index, item ->
+                                    QueueItemRow(item = item, index = index + 1, theme = theme)
+                                }
                             }
                         }
                     }
@@ -983,12 +1043,15 @@ private fun TvModePlaylistOverlays(
                                 )
                             }
                         } else {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(7.dp),
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                itemsIndexed(feed.proposals.take(4)) { _, prop ->
-                                    ProposalItemRow(proposal = prop, theme = theme)
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                val maxPropFit = (maxHeight.value / 54f).toInt().coerceAtLeast(4)
+                                LazyColumn(
+                                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    itemsIndexed(feed.proposals.take(maxPropFit)) { _, prop ->
+                                        ProposalItemRow(proposal = prop, theme = theme)
+                                    }
                                 }
                             }
                         }
@@ -1129,5 +1192,369 @@ private fun ProposalItemRow(proposal: TvProposal, theme: TvDesignTheme = getTvDe
             color = theme.primaryColor,
             trackColor = Color(0xFF334155)
         )
+    }
+}
+
+/**
+ * Horizontal Marquee across the vertical middle of the TV screen moving from Left to Right.
+ */
+@Composable
+private fun DedicationHorizontalMarquee(
+    dedication: String,
+    guestName: String?,
+    modifier: Modifier = Modifier
+) {
+    val configuration = LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp.toFloat().coerceAtLeast(640f)
+    val transition = rememberInfiniteTransition(label = "dedication_marquee")
+    val progress by transition.animateFloat(
+        initialValue = -0.95f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 15000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "dedication_offset_ltr"
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .offset(x = (progress * screenWidthDp).dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(Color(0xF2A21CAF), Color(0xF26D28D9), Color(0xF24F46E5))
+                    ),
+                    RoundedCornerShape(18.dp)
+                )
+                .border(2.dp, Color(0xFFF472B6), RoundedCornerShape(18.dp))
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = "💌", fontSize = 20.sp)
+            Box(
+                modifier = Modifier
+                    .background(Color(0x66000000), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = if (!guestName.isNullOrBlank()) {
+                        "DEDICATORIA DE ${guestName.uppercase()}"
+                    } else {
+                        "DEDICATORIA EN VIVO"
+                    },
+                    color = Color(0xFFFDE68A),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            Text(
+                text = "“$dedication”",
+                color = Color.White,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+                maxLines = 1
+            )
+            Text(text = "🎉", fontSize = 20.sp)
+        }
+    }
+}
+
+@Composable
+private fun TvSkipVoteBadge(
+    skipVote: TvSkipVote,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .background(Color(0xEB0D101B), RoundedCornerShape(16.dp))
+            .border(1.5.dp, Color(0xFFF43F5E), RoundedCornerShape(16.dp))
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(text = "⏭️", fontSize = 16.sp)
+        Text(
+            text = "VOTACIÓN CAMBIAR CANCIÓN: ${skipVote.votes}/${skipVote.threshold} VOTOS",
+            color = Color(0xFFFDA4AF),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Black,
+            fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+@Composable
+private fun TvDuelOverlay(
+    duel: TvDuel,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Color(0xF2120E24), RoundedCornerShape(22.dp))
+            .border(2.dp, Color(0xFFFBBF24), RoundedCornerShape(22.dp))
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFFBBF24), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "⚡ DUELO FIESTERO 1 vs 1 EN VIVO • ¡VOTÁ EN TU CELULAR!",
+                    color = Color(0xFF090D16),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Corner A
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color(0x3306B6D4), RoundedCornerShape(16.dp))
+                    .border(1.5.dp, Color(0xFF22D3EE), RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "ESQUINA A",
+                        color = Color(0xFF67E8F9),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = duel.titleA,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = duel.artistA,
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "${duel.votesA}",
+                        color = Color(0xFF22D3EE),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "VOTOS",
+                        color = Color(0xFFA5F3FC),
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            // Corner B
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(Color(0x33D946EF), RoundedCornerShape(16.dp))
+                    .border(1.5.dp, Color(0xFFE879F9), RoundedCornerShape(16.dp))
+                    .padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "ESQUINA B",
+                        color = Color(0xFFF0ABFC),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = duel.titleB,
+                        color = Color.White,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = duel.artistB,
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "${duel.votesB}",
+                        color = Color(0xFFE879F9),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "VOTOS",
+                        color = Color(0xFFF5D0FE),
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TvRouletteOverlay(
+    roulette: TvRoulette,
+    modifier: Modifier = Modifier
+) {
+    var spinIndex by remember(roulette.spinId) { mutableStateOf(0) }
+    var spinFinished by remember(roulette.spinId) { mutableStateOf(false) }
+
+    LaunchedEffect(roulette.spinId) {
+        spinFinished = false
+        val count = roulette.candidates.size.coerceAtLeast(1)
+        repeat(26) {
+            spinIndex = (spinIndex + 1) % count
+            kotlinx.coroutines.delay(110)
+        }
+        spinFinished = true
+    }
+
+    Box(
+        modifier = modifier.background(Color(0xD9070A13)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(520.dp)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF231238), Color(0xFF0F1322))
+                    ),
+                    RoundedCornerShape(26.dp)
+                )
+                .border(2.5.dp, Color(0xFFE879F9), RoundedCornerShape(26.dp))
+                .padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Text(text = "🎡", fontSize = 42.sp)
+            Box(
+                modifier = Modifier
+                    .background(Color(0x33D946EF), RoundedCornerShape(20.dp))
+                    .border(1.dp, Color(0xFFE879F9), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 14.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = if (spinFinished) "🎉 RESULTADO DE LA RULETA" else "🎰 GIRANDO RULETA FIESTERA EN VIVO...",
+                    color = Color(0xFFF5D0FE),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+            Text(
+                text = if (spinFinished) "¡Tema Ganador del Sorteo!" else "Sorteando entre las propuestas...",
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Black
+            )
+
+            val displayedTitle = if (!spinFinished && roulette.candidates.isNotEmpty()) {
+                roulette.candidates[spinIndex % roulette.candidates.size].title
+            } else {
+                roulette.winnerTitle
+            }
+            val displayedArtist = if (!spinFinished && roulette.candidates.isNotEmpty()) {
+                roulette.candidates[spinIndex % roulette.candidates.size].artist
+            } else {
+                roulette.winnerArtist
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        if (spinFinished) Color(0x33F59E0B) else Color(0x33A855F7),
+                        RoundedCornerShape(18.dp)
+                    )
+                    .border(
+                        1.5.dp,
+                        if (spinFinished) Color(0xFFFBBF24) else Color(0xFFC084FC),
+                        RoundedCornerShape(18.dp)
+                    )
+                    .padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (spinFinished) {
+                    Text(
+                        text = "🏆 GANADORA • PASA AL TOPE DE LA COLA",
+                        color = Color(0xFFFDE68A),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                Text(
+                    text = displayedTitle,
+                    color = Color(0xFFFDE68A),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = displayedArtist,
+                    color = Color(0xFFE2E8F0),
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (spinFinished && !roulette.winnerGuestName.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "🎉 Propuesto por ${roulette.winnerGuestName}",
+                        color = Color(0xFFF0ABFC),
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }

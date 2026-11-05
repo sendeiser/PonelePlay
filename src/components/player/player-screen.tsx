@@ -23,8 +23,10 @@ import {
   DEFAULT_BAR_PARTY_CONFIG,
   resolveEffectiveQueueThreshold,
   type PartyConfig,
+  type PartySkipVoteState,
 } from "@/lib/domain/party";
 import {
+  fetchServerPartyConfig,
   getStoredPartyConfig,
   type PartyDuelState,
   type PartyRouletteState,
@@ -64,9 +66,71 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [partyConfig, setPartyConfig] = useState<PartyConfig>(DEFAULT_BAR_PARTY_CONFIG);
   const [activeDuel, setActiveDuel] = useState<PartyDuelState | null>(null);
   const [activeRoulette, setActiveRoulette] = useState<PartyRouletteState | null>(null);
+  const [rouletteSpinIndex, setRouletteSpinIndex] = useState(0);
+  const [rouletteSpinFinished, setRouletteSpinFinished] = useState(false);
+  const [activeSkipVote, setActiveSkipVote] = useState<PartySkipVoteState | null>(null);
+  const [maxQueueFit, setMaxQueueFit] = useState(8);
+  const [maxCandidatesFit, setMaxCandidatesFit] = useState(6);
+  // Video Mode: default to true so video is always visible
+  const [videoMode, setVideoMode] = useState<boolean>(true);
 
+  // Compute how many songs fit dynamically inside the screen's max height
   useEffect(() => {
+    const updateMaxFit = () => {
+      if (typeof window === "undefined") return;
+      const vh = window.innerHeight;
+      // Reserve header (~52px), footer (~36px), and card headers (~150px)
+      const availableForQueue = Math.max(240, vh - (videoMode ? 290 : 185));
+      const availableForCands = Math.max(220, vh - (videoMode ? 310 : 215));
+      setMaxQueueFit(Math.max(4, Math.floor(availableForQueue / 56)));
+      setMaxCandidatesFit(Math.max(4, Math.floor(availableForCands / 74)));
+    };
+    updateMaxFit();
+    window.addEventListener("resize", updateMaxFit);
+    return () => window.removeEventListener("resize", updateMaxFit);
+  }, [videoMode]);
+
+  // Sync partyConfig + activeDuel + activeRoulette + activeSkipVote from server
+  useEffect(() => {
+    let active = true;
     setPartyConfig(getStoredPartyConfig(slug, nightState?.settings?.partyConfig));
+
+    const pollPartyState = async () => {
+      try {
+        const { partyConfig: serverCfg } = await fetchServerPartyConfig(slug);
+        if (!active) return;
+        setPartyConfig(serverCfg);
+        setActiveSkipVote(serverCfg.activeSkipVote ?? null);
+
+        if (serverCfg.activeDuel) {
+          const duelObj = serverCfg.activeDuel as unknown as PartyDuelState;
+          const elapsedDuel = (Date.now() - new Date(duelObj.startedAt).getTime()) / 1000;
+          if (elapsedDuel < (duelObj.durationSeconds || 30)) {
+            setActiveDuel(duelObj);
+          }
+        }
+        if (serverCfg.activeRoulette) {
+          const roulObj = serverCfg.activeRoulette as unknown as PartyRouletteState;
+          const elapsedRoul = (Date.now() - new Date(roulObj.startedAt).getTime()) / 1000;
+          if (elapsedRoul < 12) {
+            setActiveRoulette((prev) => {
+              const prevId = prev?.spinId || prev?.rouletteId;
+              const nextId = roulObj.spinId || roulObj.rouletteId;
+              if (prevId && prevId === nextId) return prev;
+              setRouletteSpinFinished(false);
+              setRouletteSpinIndex(0);
+              return roulObj;
+            });
+          }
+        }
+      } catch {
+        // Ignore
+      }
+    };
+
+    void pollPartyState();
+    const pollInterval = setInterval(() => void pollPartyState(), 3000);
+
     const onPartyChange = (e: Event) => {
       const detail = (e as CustomEvent<{ slug?: string; config?: PartyConfig }>).detail;
       if (!detail?.slug || detail.slug === slug) {
@@ -82,12 +146,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (detail?.type === "party_duel_start" && detail.duel) {
         setActiveDuel(detail.duel);
       } else if (detail?.type === "party_roulette_spin" && detail.roulette) {
+        setRouletteSpinFinished(false);
+        setRouletteSpinIndex(0);
         setActiveRoulette(detail.roulette);
       }
     };
     window.addEventListener("poneleplay:party-config-changed", onPartyChange);
     window.addEventListener("poneleplay:party-event", onPartyEvent);
     return () => {
+      active = false;
+      clearInterval(pollInterval);
       window.removeEventListener("poneleplay:party-config-changed", onPartyChange);
       window.removeEventListener("poneleplay:party-event", onPartyEvent);
     };
@@ -99,11 +167,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => clearTimeout(timer);
   }, [activeDuel]);
 
+  // Animate Roulette wheel cycling through candidates for 3.2s before revealing winner
   useEffect(() => {
     if (!activeRoulette) return;
-    const timer = setTimeout(() => setActiveRoulette(null), 10000);
-    return () => clearTimeout(timer);
-  }, [activeRoulette]);
+    setRouletteSpinFinished(false);
+    const poolLen = Math.max(1, activeRoulette.candidates?.length || 1);
+    const spinInterval = setInterval(() => {
+      setRouletteSpinIndex((prev) => (prev + 1) % poolLen);
+    }, 110);
+    const stopSpinTimer = setTimeout(() => {
+      clearInterval(spinInterval);
+      setRouletteSpinFinished(true);
+    }, 3200);
+    const closeTimer = setTimeout(() => {
+      setActiveRoulette(null);
+      void refreshNightState();
+    }, 11000);
+    return () => {
+      clearInterval(spinInterval);
+      clearTimeout(stopSpinTimer);
+      clearTimeout(closeTimer);
+    };
+  }, [activeRoulette?.spinId, activeRoulette, refreshNightState]);
 
   const effectiveThreshold = useMemo(
     () => resolveEffectiveQueueThreshold(partyConfig),
@@ -165,8 +250,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
-  // Video Mode: default to true so video is always visible
-  const [videoMode, setVideoMode] = useState<boolean>(true);
   const [mounted, setMounted] = useState<boolean>(false);
   const [origin, setOrigin] = useState<string>(() =>
     typeof window !== "undefined" ? window.location.origin : "",
@@ -638,13 +721,39 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, [token, liveNightQueue, liveNightNowPlaying, playerState, liveFallbackTracks]);
 
   // Now playing: prioritizing manualNowPlaying -> liveNightNowPlaying -> playerState.nowPlaying -> allTracks[0]
+  // Always enrich with guestName, dedication, and isKaraoke from liveNightNowPlaying / liveNightQueue
   const nowPlaying: PlayerTrack | null = useMemo(() => {
     if (!token) return null;
-    if (manualNowPlaying) return manualNowPlaying;
-    if (liveNightNowPlaying) return liveNightNowPlaying;
-    if (playerState?.nowPlaying) return playerState.nowPlaying;
-    return allTracks[0] ?? null;
-  }, [token, manualNowPlaying, liveNightNowPlaying, playerState, allTracks]);
+    const base =
+      manualNowPlaying ||
+      liveNightNowPlaying ||
+      playerState?.nowPlaying ||
+      allTracks[0] ||
+      null;
+    if (!base) return null;
+
+    const match =
+      (liveNightNowPlaying &&
+      (liveNightNowPlaying.trackId === base.trackId ||
+        (liveNightNowPlaying.youtubeVideoId &&
+          liveNightNowPlaying.youtubeVideoId === base.youtubeVideoId) ||
+        liveNightNowPlaying.title.toLowerCase() === base.title.toLowerCase())
+        ? liveNightNowPlaying
+        : null) ||
+      liveNightQueue.find(
+        (q) =>
+          (q.trackId && q.trackId === base.trackId) ||
+          (q.youtubeVideoId && q.youtubeVideoId === base.youtubeVideoId) ||
+          q.title.toLowerCase() === base.title.toLowerCase(),
+      );
+
+    return {
+      ...base,
+      guestName: base.guestName || match?.guestName || null,
+      dedication: base.dedication || match?.dedication || null,
+      isKaraoke: base.isKaraoke ?? match?.isKaraoke ?? false,
+    };
+  }, [token, manualNowPlaying, liveNightNowPlaying, liveNightQueue, playerState, allTracks]);
 
   // Rotated queue: tracks coming after nowPlaying so every Skip genuinely advances to the next track
   const queue: PlayerTrack[] = useMemo(() => {
@@ -869,6 +978,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 setTimeout(() => setHudMessage(null), 3500);
                 return next;
               });
+            } else if (cmd === "set_tv_mute") {
+              const muted = Boolean(p.muted);
+              setIsMuted(muted);
+              if (muted) engine.mute?.();
+              else {
+                engine.unMute?.();
+                engine.setVolume?.(volume);
+              }
+              setHudMessage(muted ? "🔇 Audio TV Silenciado desde Cabina" : "🔊 Audio TV Activado desde Cabina");
+              setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "skip") {
               void handleSkipNextRef.current(true);
             } else if (cmd === "seek") {
@@ -945,9 +1064,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             } else if (cmd === "set_tv_display") {
               const cfg = (p.config || p.displayConfig || {}) as Record<string, unknown>;
               if (cfg.mode === "VIDEO") {
+                setIsVideoFullscreen(false);
                 setVideoMode(true);
               } else if (cfg.mode === "PLAYLIST") {
+                setIsVideoFullscreen(false);
                 setVideoMode(false);
+              } else if (cfg.mode === "CLEAN") {
+                setIsVideoFullscreen(true);
+                setVideoMode(true);
+              }
+              if (typeof cfg.tvMuted === "boolean") {
+                setIsMuted(cfg.tvMuted);
+                if (cfg.tvMuted) engine.mute?.();
+                else engine.unMute?.();
               }
               setHudMessage("📺 Pantalla Actualizada desde Cabina");
               setTimeout(() => setHudMessage(null), 3000);
@@ -961,9 +1090,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             if (!active || !msg.payload?.config) return;
             const cfg = msg.payload.config;
             if (cfg.mode === "VIDEO") {
+              setIsVideoFullscreen(false);
               setVideoMode(true);
             } else if (cfg.mode === "PLAYLIST") {
+              setIsVideoFullscreen(false);
               setVideoMode(false);
+            } else if (cfg.mode === "CLEAN") {
+              setIsVideoFullscreen(true);
+              setVideoMode(true);
+            }
+            if (typeof cfg.tvMuted === "boolean") {
+              setIsMuted(cfg.tvMuted);
+              if (cfg.tvMuted) engine.mute?.();
+              else engine.unMute?.();
             }
             setHudMessage("📺 Pantalla Actualizada desde Cabina");
             setTimeout(() => setHudMessage(null), 3000);
@@ -1169,7 +1308,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 return prev;
               });
             } else if (p.type === "party_roulette_spin" && p.roulette) {
+              setRouletteSpinFinished(false);
+              setRouletteSpinIndex(0);
               setActiveRoulette(p.roulette as PartyRouletteState);
+            } else if (p.type === "party_skip_vote_updated" && p.activeSkipVote) {
+              setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+            } else if (p.type === "party_skip_vote_passed") {
+              setActiveSkipVote(null);
+              setHudMessage("⏭️ ¡Votación aprobada! Cambiando a la siguiente canción...");
+              setTimeout(() => setHudMessage(null), 3500);
+              void refreshNightState();
             }
           },
         )
@@ -1353,7 +1501,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             isVideoFullscreen
               ? "fixed inset-0 z-[99999] w-screen h-screen bg-black block overflow-hidden"
               : !videoMode
-                ? "absolute -bottom-40 -right-40 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
+                ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
                 : "col-span-7 flex flex-col justify-between rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg relative overflow-hidden min-h-0"
           }
         >
@@ -1438,7 +1586,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 ? "w-full h-full bg-black flex items-center justify-center overflow-hidden relative"
                 : videoMode
                   ? "relative w-full aspect-video max-h-[50vh] rounded-xl overflow-hidden border border-[#232b42] shadow-xl bg-black my-auto z-10 group"
-                  : "absolute -bottom-20 -right-20 w-8 h-8 opacity-0 pointer-events-none -z-50 overflow-hidden"
+                  : "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
             }
           >
             <div className="w-full h-full relative">
@@ -1724,7 +1872,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 {/* Content: TAB 1: CONFIRMED QUEUE */}
                 {sidebarTab === "queue" ? (
                   <div className="mt-2 space-y-1.5 overflow-hidden flex-1 min-h-0 animate-in fade-in duration-200">
-                    {queue.slice(0, 4).map((item, index) => (
+                    {queue.slice(0, maxQueueFit).map((item, index) => (
                       <div
                         key={item.itemId}
                         className="p-2 rounded-lg bg-[#10141f] border border-[#1d2232] flex items-center justify-between gap-2.5 shadow-sm hover:border-[#2a344e] transition-colors"
@@ -1775,9 +1923,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                     )}
 
                     {nightState?.candidates && nightState.candidates.length > 0 ? (
-                      nightState.candidates.slice(0, 4).map((cand, index) => {
-                        const needed = Math.max(0, 5 - cand.voteCount);
-                        const percent = Math.min(100, (cand.voteCount / 5) * 100);
+                      nightState.candidates.slice(0, maxCandidatesFit).map((cand, index) => {
+                        const needed = Math.max(0, effectiveThreshold - cand.voteCount);
+                        const percent = Math.min(100, (cand.voteCount / Math.max(1, effectiveThreshold)) * 100);
                         return (
                           <div
                             key={cand.id}
@@ -1998,9 +2146,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   </span>
                 </div>
 
-                {/* Queue Items List (Up to 5) */}
+                {/* Queue Items List (Dynamic max height fit) */}
                 <div className="mt-2.5 space-y-2 overflow-hidden flex-1 min-h-0">
-                  {queue.slice(0, 5).map((item, index) => (
+                  {queue.slice(0, maxQueueFit).map((item, index) => (
                     <div
                       key={item.itemId}
                       className="p-2.5 rounded-xl bg-[#10141f] border border-[#1d2232] flex items-center justify-between gap-3 shadow-sm hover:border-[#2a344e] transition-colors"
@@ -2087,12 +2235,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   </div>
                 )}
 
-                {/* Candidate Proposals List (Up to 4) */}
+                {/* Candidate Proposals List (Dynamic max height fit) */}
                 <div className="mt-2.5 space-y-2 overflow-hidden flex-1 min-h-0">
                   {nightState?.candidates && nightState.candidates.length > 0 ? (
-                    nightState.candidates.slice(0, 4).map((cand, index) => {
-                      const needed = Math.max(0, 5 - cand.voteCount);
-                      const percent = Math.min(100, (cand.voteCount / 5) * 100);
+                    nightState.candidates.slice(0, maxCandidatesFit).map((cand, index) => {
+                      const needed = Math.max(0, effectiveThreshold - cand.voteCount);
+                      const percent = Math.min(100, (cand.voteCount / Math.max(1, effectiveThreshold)) * 100);
                       return (
                         <div
                           key={cand.id}
@@ -2279,6 +2427,39 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </div>
       )}
 
+      {/* HORIZONTAL DEDICATION MARQUEE ACROSS THE MIDDLE OF THE SCREEN (LEFT TO RIGHT) */}
+      {nowPlaying?.dedication && (
+        <div className="fixed inset-x-0 top-1/2 -translate-y-1/2 z-[85] pointer-events-none overflow-hidden py-3">
+          <div className="animate-marquee-ltr">
+            <div className="inline-flex items-center gap-4 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-fuchsia-600/95 via-purple-700/95 to-indigo-600/95 border-2 border-pink-300/70 shadow-[0_0_40px_rgba(217,70,239,0.65)] backdrop-blur-md whitespace-nowrap">
+              <span className="text-2xl">💌</span>
+              <span className="font-mono text-sm uppercase tracking-widest font-black text-amber-200 bg-black/35 px-3 py-1 rounded-lg border border-amber-300/30">
+                {nowPlaying.guestName ? `DEDICATORIA DE ${nowPlaying.guestName.toUpperCase()}` : "DEDICATORIA EN VIVO"}
+              </span>
+              <span className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                &ldquo;{nowPlaying.dedication}&rdquo;
+              </span>
+              <span className="text-2xl">🎉</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LIVE VOTE-TO-SKIP INDICATOR ON TV */}
+      {activeSkipVote && activeSkipVote.votes > 0 && (
+        <div className="fixed top-14 right-6 z-[82] rounded-2xl border border-rose-500/50 bg-[#0d101b]/95 px-4 py-2.5 shadow-2xl backdrop-blur-md flex items-center gap-3 animate-fade-in">
+          <span className="text-lg animate-pulse">⏭️</span>
+          <div>
+            <span className="block font-mono text-[11px] font-black uppercase text-rose-300">
+              Votación para cambiar canción
+            </span>
+            <span className="block font-mono text-xs font-bold text-white">
+              {activeSkipVote.votes} / {activeSkipVote.threshold} votos en sala
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* PARTY LIVE 1v1 DUEL TV OVERLAY */}
       {activeDuel && (
         <div className="fixed inset-x-6 bottom-12 z-[90] mx-auto max-w-4xl rounded-3xl border-2 border-amber-400 bg-gradient-to-r from-[#1d1130]/95 via-[#0e1222]/95 to-[#281228]/95 p-5 shadow-2xl backdrop-blur-xl">
@@ -2328,28 +2509,44 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
       {/* PARTY LIVE ROULETTE TV OVERLAY */}
       {activeRoulette && (
-        <div className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
-          <div className="max-w-lg w-full rounded-3xl border-2 border-fuchsia-400 bg-gradient-to-b from-[#231238] to-[#0f1322] p-8 text-center shadow-2xl space-y-4">
-            <div className="text-4xl animate-bounce">🎡</div>
+        <div className="fixed inset-0 z-[95] bg-black/85 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="max-w-xl w-full rounded-3xl border-2 border-fuchsia-400 bg-gradient-to-b from-[#231238] to-[#0f1322] p-8 text-center shadow-2xl space-y-5">
+            <div className={`text-5xl ${rouletteSpinFinished ? "animate-bounce" : "animate-spin"}`}>
+              🎡
+            </div>
             <span className="inline-block rounded-full bg-fuchsia-500/20 border border-fuchsia-400/40 px-4 py-1 font-mono text-xs font-black uppercase text-fuchsia-200">
-              RULETA FIESTERA EN VIVO
+              {rouletteSpinFinished ? "🎉 RESULTADO DE LA RULETA" : "🎰 GIRANDO RULETA FIESTERA EN VIVO..."}
             </span>
             <h2 className="text-2xl font-black text-white">
-              ¡Tema Ganador del Sorteo!
+              {rouletteSpinFinished ? "¡Tema Ganador del Sorteo!" : "Sorteando entre las propuestas..."}
             </h2>
-            <div className="rounded-2xl border border-amber-400/60 bg-amber-500/15 p-5">
-              <h3 className="text-xl font-black text-amber-200 truncate">
-                {activeRoulette.winner.title}
-              </h3>
-              <p className="text-sm text-slate-200 mt-1 truncate">
-                {activeRoulette.winner.artist}
-              </p>
-              {activeRoulette.winner.guestName && (
-                <p className="text-xs font-mono text-fuchsia-300 mt-2">
-                  🎉 Propuesto por {activeRoulette.winner.guestName}
+            {!rouletteSpinFinished && activeRoulette.candidates?.length > 0 ? (
+              <div className="rounded-2xl border border-fuchsia-400/50 bg-fuchsia-500/15 p-5 transition-all">
+                <h3 className="text-xl font-black text-fuchsia-200 truncate">
+                  {activeRoulette.candidates[rouletteSpinIndex % activeRoulette.candidates.length]?.title}
+                </h3>
+                <p className="text-sm text-slate-300 mt-1 truncate">
+                  {activeRoulette.candidates[rouletteSpinIndex % activeRoulette.candidates.length]?.artist}
                 </p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border-2 border-amber-400 bg-amber-500/20 p-5 shadow-[0_0_30px_rgba(251,191,36,0.3)]">
+                <span className="inline-block font-mono text-[10px] font-black uppercase text-amber-300 mb-1">
+                  🏆 GANADORA · PASA AL TOPE DE LA COLA
+                </span>
+                <h3 className="text-2xl font-black text-amber-200 truncate">
+                  {activeRoulette.winner.title}
+                </h3>
+                <p className="text-sm text-slate-200 mt-1 truncate">
+                  {activeRoulette.winner.artist}
+                </p>
+                {activeRoulette.winner.guestName && (
+                  <p className="text-xs font-mono text-fuchsia-300 mt-2">
+                    🎉 Propuesto por {activeRoulette.winner.guestName}
+                  </p>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={() => setActiveRoulette(null)}

@@ -118,10 +118,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Determine initial status based on effective threshold
-    const threshold = resolveEffectiveQueueThreshold({
-      ...partyConfig,
-      venueType: "party",
-    });
+    const threshold = resolveEffectiveQueueThreshold(partyConfig);
     const initialStatus = threshold <= 1 ? "queued" : "proposed";
 
     // Try inserting with guest_name, dedication, is_karaoke first; fallback if columns don't exist
@@ -167,10 +164,13 @@ export async function POST(req: NextRequest) {
 
     // 5. Persist guest metadata in venue_playlists (__party_item_meta__) so it always resolves
     if (guestName || dedication || isKaraoke) {
+      const metaEntry: PartyItemMeta = { guestName, dedication, isKaraoke };
       const nextMeta: Record<string, PartyItemMeta> = {
         ...itemMeta,
-        [queueItemId]: { guestName, dedication, isKaraoke },
-        [existingTrack.id]: { guestName, dedication, isKaraoke },
+        [queueItemId]: metaEntry,
+        [existingTrack.id]: metaEntry,
+        ...(youtubeVideoId ? { [`yt:${youtubeVideoId}`]: metaEntry } : {}),
+        [`title:${title.toLowerCase()}`]: metaEntry,
       };
 
       const { data: metaRow } = await admin

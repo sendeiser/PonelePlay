@@ -50,9 +50,20 @@ export async function POST(req: NextRequest) {
 
     const threshold = resolveEffectiveQueueThreshold(partyConfig);
     const voteDelta = isTurbo ? 3 : 1;
-    const newVoteCount = Number(item.vote_count ?? 0) + voteDelta;
+    const rawCurrentVotes = Number(item.vote_count ?? 0);
+    const baseVotes = rawCurrentVotes >= 9999 || rawCurrentVotes < 0 ? 0 : rawCurrentVotes;
+    const newVoteCount = baseVotes + voteDelta;
     const newStatus =
       item.status === "proposed" && newVoteCount >= threshold ? "queued" : item.status;
+
+    // Clean up any legacy 99999 house track votes in this night session so voted songs climb cleanly
+    if (item.night_session_id) {
+      await admin
+        .from("queue_items")
+        .update({ vote_count: 0 })
+        .eq("night_session_id", item.night_session_id)
+        .gte("vote_count", 9999);
+    }
 
     const { error: updateErr } = await admin
       .from("queue_items")

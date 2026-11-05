@@ -209,7 +209,7 @@ describe("PanelPlaybackFooter with Expandable Queue Drawer", () => {
     const subirBtn = screen.getByTitle(/subir de puesto/i);
     fireEvent.click(subirBtn);
     await waitFor(() => {
-      expect(mockCastVote).toHaveBeenCalledWith("qi-1");
+      expect(mockCastVote).toHaveBeenCalledWith("qi-1", "billar-aurora");
     });
 
     // Test veto item

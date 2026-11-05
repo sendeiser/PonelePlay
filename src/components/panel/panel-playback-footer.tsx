@@ -37,7 +37,7 @@ import { castVote } from "@/lib/api/votes";
 import type { QueueItemView } from "@/lib/api/contracts";
 import type { PlayerTrack } from "@/lib/api/player";
 import { fetchFallback } from "@/lib/api/catalog";
-import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
+import { updateTvDeviceDisplay } from "@/lib/api/tv-pairing";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
   fetchPlaybackState,
@@ -82,9 +82,11 @@ export function PanelPlaybackFooter({
   const [isPaused, setIsPaused] = useState(false);
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
+  const [tvMuted, setTvMuted] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
 
   // Modals
   const [manualModalOpen, setManualModalOpen] = useState(false);
@@ -105,7 +107,7 @@ export function PanelPlaybackFooter({
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
-  const { state: nightState, refresh: refreshNightState } = useNightState(nightSource);
+  const { state: nightState, loading: nightLoading, refresh: refreshNightState } = useNightState(nightSource);
 
   // Load venue fallback tracks so cabina and TV always have music playing
   useEffect(() => {
@@ -124,17 +126,19 @@ export function PanelPlaybackFooter({
           const fbs = await fetchFallback(venueId);
           if (active && fbs.length > 0) {
             setFallbackTracks(
-              fbs.map((tr) => ({
-                itemId: `fb-${tr.id}`,
-                trackId: tr.id,
-                title: tr.title,
-                artist: tr.artist,
-                source: tr.source,
-                durationSeconds: tr.durationSeconds ?? 210,
-                youtubeVideoId: tr.youtubeVideoId ?? "T_FkEw27XJ0",
-                thumbnailUrl: tr.thumbnailUrl ?? null,
-                voteCount: 0,
-              }))
+              fbs
+                .filter((tr) => Boolean(tr.youtubeVideoId))
+                .map((tr) => ({
+                  itemId: `fb-${tr.id}`,
+                  trackId: tr.id,
+                  title: tr.title,
+                  artist: tr.artist,
+                  source: tr.source,
+                  durationSeconds: tr.durationSeconds ?? 210,
+                  youtubeVideoId: tr.youtubeVideoId ?? undefined,
+                  thumbnailUrl: tr.thumbnailUrl ?? null,
+                  voteCount: 0,
+                }))
             );
           }
         }
@@ -176,31 +180,7 @@ export function PanelPlaybackFooter({
   }, [nightState?.queue, nightState?.candidates, effectiveThreshold]);
 
   const effectiveFallbackTracks: PlayerTrack[] = useMemo(() => {
-    if (fallbackTracks.length > 0) return fallbackTracks;
-    return [
-      {
-        itemId: demoNowPlaying.id,
-        trackId: demoNowPlaying.id,
-        title: demoNowPlaying.title,
-        artist: demoNowPlaying.artist,
-        source: demoNowPlaying.source,
-        durationSeconds: 207,
-        youtubeVideoId: demoNowPlaying.youtubeVideoId ?? "T_FkEw27XJ0",
-        thumbnailUrl: null,
-        voteCount: demoNowPlaying.votes,
-      },
-      ...demoQueue.map((item) => ({
-        itemId: item.id,
-        trackId: item.id,
-        title: item.title,
-        artist: item.artist,
-        source: item.source,
-        durationSeconds: 252,
-        youtubeVideoId: item.youtubeVideoId,
-        thumbnailUrl: null,
-        voteCount: item.votes,
-      })),
-    ];
+    return fallbackTracks;
   }, [fallbackTracks]);
 
   // ---------------------------------------------------------------------------
@@ -249,6 +229,9 @@ export function PanelPlaybackFooter({
         youtubeVideoId: live.youtubeVideoId || undefined,
         thumbnailUrl: live.thumbnailUrl ?? null,
         voteCount: live.voteCount,
+        guestName: live.guestName ?? null,
+        dedication: live.dedication ?? null,
+        isKaraoke: live.isKaraoke ?? false,
       };
       // Only react when the SERVER's now-playing actually changes (transition),
       // never re-apply it just because the local track changed.
@@ -260,24 +243,34 @@ export function PanelPlaybackFooter({
       return;
     }
 
+    // Do NOT pick a fallback track before initial server playback state and nightState have resolved
+    if (!initialSyncDone || nightLoading) {
+      return;
+    }
+
     if (!currentTrack) {
       if (activeQueue.length > 0) {
-        setCurrentTrack({
+        const nextFromQueue: PlayerTrack = {
           itemId: activeQueue[0].id,
           trackId: activeQueue[0].trackId,
           title: activeQueue[0].title,
           artist: activeQueue[0].artist,
-          source: activeQueue[0].source || "catalog",
+          source: activeQueue[0].source || "youtube",
           durationSeconds: activeQueue[0].durationSeconds ?? 210,
           youtubeVideoId: activeQueue[0].youtubeVideoId || undefined,
           thumbnailUrl: activeQueue[0].thumbnailUrl ?? null,
           voteCount: activeQueue[0].voteCount,
-        });
+          guestName: activeQueue[0].guestName ?? null,
+          dedication: activeQueue[0].dedication ?? null,
+          isKaraoke: activeQueue[0].isKaraoke ?? false,
+        };
+        setCurrentTrack(nextFromQueue);
+        void sendPlaybackCommand(slug, "play_now", { track: nextFromQueue }).catch(() => {});
       } else if (effectiveFallbackTracks.length > 0) {
         setCurrentTrack(effectiveFallbackTracks[0]);
       }
     }
-  }, [currentTrack, nightState?.nowPlaying, activeQueue, effectiveFallbackTracks, applyExternalTrack]);
+  }, [currentTrack, nightState?.nowPlaying, activeQueue, effectiveFallbackTracks, applyExternalTrack, initialSyncDone, nightLoading, slug]);
 
   // Drawer Actions: Play now, Veto, Boost vote
   const handlePlayQueueItemNow = async (item: QueueItemView) => {
@@ -291,8 +284,11 @@ export function PanelPlaybackFooter({
         youtubeVideoId: item.youtubeVideoId,
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: item.durationSeconds,
-        source: item.source || "catalog",
+        source: item.source || "youtube",
         voteCount: item.voteCount,
+        guestName: item.guestName ?? null,
+        dedication: item.dedication ?? null,
+        isKaraoke: item.isKaraoke ?? false,
       };
       setIsPaused(false);
       setElapsed(0);
@@ -329,7 +325,7 @@ export function PanelPlaybackFooter({
   const handleBoostQueueItem = async (item: QueueItemView) => {
     setPendingActionId(item.id);
     try {
-      await castVote(item.id);
+      await castVote(item.id, slug);
       showToast(`+1 voto sumado para "${item.title}"`);
       await refreshNightState();
     } catch {
@@ -347,16 +343,65 @@ export function PanelPlaybackFooter({
   // 1. Initial State Sync
   const loadState = useCallback(async () => {
     try {
+      // First check /api/tv/${slug} for authoritative server state (nowPlaying, positionSeconds, tvMuted, partyConfig)
+      try {
+        const tvRes = await fetch(`/api/tv/${encodeURIComponent(slug)}`, { cache: "no-store" });
+        if (tvRes.ok) {
+          const tvData = await tvRes.json();
+          if (tvData?.ok) {
+            if (typeof tvData.playback?.tvMuted === "boolean") {
+              setTvMuted(tvData.playback.tvMuted);
+            }
+            if (tvData.nowPlaying && tvData.nowPlaying.title) {
+              const np = tvData.nowPlaying;
+              const restoredTrack: PlayerTrack = {
+                itemId: String(np.id || "now"),
+                trackId: String(np.trackId || np.id || "now"),
+                title: String(np.title),
+                artist: String(np.artist || "Artista"),
+                source: "youtube",
+                durationSeconds: Number(np.durationSeconds ?? 210),
+                youtubeVideoId: np.youtubeVideoId || undefined,
+                thumbnailUrl: np.thumbnailUrl ?? null,
+                voteCount: Number(np.voteCount ?? 0),
+                guestName: np.guestName ?? null,
+                dedication: np.dedication ?? null,
+                isKaraoke: Boolean(np.isKaraoke),
+              };
+              lastLiveKeyRef.current = trackAudioKey(restoredTrack);
+              applyExternalTrack(restoredTrack);
+              const pos = Number(tvData.playback?.positionSeconds ?? 0);
+              if (pos > 0) {
+                setElapsed(Math.floor(pos));
+                setTimeout(() => audioEngineRef.current?.seekTo(Math.floor(pos)), 350);
+              }
+            }
+          }
+        }
+      } catch {
+        // Ignore and continue to RPC
+      }
+
       const st = await fetchPlaybackState(slug);
-      if (st.currentTrack && !nightState?.nowPlaying) applyExternalTrack(st.currentTrack);
+      if (st.currentTrack) {
+        lastLiveKeyRef.current = trackAudioKey(st.currentTrack);
+        applyExternalTrack(st.currentTrack);
+        const pos = Number((st.currentTrack as unknown as Record<string, unknown>).positionSeconds ?? 0);
+        if (pos > 0) {
+          setElapsed(Math.floor(pos));
+          setTimeout(() => audioEngineRef.current?.seekTo(Math.floor(pos)), 350);
+        }
+      }
       setIsPaused(st.isPaused);
       setVolume(st.volume ?? 85);
       setIsMuted(st.isMuted ?? false);
       setKaraokeMode(st.karaokeMode ?? false);
     } catch {
       // Non-blocking fallback
+    } finally {
+      setInitialSyncDone(true);
     }
-  }, [slug, nightState?.nowPlaying, applyExternalTrack]);
+  }, [slug, applyExternalTrack]);
 
   useEffect(() => {
     void loadState();
@@ -399,6 +444,7 @@ export function PanelPlaybackFooter({
             } else if (cmd === "mute") setIsMuted(true);
             else if (cmd === "unmute") setIsMuted(false);
             else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
+            else if (cmd === "set_tv_mute") setTvMuted(Boolean(p.tvMuted));
             else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
             else if (cmd === "seek" && typeof p.seconds === "number") {
               setElapsed(Math.floor(p.seconds));
@@ -408,6 +454,17 @@ export function PanelPlaybackFooter({
               setIsPaused(false);
               setElapsed(0);
               setVideoDuration(null);
+            }
+          },
+        )
+        .on(
+          "broadcast",
+          { event: "party_event" },
+          (msg: { payload?: Record<string, unknown> }) => {
+            if (!active || !msg.payload) return;
+            const p = msg.payload;
+            if (p.type === "party_skip_vote_updated" && p.skipped) {
+              void handleSkipNextRef.current();
             }
           },
         )
@@ -547,11 +604,14 @@ export function PanelPlaybackFooter({
       trackId: item.trackId,
       title: item.title,
       artist: item.artist,
-      source: item.source || "catalog",
+      source: item.source || "youtube",
       durationSeconds: item.durationSeconds ?? 210,
       youtubeVideoId: item.youtubeVideoId || undefined,
       thumbnailUrl: item.thumbnailUrl ?? null,
       voteCount: item.voteCount,
+      guestName: item.guestName ?? null,
+      dedication: item.dedication ?? null,
+      isKaraoke: item.isKaraoke ?? false,
     });
 
     if (activeQueue.length > 0) {
@@ -670,7 +730,7 @@ export function PanelPlaybackFooter({
   const handleToggleMute = async () => {
     const next = !isMuted;
     setIsMuted(next);
-    showToast(next ? "🔇 Audio TV Silenciado" : "🔊 Audio TV Activo");
+    showToast(next ? "🔇 Audio Cabina Silenciado" : "🔊 Audio Cabina Activo");
     broadcastControl(next ? "mute" : "unmute");
     try {
       if (next) {
@@ -680,6 +740,18 @@ export function PanelPlaybackFooter({
       }
     } catch {
       setIsMuted(!next);
+    }
+  };
+
+  const handleToggleTvMute = async () => {
+    const next = !tvMuted;
+    setTvMuted(next);
+    showToast(next ? "🔇 Audio de la TV Silenciado" : "🔊 Audio de la TV Activado");
+    broadcastControl("set_tv_mute", { tvMuted: next });
+    try {
+      await updateTvDeviceDisplay(slug, "all", { tvMuted: next });
+    } catch {
+      // Non-blocking
     }
   };
 
@@ -816,6 +888,20 @@ export function PanelPlaybackFooter({
               title="Buscar en YouTube y poner en TV"
             >
               <Search className="size-3.5 text-cyan-400" />
+            </button>
+
+            {/* TV Audio Mute/Unmute Toggle */}
+            <button
+              type="button"
+              onClick={() => void handleToggleTvMute()}
+              className={`size-8 rounded-lg border flex items-center justify-center active:scale-95 transition-all ${
+                tvMuted
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                  : "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
+              }`}
+              title={tvMuted ? "Activar sonido de la TV" : "Silenciar sonido de la TV"}
+            >
+              {tvMuted ? <VolumeX className="size-3.5 text-rose-400" /> : <Volume2 className="size-3.5 text-cyan-400" />}
             </button>
 
             {/* Play / Pause */}
@@ -969,6 +1055,30 @@ export function PanelPlaybackFooter({
             >
               <Tv className="size-3.5 text-cyan-400 shrink-0" />
               <span>Pantallas TV</span>
+            </button>
+
+            {/* Remote TV Audio Mute/Unmute Button */}
+            <button
+              type="button"
+              onClick={() => void handleToggleTvMute()}
+              className={`h-8 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border font-mono text-[11px] font-bold transition-all active:scale-95 whitespace-nowrap ${
+                tvMuted
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-sm"
+                  : "bg-[#131722] text-cyan-300 border-[#232b42] hover:text-white"
+              }`}
+              title={tvMuted ? "Sonido de la TV silenciado — Clic para activar sonido en la TV" : "Sonido de la TV activo — Clic para silenciar la TV desde la cabina"}
+            >
+              {tvMuted ? (
+                <>
+                  <VolumeX className="size-3.5 text-rose-400 shrink-0" />
+                  <span>TV Silenciada</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="size-3.5 text-cyan-400 shrink-0" />
+                  <span>Audio TV</span>
+                </>
+              )}
             </button>
 
             {/* Karaoke Mode Toggle Button */}

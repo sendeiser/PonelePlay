@@ -13,6 +13,7 @@ interface CandidateRowProps {
   onVote: () => void;
   onTurboVote?: () => void;
   turboAvailable?: boolean;
+  allowRepeatVotes?: boolean;
   disabled?: boolean;
 }
 
@@ -41,6 +42,7 @@ export const CandidateRow = memo(function CandidateRow({
   onVote,
   onTurboVote,
   turboAvailable = false,
+  allowRepeatVotes = false,
   disabled,
 }: CandidateRowProps) {
   const title = decodeHtmlEntities(item.title);
@@ -49,6 +51,7 @@ export const CandidateRow = memo(function CandidateRow({
   const target = Math.max(1, targetVotes);
   const progressPct = Math.min(100, Math.round((votes / target) * 100));
   const votesNeeded = Math.max(0, target - votes);
+  const isVoteLocked = !allowRepeatVotes && item.myVote;
 
   return (
     <div className="relative rounded-xl p-3 border border-[#232B42] bg-[#121624] shadow-sm transition-all hover:border-[#2f3a58]">
@@ -110,22 +113,22 @@ export const CandidateRow = memo(function CandidateRow({
           <button
             type="button"
             onClick={onVote}
-            disabled={disabled || item.myVote}
+            disabled={disabled || isVoteLocked}
             aria-label={
-              item.myVote
+              isVoteLocked
                 ? `Ya votaste por ${title}`
                 : `Votar por ${title}`
             }
             className={cn(
               "flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl font-mono text-xs font-bold transition-all active:scale-95 touch-manipulation",
-              item.myVote
+              isVoteLocked
                 ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 cursor-default"
                 : disabled
                   ? "bg-[#181b25] border border-[#232b42] text-slate-500 cursor-not-allowed"
                   : "bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-white shadow-md shadow-amber-500/20",
             )}
           >
-            {item.myVote ? (
+            {isVoteLocked ? (
               <>
                 <Check className="size-4" aria-hidden="true" />
                 <span>Votado</span>

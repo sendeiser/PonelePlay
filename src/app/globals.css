@@ -195,6 +195,22 @@ button, a, input, select, textarea {
   transform: translate3d(0, 0, 0);
 }
 
+/* Horizontal Left-to-Right Marquee for TV Dedications */
+@keyframes marqueeLeftToRight {
+  0% {
+    transform: translate3d(-100%, 0, 0);
+  }
+  100% {
+    transform: translate3d(100vw, 0, 0);
+  }
+}
+
+.animate-marquee-ltr {
+  display: inline-flex;
+  animation: marqueeLeftToRight 16s linear infinite;
+  will-change: transform;
+}
+
 /* Receipt Perforations */
 .receipt-perforation {
   background-image: radial-gradient(circle at 10px, transparent 0, transparent 4px, #181b25 4.5px);

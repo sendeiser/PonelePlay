@@ -55,6 +55,11 @@ export const partyConfigSchema = z
     allowDedications: z.boolean().default(true),
     allowGuestKaraoke: z.boolean().default(true),
     turboCooldownSeconds: z.number().int().positive().default(180),
+    skipVoteEnabled: z.boolean().optional(),
+    skipVotesThreshold: z.number().int().positive().optional(),
+    activeSkipVote: z.any().nullable().optional(),
+    activeDuel: z.any().nullable().optional(),
+    activeRoulette: z.any().nullable().optional(),
   })
   .nullable()
   .optional();
@@ -97,7 +102,7 @@ export const nightStateSchema = z.object({
   night: nightSessionSchema,
   nowPlaying: queueItemViewSchema.nullable(),
   queue: z.array(queueItemViewSchema),
-  candidates: z.array(queueItemViewSchema).optional().default([]),
+  candidates: z.array(queueItemViewSchema).optional(),
   votingRound: votingRoundSchema,
   me: nightMeSchema,
   settings: nightSettingsSchema,

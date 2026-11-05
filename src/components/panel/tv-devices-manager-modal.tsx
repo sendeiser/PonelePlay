@@ -18,8 +18,11 @@ import {
   Trash2,
   Tv,
   Type,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
+import { sendPlaybackCommand } from "@/lib/api/master-control";
 import {
   confirmTvPairingCode,
   listVenuePlayerDevices,
@@ -165,6 +168,9 @@ export function TvDevicesManagerModal({
     showToast(`⚡ Ajustes enviados a ${targetName}`);
 
     try {
+      if (typeof partialConfig.tvMuted === "boolean") {
+        await sendPlaybackCommand(slug, "set_tv_mute", { muted: partialConfig.tvMuted });
+      }
       await updateTvDeviceDisplay(slug, deviceId, partialConfig);
     } catch {
       showToast("Error al sincronizar con el servidor");
@@ -346,7 +352,7 @@ export function TvDevicesManagerModal({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {/* Mode Global */}
                     <button
                       type="button"
@@ -399,6 +405,39 @@ export function TvDevicesManagerModal({
                     >
                       <Eye className="size-3 text-emerald-400" />
                       <span>Mostrar Listas</span>
+                    </button>
+
+                    {/* Mute / Unmute TV Audio Global */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleUpdateDisplay(
+                          null,
+                          { tvMuted: true },
+                          "todas las TVs (Silenciadas)",
+                        )
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 border border-rose-500/40 text-rose-200 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      title="Silenciar el sonido de todas las TVs desde la cabina"
+                    >
+                      <VolumeX className="size-3 text-rose-400" />
+                      <span>Silenciar TV</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleUpdateDisplay(
+                          null,
+                          { tvMuted: false },
+                          "todas las TVs (Audio Activo)",
+                        )
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/40 text-cyan-200 font-mono text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      title="Activar el sonido de todas las TVs"
+                    >
+                      <Volume2 className="size-3 text-cyan-400" />
+                      <span>Activar Audio TV</span>
                     </button>
                   </div>
                 </div>

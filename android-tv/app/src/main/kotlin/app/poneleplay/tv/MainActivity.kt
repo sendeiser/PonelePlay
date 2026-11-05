@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
     private var showProposalsState = mutableStateOf(true)
     private var themeState = mutableStateOf("neon")
     private var scaleState = mutableStateOf("normal")
-    private var isMutedState = mutableStateOf(true)
+    private var isMutedState = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
         showProposalsState.value = prefs.getBoolean("tv_show_proposals", true)
         themeState.value = prefs.getString("tv_theme", "neon") ?: "neon"
         scaleState.value = prefs.getString("tv_scale", "normal") ?: "normal"
-        isMutedState.value = prefs.getBoolean("tv_is_muted", true)
+        isMutedState.value = prefs.getBoolean("tv_is_muted", false)
 
         setContent {
             PonelePlayTVTheme {
@@ -155,6 +155,12 @@ class MainActivity : ComponentActivity() {
                     scaleState.value = sc.lowercase()
                     prefs.edit().putString("tv_scale", sc.lowercase()).apply()
                 }
+            }
+            if (obj.has("tvMuted")) {
+                val muted = obj.optBoolean("tvMuted", false)
+                isMutedState.value = muted
+                prefs.edit().putBoolean("tv_is_muted", muted).apply()
+                if (muted) videoController.mute() else videoController.unMute()
             }
         } catch (e: Exception) {
             android.util.Log.e("PonelePlayTV", "Error parsing displayConfig: ${e.message}")

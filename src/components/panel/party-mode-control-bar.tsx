@@ -30,6 +30,13 @@ const QUEUE_THRESHOLD_PRESETS = [
   { label: "8 votos", value: 8 },
 ];
 
+const SKIP_THRESHOLD_PRESETS = [
+  { label: "2 votos", value: 2 },
+  { label: "3 votos", value: 3 },
+  { label: "5 votos", value: 5 },
+  { label: "8 votos", value: 8 },
+];
+
 export function PartyModeControlBar({
   slug,
   venueName,
@@ -303,6 +310,58 @@ export function PartyModeControlBar({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Control 3: Votación para cambiar la canción que se está reproduciendo */}
+          <div className="pt-2.5 border-t border-cyan-500/20 flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs font-bold text-rose-200 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.skipVoteEnabled ?? true}
+                onChange={(e) =>
+                  void onConfigChange({ skipVoteEnabled: e.target.checked })
+                }
+                className="accent-rose-500 size-4"
+              />
+              <span>⏭️ Permitir iniciar votación para cambiar la canción en curso</span>
+            </label>
+
+            {(config.skipVoteEnabled ?? true) && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-mono text-slate-400 mr-1">
+                  Votos para saltar:
+                </span>
+                {SKIP_THRESHOLD_PRESETS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() =>
+                      void onConfigChange({ skipVotesThreshold: preset.value })
+                    }
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all ${
+                      (config.skipVotesThreshold ?? 3) === preset.value
+                        ? "bg-rose-500 text-white border-rose-300"
+                        : "bg-[#141a29] text-slate-300 border-white/10 hover:border-rose-400/40"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  aria-label="Votos necesarios para cambiar canción"
+                  value={config.skipVotesThreshold ?? 3}
+                  onChange={(e) =>
+                    void onConfigChange({
+                      skipVotesThreshold: Math.max(1, Number(e.target.value) || 3),
+                    })
+                  }
+                  className="w-16 rounded-lg border border-white/15 bg-[#141a29] px-2 py-0.5 text-[11px] font-mono text-white"
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

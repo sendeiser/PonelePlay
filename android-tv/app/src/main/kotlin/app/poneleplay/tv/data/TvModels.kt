@@ -13,6 +13,7 @@ data class TvPlayback(
     val isPaused: Boolean,
     val volume: Int,
     val isMuted: Boolean,
+    val tvMuted: Boolean = false,
     val karaokeMode: Boolean,
     val lastCommand: String?,
     val commandSeq: Long,
@@ -47,6 +48,39 @@ data class TvProposal(
     val dedication: String? = null
 )
 
+data class TvDuel(
+    val duelId: String,
+    val titleA: String,
+    val artistA: String,
+    val votesA: Int,
+    val titleB: String,
+    val artistB: String,
+    val votesB: Int,
+    val durationSeconds: Int = 30
+)
+
+data class TvRouletteCandidate(
+    val id: String,
+    val title: String,
+    val artist: String,
+    val guestName: String? = null
+)
+
+data class TvRoulette(
+    val spinId: String,
+    val candidates: List<TvRouletteCandidate>,
+    val winnerTitle: String,
+    val winnerArtist: String,
+    val winnerGuestName: String? = null
+)
+
+data class TvSkipVote(
+    val trackId: String,
+    val title: String,
+    val votes: Int,
+    val threshold: Int
+)
+
 data class TvFeed(
     val ok: Boolean,
     val venue: TvVenue,
@@ -55,6 +89,9 @@ data class TvFeed(
     val nowPlaying: TvTrack?,
     val queue: List<TvTrack>,
     val proposals: List<TvProposal>,
+    val activeDuel: TvDuel? = null,
+    val activeRoulette: TvRoulette? = null,
+    val activeSkipVote: TvSkipVote? = null,
     val clientUrl: String,
     val serverTime: String
 )
@@ -100,10 +137,16 @@ object TvFeedParser {
 
         val playObj = root.optJSONObject("playback") ?: JSONObject()
         val cfgObj = playObj.optJSONObject("displayConfig")
+        val tvMutedFlag = if (playObj.has("tvMuted")) {
+            playObj.optBoolean("tvMuted", false)
+        } else {
+            cfgObj?.optBoolean("tvMuted", false) ?: false
+        }
         val playback = TvPlayback(
             isPaused = playObj.optBoolean("isPaused", false),
             volume = playObj.optInt("volume", 85),
             isMuted = playObj.optBoolean("isMuted", false),
+            tvMuted = tvMutedFlag,
             karaokeMode = playObj.optBoolean("karaokeMode", false),
             lastCommand = if (playObj.isNull("lastCommand")) null else playObj.optString("lastCommand"),
             commandSeq = playObj.optLong("commandSeq", 0L),
@@ -174,6 +217,66 @@ object TvFeedParser {
             }
         }
 
+        // Parse activeDuel
+        val duelObj = root.optJSONObject("activeDuel") ?: partyCfgObj?.optJSONObject("activeDuel")
+        val activeDuel = if (duelObj != null) {
+            val tA = duelObj.optJSONObject("trackA")
+            val tB = duelObj.optJSONObject("trackB")
+            if (tA != null && tB != null) {
+                TvDuel(
+                    duelId = duelObj.optString("duelId", ""),
+                    titleA = tA.optString("title", ""),
+                    artistA = tA.optString("artist", ""),
+                    votesA = duelObj.optInt("votesA", 0),
+                    titleB = tB.optString("title", ""),
+                    artistB = tB.optString("artist", ""),
+                    votesB = duelObj.optInt("votesB", 0),
+                    durationSeconds = duelObj.optInt("durationSeconds", 30)
+                )
+            } else null
+        } else null
+
+        // Parse activeRoulette
+        val roulObj = root.optJSONObject("activeRoulette") ?: partyCfgObj?.optJSONObject("activeRoulette")
+        val activeRoulette = if (roulObj != null) {
+            val winObj = roulObj.optJSONObject("winner")
+            val candArr = roulObj.optJSONArray("candidates")
+            val cands = mutableListOf<TvRouletteCandidate>()
+            if (candArr != null) {
+                for (i in 0 until candArr.length()) {
+                    val c = candArr.getJSONObject(i)
+                    cands.add(
+                        TvRouletteCandidate(
+                            id = c.optString("id", ""),
+                            title = c.optString("title", ""),
+                            artist = c.optString("artist", ""),
+                            guestName = optNullableString(c, "guestName")
+                        )
+                    )
+                }
+            }
+            if (winObj != null) {
+                TvRoulette(
+                    spinId = roulObj.optString("spinId", ""),
+                    candidates = cands,
+                    winnerTitle = winObj.optString("title", ""),
+                    winnerArtist = winObj.optString("artist", ""),
+                    winnerGuestName = optNullableString(winObj, "guestName")
+                )
+            } else null
+        } else null
+
+        // Parse activeSkipVote
+        val skipObj = root.optJSONObject("activeSkipVote") ?: partyCfgObj?.optJSONObject("activeSkipVote")
+        val activeSkipVote = if (skipObj != null && skipObj.optInt("votes", 0) > 0) {
+            TvSkipVote(
+                trackId = skipObj.optString("trackId", ""),
+                title = skipObj.optString("title", ""),
+                votes = skipObj.optInt("votes", 0),
+                threshold = skipObj.optInt("threshold", 3)
+            )
+        } else null
+
         return TvFeed(
             ok = root.optBoolean("ok", true),
             venue = venue,
@@ -182,6 +285,9 @@ object TvFeedParser {
             nowPlaying = nowPlaying,
             queue = queueList,
             proposals = proposalList,
+            activeDuel = activeDuel,
+            activeRoulette = activeRoulette,
+            activeSkipVote = activeSkipVote,
             clientUrl = root.optString("clientUrl", "https://poneleplay.netlify.app"),
             serverTime = root.optString("serverTime", "")
         )

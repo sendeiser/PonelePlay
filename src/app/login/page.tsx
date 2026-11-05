@@ -11,7 +11,7 @@ function LoginForm() {
   const nextParam = searchParams.get("next");
   const pairCodeParam = searchParams.get("pair_code");
 
-  const [authMode, setAuthMode] = useState<"owner" | "pin">("owner");
+  const [authMode] = useState<"owner" | "pin">("owner");
   const [pin, setPin] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -140,39 +140,10 @@ function LoginForm() {
             <span>Volver a PonelePlay</span>
           </Link>
 
-          {/* Mode Switcher Tabs */}
-          <div className="flex p-1 bg-[#181b25] rounded-xl border border-[#232b42] mb-6">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("owner");
-                setError(null);
-              }}
-              className={`flex-1 py-2 px-3 rounded-lg font-mono text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                authMode === "owner"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">admin_panel_settings</span>
-              <span>Dueño / Admin</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode("pin");
-                setError(null);
-              }}
-              className={`flex-1 py-2 px-3 rounded-lg font-mono text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-                authMode === "pin"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">dialpad</span>
-              <span>PIN Rápido Mozo</span>
-            </button>
+          {/* Main Auth Header Badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#181b25] rounded-xl border border-[#232b42] mb-5">
+            <span className="material-symbols-outlined text-base text-indigo-400">admin_panel_settings</span>
+            <span className="font-mono text-xs font-bold text-white">Acceso Principal · Cabina & Administración</span>
           </div>
 
           {error && (
@@ -336,9 +307,9 @@ function LoginForm() {
           )}
 
           <p className="text-center text-xs text-slate-500 font-mono">
-            ¿No registraste tu bar todavía?{" "}
+            ¿No registraste tu bar o fiesta todavía?{" "}
             <Link href="/signup" className="text-indigo-400 hover:underline font-semibold inline-block py-2 px-1">
-              Crear cuenta de bar
+              Crear cuenta
             </Link>
           </p>
         </div>

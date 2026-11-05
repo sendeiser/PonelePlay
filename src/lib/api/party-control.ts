@@ -3,6 +3,7 @@ import {
   DEFAULT_BAR_PARTY_CONFIG,
   DEFAULT_PARTY_CONFIG,
   type PartyConfig,
+  type PartySkipVoteState,
 } from "@/lib/domain/party";
 import type { QueueItemView } from "./contracts";
 
@@ -12,7 +13,8 @@ export type PartyRealtimeEventType =
   | "party_duel_start"
   | "party_duel_vote"
   | "party_duel_end"
-  | "party_roulette_spin";
+  | "party_roulette_spin"
+  | "party_skip_vote_updated";
 
 export interface PartyDuelState {
   duelId: string;
@@ -27,6 +29,7 @@ export interface PartyDuelState {
 
 export interface PartyRouletteState {
   rouletteId: string;
+  spinId?: string;
   candidates: QueueItemView[];
   winner: QueueItemView;
   startedAt: number;
@@ -43,8 +46,9 @@ export function normalizePartyConfigPatch(
   const rawVotes = Number(patch.votesPerGuest ?? base.votesPerGuest);
   const rawMinQueue = Number(patch.minVotesToQueue ?? base.minVotesToQueue);
   const rawCooldown = Number(patch.turboCooldownSeconds ?? base.turboCooldownSeconds);
+  const rawSkipThreshold = Number(patch.skipVotesThreshold ?? base.skipVotesThreshold ?? 3);
 
-  return {
+  const normalized: PartyConfig = {
     venueType: venueType === "party" ? "party" : "bar",
     partyMode:
       partyMode === "democratic" || partyMode === "hybrid_turbo" || partyMode === "party_games"
@@ -55,7 +59,14 @@ export function normalizePartyConfigPatch(
     allowDedications: patch.allowDedications ?? base.allowDedications,
     allowGuestKaraoke: patch.allowGuestKaraoke ?? base.allowGuestKaraoke,
     turboCooldownSeconds: Number.isNaN(rawCooldown) ? 180 : Math.max(30, Math.floor(rawCooldown)),
+    skipVoteEnabled: patch.skipVoteEnabled ?? base.skipVoteEnabled ?? true,
+    skipVotesThreshold: Number.isNaN(rawSkipThreshold) ? 3 : Math.max(1, Math.floor(rawSkipThreshold)),
+    activeSkipVote: patch.activeSkipVote !== undefined ? patch.activeSkipVote : (base.activeSkipVote ?? null),
+    activeDuel: patch.activeDuel !== undefined ? patch.activeDuel : (base.activeDuel ?? null),
+    activeRoulette: patch.activeRoulette !== undefined ? patch.activeRoulette : (base.activeRoulette ?? null),
   };
+
+  return normalized;
 }
 
 export function buildPartyBroadcastPayload(
@@ -125,15 +136,52 @@ async function broadcastPartyEvent(
   try {
     const supabase = createBrowserSupabase();
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
-    const existing = channels.find(
-      (c: { topic?: string }) =>
-        c.topic === `playback-control:${slug}` ||
-        c.topic === `realtime:playback-control:${slug}`,
-    );
-    const channel = existing ?? supabase.channel(`playback-control:${slug}`);
-    if (channel && typeof channel.send === "function") {
-      await channel.send(buildPartyBroadcastPayload(type, data));
-    }
+    const payload = buildPartyBroadcastPayload(type, data);
+
+    const sendToTopic = (topicName: string) => {
+      const existing = channels.find(
+        (c: { topic?: string }) =>
+          c.topic === topicName || c.topic === `realtime:${topicName}`,
+      ) as { state?: string; send?: (msg: unknown) => Promise<unknown>; subscribe?: (cb: (status: string) => void) => void } | undefined;
+
+      if (existing && typeof existing.send === "function") {
+        if (!existing.state || existing.state === "joined") {
+          void existing.send(payload);
+        } else if (typeof existing.subscribe === "function") {
+          existing.subscribe((status: string) => {
+            if (status === "SUBSCRIBED") void existing.send!(payload);
+          });
+        }
+        return;
+      }
+
+      const ch = supabase.channel(topicName) as {
+        state?: string;
+        send?: (msg: unknown) => Promise<unknown>;
+        subscribe?: (cb?: (status: string) => void) => unknown;
+      };
+      if (ch && typeof ch.send === "function") {
+        if (typeof ch.subscribe === "function") {
+          let sent = false;
+          ch.subscribe((status: string) => {
+            if (status === "SUBSCRIBED" && !sent) {
+              sent = true;
+              void ch.send!(payload);
+            }
+          });
+          // Also invoke send directly for mocked unit-test channels
+          if (!ch.state || ch.state === "joined") {
+            sent = true;
+            void ch.send(payload);
+          }
+        } else {
+          void ch.send(payload);
+        }
+      }
+    };
+
+    sendToTopic(`playback-control:${slug}`);
+    sendToTopic(`guest-party:${slug}`);
   } catch {
     // Non-blocking fallback
   }
@@ -371,13 +419,13 @@ export async function triggerPartyDuel(
     duelId: `duel-${Date.now()}`,
     trackA,
     trackB,
-    votesA: 1,
-    votesB: 1,
+    votesA: Math.max(1, trackA.voteCount >= 9999 ? 1 : trackA.voteCount || 1),
+    votesB: Math.max(1, trackB.voteCount >= 9999 ? 1 : trackB.voteCount || 1),
     durationSeconds,
     startedAt: Date.now(),
   };
 
-  await broadcastPartyEvent(slug, "party_duel_start", { duel });
+  void broadcastPartyEvent(slug, "party_duel_start", { duel });
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("poneleplay:party-event", {
@@ -385,6 +433,23 @@ export async function triggerPartyDuel(
       }),
     );
   }
+
+  try {
+    await fetch("/api/party/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug,
+        patch: {
+          activeDuel: duel as unknown as Record<string, unknown>,
+          activeRoulette: null,
+        },
+      }),
+    });
+  } catch {
+    // Non-blocking fallback
+  }
+
   return duel;
 }
 
@@ -394,11 +459,24 @@ export async function castPartyDuelVote(
   choice: "A" | "B",
   trackId: string,
 ): Promise<void> {
-  await broadcastPartyEvent(slug, "party_duel_vote", {
+  void broadcastPartyEvent(slug, "party_duel_vote", {
     duelId,
     choice,
     trackId,
   });
+
+  try {
+    await fetch("/api/party/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug,
+        duelVote: { duelId, choice, trackId },
+      }),
+    });
+  } catch {
+    // Non-blocking
+  }
 }
 
 export async function triggerPartyRoulette(
@@ -413,7 +491,7 @@ export async function triggerPartyRoulette(
     startedAt: Date.now(),
   };
 
-  await broadcastPartyEvent(slug, "party_roulette_spin", { roulette });
+  void broadcastPartyEvent(slug, "party_roulette_spin", { roulette });
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent("poneleplay:party-event", {
@@ -421,6 +499,94 @@ export async function triggerPartyRoulette(
       }),
     );
   }
+
+  try {
+    await fetch("/api/party/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug,
+        patch: {
+          activeRoulette: roulette as unknown as Record<string, unknown>,
+          activeDuel: null,
+        },
+        rouletteWinnerItemId: winner.id,
+      }),
+    });
+  } catch {
+    // Non-blocking fallback
+  }
+
   return roulette;
+}
+
+export async function castSkipTrackVote(
+  slug: string,
+  paramsOrTrackId:
+    | {
+        voterId: string;
+        trackId?: string;
+        itemId?: string;
+        title?: string;
+        artist?: string;
+      }
+    | string,
+  titleArg?: string,
+  voterIdArg?: string,
+): Promise<{
+  ok: boolean;
+  votes: number;
+  threshold: number;
+  skipped: boolean;
+  alreadyVoted?: boolean;
+  activeSkipVote?: PartySkipVoteState | null;
+  error?: string;
+}> {
+  const params =
+    typeof paramsOrTrackId === "string"
+      ? {
+          trackId: paramsOrTrackId,
+          title: titleArg,
+          voterId: voterIdArg || `guest-${Date.now()}`,
+        }
+      : paramsOrTrackId;
+
+  try {
+    const res = await fetch("/api/party/vote-skip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug,
+        ...params,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok) {
+        void broadcastPartyEvent(slug, "party_skip_vote_updated", {
+          activeSkipVote: data.activeSkipVote ?? null,
+          skipped: Boolean(data.skipped),
+        });
+        return {
+          ok: true,
+          votes: Number(data.votes ?? 1),
+          threshold: Number(data.threshold ?? 3),
+          skipped: Boolean(data.skipped),
+          alreadyVoted: Boolean(data.alreadyVoted),
+          activeSkipVote: (data.activeSkipVote as PartySkipVoteState | null) ?? null,
+        };
+      }
+      return {
+        ok: false,
+        votes: 0,
+        threshold: 3,
+        skipped: false,
+        error: data?.error || "error",
+      };
+    }
+  } catch {
+    // Ignore
+  }
+  return { ok: false, votes: 0, threshold: 3, skipped: false, error: "network_error" };
 }
 

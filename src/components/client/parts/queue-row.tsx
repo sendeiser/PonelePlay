@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Check, Flame, Plus } from "lucide-react";
+import { Flame, Plus } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { cn } from "@/lib/cn";
 import type { QueueItemView } from "@/lib/api/contracts";
@@ -122,25 +122,21 @@ export const QueueRow = memo(function QueueRow({
         <button
           type="button"
           onClick={onVote}
-          disabled={disabled || item.myVote}
-          aria-label={
-            item.myVote
-              ? `Ya votaste por ${title}`
-              : `Votar por ${title}`
-          }
+          disabled={disabled}
+          aria-label={`Votar por ${title} para que suba en la cola`}
           className={cn(
             "flex items-center gap-1.5 px-3.5 py-2.5 min-h-[44px] rounded-xl font-mono text-xs font-bold transition-all active:scale-95 touch-manipulation",
-            item.myVote
-              ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 cursor-default"
-              : disabled
-                ? "bg-[#181b25] border border-[#232b42] text-slate-500 cursor-not-allowed"
+            disabled
+              ? "bg-[#181b25] border border-[#232b42] text-slate-500 cursor-not-allowed"
+              : item.myVote
+                ? "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md shadow-emerald-600/25"
                 : "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-md shadow-indigo-600/30",
           )}
         >
           {item.myVote ? (
             <>
-              <Check className="size-4" aria-hidden="true" />
-              <span>Votado</span>
+              <Plus className="size-4" aria-hidden="true" />
+              <span>+1 Subir</span>
             </>
           ) : (
             <>

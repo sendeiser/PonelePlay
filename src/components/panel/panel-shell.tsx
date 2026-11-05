@@ -21,6 +21,7 @@ const iconMap: Record<string, string> = {
   Catálogo: "queue_music",
   Códigos: "receipt_long",
   Personal: "badge",
+  Suscripción: "workspace_premium",
   Ajustes: "tune",
 };
 
@@ -286,6 +287,29 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                   </Link>
                 );
               })}
+              {role !== "staff" && (
+                <Link
+                  href={`/panel/${slug}/suscripcion`}
+                  prefetch={true}
+                  title="Suscripción y Planes"
+                  className={`flex items-center ${
+                    isSidebarCollapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3.5 py-2.5"
+                  } rounded-lg font-medium transition-all text-xs font-mono border ${
+                    pathname === `/panel/${slug}/suscripcion`
+                      ? "bg-amber-500/20 text-amber-200 font-semibold border-amber-400/40 shadow-sm"
+                      : "text-amber-300/90 hover:bg-[#181b25] hover:text-amber-200 border-transparent"
+                  }`}
+                >
+                  <span
+                    className={`material-symbols-outlined text-base ${
+                      pathname === `/panel/${slug}/suscripcion` ? "text-amber-400" : "text-amber-400/80"
+                    }`}
+                  >
+                    workspace_premium
+                  </span>
+                  {!isSidebarCollapsed && <span>Suscripción</span>}
+                </Link>
+              )}
             </nav>
 
             {/* TV Kiosk Mode Action */}
@@ -380,6 +404,28 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
             </Link>
           );
         })}
+        {role !== "staff" && (
+          <Link
+            href={`/panel/${slug}/suscripcion`}
+            prefetch={true}
+            className={`flex flex-col items-center justify-center flex-1 py-1 rounded-xl transition-all ${
+              pathname === `/panel/${slug}/suscripcion`
+                ? "text-amber-400 font-bold"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <div
+              className={`size-8 rounded-xl flex items-center justify-center transition-all ${
+                pathname === `/panel/${slug}/suscripcion`
+                  ? "bg-amber-500/25 text-amber-300 shadow-sm"
+                  : ""
+              }`}
+            >
+              <span className="material-symbols-outlined text-xl">workspace_premium</span>
+            </div>
+            <span className="text-[10px] font-mono tracking-tight mt-0.5">Planes</span>
+          </Link>
+        )}
       </nav>
     </div>
   );

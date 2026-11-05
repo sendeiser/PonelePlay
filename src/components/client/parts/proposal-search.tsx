@@ -168,16 +168,14 @@ export function ProposalSearch({
         thumbnailUrl: item.thumbnailUrl,
       };
 
-      if (isPartyMode) {
-        const cleanName = guestName.trim();
-        const cleanDedication = sanitizeDedication(dedication);
-        if (cleanName) payload.guestName = cleanName;
-        if (cleanDedication && allowDedications) payload.dedication = cleanDedication;
-        if (isKaraoke && allowGuestKaraoke) payload.isKaraoke = true;
-        if (slug) {
-          payload.slug = slug;
-          payload.isPartyMode = true;
-        }
+      const cleanName = guestName.trim();
+      const cleanDedication = sanitizeDedication(dedication);
+      if (cleanName) payload.guestName = cleanName;
+      if (cleanDedication && allowDedications) payload.dedication = cleanDedication;
+      if (isKaraoke && allowGuestKaraoke) payload.isKaraoke = true;
+      if (slug && (isPartyMode || cleanDedication || cleanName)) {
+        payload.slug = slug;
+        payload.isPartyMode = isPartyMode || Boolean(cleanDedication || cleanName);
       }
 
       if (onPropose) {
@@ -293,8 +291,8 @@ export function ProposalSearch({
         </p>
       </div>
 
-      {/* Party Mode Extras: Guest Name, Dedication & Karaoke Toggle */}
-      {isPartyMode && (
+      {/* Guest Name, Dedication & Karaoke Toggle */}
+      {(isPartyMode || allowDedications) && (
         <div className="rounded-xl border border-fuchsia-500/35 bg-gradient-to-br from-fuchsia-950/30 via-[#151928] to-amber-950/20 p-3.5 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>

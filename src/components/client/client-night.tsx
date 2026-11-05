@@ -26,11 +26,13 @@ import {
   canGuestCastVote,
   resolveEffectiveQueueThreshold,
   type PartyConfig,
+  type PartySkipVoteState,
 } from "@/lib/domain/party";
 import {
   castPartyDuelVote,
   castPartyTurboVote,
   castPartyVote,
+  castSkipTrackVote,
   fetchServerPartyConfig,
   getStoredPartyConfig,
   type PartyDuelState,
@@ -84,6 +86,9 @@ export function ClientNight({ slug }: { slug: string }) {
   const [turboCooldownLeft, setTurboCooldownLeft] = useState<number>(0);
   const [activeDuel, setActiveDuel] = useState<PartyDuelState | null>(null);
   const [duelVotedChoice, setDuelVotedChoice] = useState<"A" | "B" | null>(null);
+  const [activeSkipVote, setActiveSkipVote] = useState<PartySkipVoteState | null>(null);
+  const [votedSkipTrackId, setVotedSkipTrackId] = useState<string | null>(null);
+  const [skipPending, setSkipPending] = useState(false);
 
   const isParty = partyConfig.venueType === "party";
 
@@ -92,6 +97,16 @@ export function ClientNight({ slug }: { slug: string }) {
     setPartyConfig(getStoredPartyConfig(slug, state?.settings?.partyConfig));
     void fetchServerPartyConfig(slug).then(({ partyConfig: serverCfg }) => {
       setPartyConfig(serverCfg);
+      if (serverCfg.activeSkipVote) {
+        setActiveSkipVote(serverCfg.activeSkipVote);
+      }
+      if (serverCfg.activeDuel) {
+        const duelObj = serverCfg.activeDuel as unknown as PartyDuelState;
+        const startedMs = new Date(duelObj.startedAt).getTime();
+        if (Date.now() - startedMs < (duelObj.durationSeconds || 30) * 1000) {
+          setActiveDuel(duelObj);
+        }
+      }
     });
     try {
       const savedName = localStorage.getItem(`${GUEST_NAME_KEY_PREFIX}${slug}`);
@@ -177,6 +192,16 @@ export function ClientNight({ slug }: { slug: string }) {
               } else if (p.type === "party_duel_start" && p.duel) {
                 setActiveDuel(p.duel as PartyDuelState);
                 setDuelVotedChoice(null);
+              } else if (p.type === "party_skip_vote_updated" && p.activeSkipVote) {
+                setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+              } else if (p.type === "party_skip_vote_passed") {
+                setActiveSkipVote(null);
+                setVotedSkipTrackId(null);
+                setToast({
+                  message: "⏭️ ¡La votación alcanzó los votos! Cambiando a la siguiente canción...",
+                  tone: "ok",
+                });
+                void refresh();
               }
             },
           )
@@ -325,7 +350,7 @@ export function ClientNight({ slug }: { slug: string }) {
     try {
       const res = isParty
         ? await castPartyVote(slug, queueItemId)
-        : await castVote(queueItemId);
+        : await castVote(queueItemId, slug);
       if (res.ok) {
         if (isParty && partyConfig.partyMode === "democratic" && partyConfig.votesPerGuest > 0) {
           const nextUsed = guestVotesUsed + 1;
@@ -398,12 +423,55 @@ export function ClientNight({ slug }: { slug: string }) {
       if (isParty) {
         await castPartyVote(slug, chosenTrack.id);
       } else {
-        await castVote(chosenTrack.id);
+        await castVote(chosenTrack.id, slug);
       }
       notify(`⚡ ¡Votaste por «${chosenTrack.title}» en el Duelo!`, "ok");
       await refresh();
     } catch {
       notify("Voto de duelo enviado.", "info");
+    }
+  }
+
+  async function handleVoteSkipCurrentTrack() {
+    if (!state?.nowPlaying || skipPending) return;
+    const currentKey = state.nowPlaying.trackId || state.nowPlaying.id;
+    setSkipPending(true);
+    try {
+      let voterId = guestName.trim();
+      if (!voterId) {
+        try {
+          voterId = localStorage.getItem("poneleplay.voterId") || "";
+          if (!voterId) {
+            voterId = `guest-${Math.random().toString(36).slice(2, 10)}`;
+            localStorage.setItem("poneleplay.voterId", voterId);
+          }
+        } catch {
+          voterId = `guest-${Date.now()}`;
+        }
+      }
+
+      const res = await castSkipTrackVote(
+        slug,
+        currentKey,
+        state.nowPlaying.title,
+        voterId,
+      );
+      setVotedSkipTrackId(currentKey);
+      if (res.skipped) {
+        setActiveSkipVote(null);
+        notify("⏭️ ¡Votación completada! Cambiando a la siguiente canción...", "ok");
+        await refresh();
+      } else if (res.activeSkipVote) {
+        setActiveSkipVote(res.activeSkipVote);
+        notify(
+          `🗳️ Voto registrado (${res.activeSkipVote.votes}/${res.activeSkipVote.threshold} para cambiar tema).`,
+          "ok",
+        );
+      }
+    } catch {
+      notify("No se pudo registrar el voto para cambiar canción.", "error");
+    } finally {
+      setSkipPending(false);
     }
   }
 
@@ -683,7 +751,23 @@ export function ClientNight({ slug }: { slug: string }) {
               className="space-y-4"
             >
               {/* NOW PLAYING HERO CARD */}
-              <NowPlayingCard item={state.nowPlaying} slug={slug} />
+              <NowPlayingCard
+                item={state.nowPlaying}
+                slug={slug}
+                skipVoteEnabled={partyConfig.skipVoteEnabled ?? true}
+                skipVotesThreshold={partyConfig.skipVotesThreshold ?? 3}
+                activeSkipVote={activeSkipVote}
+                hasVotedSkip={
+                  Boolean(
+                    state.nowPlaying &&
+                      votedSkipTrackId &&
+                      (votedSkipTrackId === state.nowPlaying.trackId ||
+                        votedSkipTrackId === state.nowPlaying.id),
+                  )
+                }
+                skipPending={skipPending}
+                onVoteSkip={() => void handleVoteSkipCurrentTrack()}
+              />
 
               {/* PROPOSE SONG CTA BANNER */}
               <section className="relative bg-[#131826] rounded-xl p-1.5 border border-[#1E2538] shadow-md hover:border-indigo-500/40 transition-colors">
@@ -845,6 +929,7 @@ export function ClientNight({ slug }: { slug: string }) {
                           rank={index + 1}
                           targetVotes={effectiveThreshold}
                           disabled={pendingVotes.has(item.id)}
+                          allowRepeatVotes={isParty}
                           onVote={() => void handleVote(item.id)}
                           onTurboVote={showTurboButtons ? () => void handleTurboVote(item.id) : undefined}
                           turboAvailable={turboCooldownLeft <= 0}

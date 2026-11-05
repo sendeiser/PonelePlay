@@ -19,9 +19,33 @@ export async function GET(req: NextRequest) {
     const admin = createAdminSupabase();
     const { partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
 
+    const now = Date.now();
+    const cleanedConfig = { ...partyConfig };
+    if (
+      cleanedConfig.activeDuel &&
+      typeof cleanedConfig.activeDuel === "object" &&
+      typeof (cleanedConfig.activeDuel as { startedAt?: number }).startedAt === "number"
+    ) {
+      const duel = cleanedConfig.activeDuel as { startedAt: number; durationSeconds?: number };
+      const maxAge = ((duel.durationSeconds || 30) + 6) * 1000;
+      if (now - duel.startedAt > maxAge) {
+        cleanedConfig.activeDuel = null;
+      }
+    }
+    if (
+      cleanedConfig.activeRoulette &&
+      typeof cleanedConfig.activeRoulette === "object" &&
+      typeof (cleanedConfig.activeRoulette as { startedAt?: number }).startedAt === "number"
+    ) {
+      const roul = cleanedConfig.activeRoulette as { startedAt: number };
+      if (now - roul.startedAt > 16000) {
+        cleanedConfig.activeRoulette = null;
+      }
+    }
+
     return NextResponse.json({
       ok: true,
-      partyConfig,
+      partyConfig: cleanedConfig,
       itemMeta,
     });
   } catch (err: unknown) {
@@ -37,6 +61,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
     const patch = (body?.patch || body?.partyConfig || {}) as Partial<PartyConfig>;
+    const duelVote = body?.duelVote as
+      | { duelId?: string; choice?: "A" | "B"; trackId?: string }
+      | undefined;
+    const rouletteWinnerItemId =
+      typeof body?.rouletteWinnerItemId === "string" ? body.rouletteWinnerItemId.trim() : "";
 
     if (!slug) {
       return NextResponse.json({ ok: false, error: "slug_required" }, { status: 400 });
@@ -49,9 +78,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "venue_not_found" }, { status: 404 });
     }
 
+    // Handle live 1v1 Duel Vote if provided
+    let updatedDuel = patch.activeDuel !== undefined ? patch.activeDuel : current.activeDuel;
+    if (duelVote && updatedDuel && typeof updatedDuel === "object") {
+      const d = { ...(updatedDuel as Record<string, unknown>) };
+      if (!duelVote.duelId || d.duelId === duelVote.duelId) {
+        if (duelVote.choice === "A") {
+          d.votesA = Number(d.votesA ?? 1) + 1;
+        } else if (duelVote.choice === "B") {
+          d.votesB = Number(d.votesB ?? 1) + 1;
+        }
+        updatedDuel = d;
+      }
+    }
+
+    // If rouletteWinnerItemId is provided, promote winner to top of active queue
+    if (rouletteWinnerItemId) {
+      const { data: winItem } = await admin
+        .from("queue_items")
+        .select("id, vote_count, night_session_id")
+        .eq("id", rouletteWinnerItemId)
+        .maybeSingle();
+      if (winItem?.id) {
+        const curVotes = Number(winItem.vote_count ?? 0);
+        const base = curVotes >= 9999 ? 0 : curVotes;
+        await admin
+          .from("queue_items")
+          .update({
+            status: "queued",
+            vote_count: base + 10,
+          })
+          .eq("id", winItem.id);
+      }
+    }
+
     // Lock Party Mode: if venue is already in Party Mode, do not allow switching to Bar Mode
     const safePatch: Partial<PartyConfig> = {
       ...patch,
+      activeDuel: updatedDuel,
       venueType: current.venueType === "party" ? "party" : (patch.venueType ?? current.venueType),
     };
 

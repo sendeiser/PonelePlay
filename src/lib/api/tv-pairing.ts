@@ -32,6 +32,7 @@ export interface TvDisplayConfig {
   showProposals: boolean;
   theme: "neon" | "minimal" | "gold" | "emerald";
   scale: "compact" | "normal" | "large" | "xlarge";
+  tvMuted?: boolean;
 }
 
 export const DEFAULT_TV_DISPLAY_CONFIG: TvDisplayConfig = {
@@ -40,6 +41,7 @@ export const DEFAULT_TV_DISPLAY_CONFIG: TvDisplayConfig = {
   showProposals: true,
   theme: "neon",
   scale: "normal",
+  tvMuted: false,
 };
 
 export interface PlayerDeviceItem {

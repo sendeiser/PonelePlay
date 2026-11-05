@@ -97,6 +97,7 @@ export async function GET(
       showProposals: true,
       theme: "neon",
       scale: "normal",
+      tvMuted: false,
     };
 
     try {
@@ -124,7 +125,13 @@ export async function GET(
     const resolveMeta = (item: Record<string, unknown>) => {
       const id = String(item.itemId || item.id || "");
       const trackId = String(item.trackId || "");
-      const meta = itemMeta[id] || (trackId ? itemMeta[trackId] : undefined);
+      const ytId = item.youtubeVideoId ? String(item.youtubeVideoId) : "";
+      const titleKey = item.title ? `title:${String(item.title).toLowerCase()}` : "";
+      const meta =
+        itemMeta[id] ||
+        (trackId ? itemMeta[trackId] : undefined) ||
+        (ytId ? itemMeta[`yt:${ytId}`] : undefined) ||
+        (titleKey ? itemMeta[titleKey] : undefined);
       return {
         guestName: (item.guestName as string | null) ?? meta?.guestName ?? null,
         dedication: (item.dedication as string | null) ?? meta?.dedication ?? null,
@@ -133,6 +140,32 @@ export async function GET(
     };
 
     const nowMeta = nowPlayingTrack ? resolveMeta(nowPlayingTrack) : null;
+
+    // Clean expired activeDuel / activeRoulette
+    const nowMs = Date.now();
+    let activeDuel = partyConfig.activeDuel ?? null;
+    if (
+      activeDuel &&
+      typeof activeDuel === "object" &&
+      typeof (activeDuel as { startedAt?: number }).startedAt === "number"
+    ) {
+      const d = activeDuel as { startedAt: number; durationSeconds?: number };
+      if (nowMs - d.startedAt > ((d.durationSeconds || 30) + 6) * 1000) {
+        activeDuel = null;
+      }
+    }
+    let activeRoulette = partyConfig.activeRoulette ?? null;
+    if (
+      activeRoulette &&
+      typeof activeRoulette === "object" &&
+      typeof (activeRoulette as { startedAt?: number }).startedAt === "number"
+    ) {
+      const r = activeRoulette as { startedAt: number };
+      if (nowMs - r.startedAt > 16000) {
+        activeRoulette = null;
+      }
+    }
+    const activeSkipVote = partyConfig.activeSkipVote ?? null;
 
     return NextResponse.json(
       {
@@ -143,12 +176,21 @@ export async function GET(
           slug: venue.slug,
           venueType: partyConfig.venueType,
         },
-        partyConfig,
+        partyConfig: {
+          ...partyConfig,
+          activeDuel,
+          activeRoulette,
+          activeSkipVote,
+        },
+        activeDuel,
+        activeRoulette,
+        activeSkipVote,
         isOpen: rawState.night ? (rawState.night as Record<string, unknown>).status === "open" : false,
         playback: {
           isPaused: Boolean(playState?.is_paused),
           volume: Number(playState?.volume ?? 85),
-          isMuted: Boolean(playState?.is_muted),
+          isMuted: Boolean(displayConfig.tvMuted ?? playState?.is_muted),
+          tvMuted: Boolean(displayConfig.tvMuted),
           karaokeMode: Boolean(playState?.karaoke_mode),
           lastCommand: playState?.last_command ?? null,
           commandSeq: playState?.command_seq ?? 0,

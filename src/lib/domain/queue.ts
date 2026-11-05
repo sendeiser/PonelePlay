@@ -7,9 +7,16 @@ export type QueueCandidate = {
 export const MIN_VOTES_FOR_QUEUE = 5;
 export const PROPOSAL_COOLDOWN_SECONDS = 120; // 2 minutes between proposals
 
+export function effectiveVoteScore(voteCount: number): number {
+  if (!voteCount || voteCount >= 9999 || voteCount < 0) return 0;
+  return voteCount;
+}
+
 export function compareQueue(a: QueueCandidate, b: QueueCandidate): number {
-  if (a.voteCount !== b.voteCount) {
-    return b.voteCount - a.voteCount;
+  const scoreA = effectiveVoteScore(a.voteCount);
+  const scoreB = effectiveVoteScore(b.voteCount);
+  if (scoreA !== scoreB) {
+    return scoreB - scoreA;
   }
 
   return Date.parse(a.createdAt) - Date.parse(b.createdAt);
@@ -50,7 +57,14 @@ export function partitionQueueAndProposals<
   for (const item of queueItems) {
     if (item.status === "playing") continue;
 
-    if (item.voteCount < threshold || (threshold >= MIN_VOTES_FOR_QUEUE && item.status === "proposed")) {
+    const isAlreadyQueuedFromRpc = candidateItems !== undefined && item.status === "queued";
+    const isHouseTrack = item.status === "queued" && (item.voteCount === 0 || item.voteCount >= 9999);
+
+    if (
+      !isAlreadyQueuedFromRpc &&
+      !isHouseTrack &&
+      (item.voteCount < threshold || (threshold >= MIN_VOTES_FOR_QUEUE && item.status === "proposed"))
+    ) {
       cand.push(item);
     } else {
       active.push(item);

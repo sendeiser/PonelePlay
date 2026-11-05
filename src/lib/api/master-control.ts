@@ -31,7 +31,8 @@ export type PlaybackCommand =
   | "toggle_fullscreen"
   | "set_fullscreen"
   | "toggle_video_mode"
-  | "set_video_mode";
+  | "set_video_mode"
+  | "set_tv_mute";
 
 export async function fetchPlaybackState(slug: string): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();

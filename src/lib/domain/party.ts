@@ -4,6 +4,19 @@ export type VenueType = "bar" | "party";
 
 export type PartyMode = "democratic" | "hybrid_turbo" | "party_games";
 
+export type PartySkipVoteState = {
+  trackId: string;
+  itemId?: string;
+  title: string;
+  artist?: string;
+  voterIds?: string[];
+  voters?: string[];
+  votes: number;
+  votesCount?: number;
+  threshold: number;
+  startedAt: number | string;
+};
+
 export type PartyConfig = {
   venueType: VenueType;
   partyMode: PartyMode;
@@ -14,6 +27,13 @@ export type PartyConfig = {
   allowDedications: boolean;
   allowGuestKaraoke: boolean;
   turboCooldownSeconds: number;
+  /** Allow guests to start a vote to skip the currently playing song */
+  skipVoteEnabled?: boolean;
+  /** Votes required to automatically skip the currently playing song (default 3) */
+  skipVotesThreshold?: number;
+  activeSkipVote?: PartySkipVoteState | null;
+  activeDuel?: Record<string, unknown> | null;
+  activeRoulette?: Record<string, unknown> | null;
 };
 
 export const DEFAULT_PARTY_CONFIG: PartyConfig = {
@@ -31,7 +51,7 @@ export const DEFAULT_BAR_PARTY_CONFIG: PartyConfig = {
   partyMode: "democratic",
   votesPerGuest: 0,
   minVotesToQueue: MIN_VOTES_FOR_QUEUE,
-  allowDedications: false,
+  allowDedications: true,
   allowGuestKaraoke: false,
   turboCooldownSeconds: 180,
 };

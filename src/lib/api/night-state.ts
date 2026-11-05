@@ -34,6 +34,8 @@ export async function fetchNightState(slug: string): Promise<NightState> {
             T extends {
               id: string;
               trackId?: string;
+              title?: string;
+              youtubeVideoId?: string | null;
               guestName?: string | null;
               dedication?: string | null;
               isKaraoke?: boolean;
@@ -41,7 +43,11 @@ export async function fetchNightState(slug: string): Promise<NightState> {
           >(
             item: T,
           ): T => {
-            const meta = itemMeta[item.id] || (item.trackId ? itemMeta[item.trackId] : undefined);
+            const meta =
+              itemMeta[item.id] ||
+              (item.trackId ? itemMeta[item.trackId] : undefined) ||
+              (item.youtubeVideoId ? itemMeta[`yt:${item.youtubeVideoId}`] : undefined) ||
+              (item.title ? itemMeta[`title:${item.title.toLowerCase()}`] : undefined);
             if (!meta) return item;
             return {
               ...item,

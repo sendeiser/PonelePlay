@@ -60,8 +60,50 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
     }).then(setQrUrl).catch(() => {});
   }, [clientUrl]);
 
-  // Load venue and settings
+  // Load venue and settings via Admin API (with browser fallback)
   const loadSettings = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/panel/settings?slug=${encodeURIComponent(slug)}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const json = (await res.json()) as {
+          venue?: { id: string; name: string; accent_color: string | null; join_message: string | null };
+          settings?: {
+            explicit_filter_enabled?: boolean;
+            explicit_keywords?: string[];
+            max_song_duration_seconds?: number;
+            max_proposals_per_participant?: number;
+            max_queue_size?: number;
+            voting_rounds_enabled?: boolean;
+            voting_round_seconds?: number;
+          } | null;
+        };
+        if (json.venue) {
+          setVenueId(json.venue.id);
+          setVenueName(json.venue.name);
+          setAccentColor(json.venue.accent_color || "#8083ff");
+          setJoinMessage(json.venue.join_message || "");
+          if (json.settings) {
+            setExplicitFilter(json.settings.explicit_filter_enabled ?? true);
+            setKeywords(json.settings.explicit_keywords?.join(", ") || "");
+            setMaxDuration(json.settings.max_song_duration_seconds || 480);
+            setMaxProposals(json.settings.max_proposals_per_participant || 3);
+            setMaxQueue(json.settings.max_queue_size || 30);
+            setVotingRoundsEnabled(json.settings.voting_rounds_enabled ?? true);
+            setVotingRoundSeconds(json.settings.voting_round_seconds ?? 180);
+          }
+          const { partyConfig: serverPartyCfg } = await fetchServerPartyConfig(slug);
+          setPartyConfig(serverPartyCfg);
+          const sum = await fetchNightSummary(json.venue.id).catch(() => null);
+          if (sum) setSummary(sum);
+          return;
+        }
+      }
+    } catch {
+      // Fallback to browser client below
+    }
+
     const supabase = createBrowserSupabase();
     const { data: vData } = await supabase
       .from("venues")
@@ -140,34 +182,32 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
     try {
       await updatePartyConfig(slug, partyConfig);
 
-      if (venueId) {
-        const supabase = createBrowserSupabase();
-        await supabase
-          .from("venues")
-          .update({
-            name: venueName,
-            accent_color: accentColor,
-            join_message: joinMessage || null,
-          })
-          .eq("id", venueId);
+      const splitKeywords = keywords
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean);
 
-        const splitKeywords = keywords
-          .split(",")
-          .map((k) => k.trim())
-          .filter(Boolean);
+      const res = await fetch("/api/panel/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          venueName,
+          accentColor,
+          joinMessage: joinMessage || null,
+          explicitFilter,
+          keywords: splitKeywords,
+          maxDuration,
+          maxProposals,
+          maxQueue,
+          votingRoundsEnabled,
+          votingRoundSeconds,
+        }),
+      });
 
-        await supabase
-          .from("venue_settings")
-          .update({
-            explicit_filter_enabled: explicitFilter,
-            explicit_keywords: splitKeywords,
-            max_song_duration_seconds: maxDuration,
-            max_proposals_per_participant: maxProposals,
-            max_queue_size: maxQueue,
-            voting_rounds_enabled: votingRoundsEnabled,
-            voting_round_seconds: votingRoundSeconds,
-          })
-          .eq("venue_id", venueId);
+      if (!res.ok) {
+        const errData = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(errData.error || "No se pudo guardar la configuración");
       }
 
       setSaved(true);
@@ -514,6 +554,48 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
                 className="w-full bg-[#0a0e17] border border-[#232b42] rounded-lg px-2.5 py-2 text-white font-bold"
               />
               <span className="text-[10px] text-slate-500 mt-1 block">Temas simultáneos</span>
+            </div>
+          </div>
+
+          {/* Vote-to-skip settings for both Bar & Party */}
+          <div className="bg-[#121624] p-3.5 rounded-xl border border-[#232b42] flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={partyConfig.skipVoteEnabled ?? true}
+                onChange={(e) =>
+                  setPartyConfig((prev) => ({
+                    ...prev,
+                    skipVoteEnabled: e.target.checked,
+                  }))
+                }
+                className="size-4 accent-rose-500"
+              />
+              <div>
+                <span className="text-white font-bold block">
+                  ⏭️ Votación para cambiar canción en reproducción
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  Permite que una persona inicie una votación en vivo para saltar el tema actual
+                </span>
+              </div>
+            </label>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-slate-400 text-[11px]">Votos necesarios:</span>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                value={partyConfig.skipVotesThreshold ?? 3}
+                onChange={(e) =>
+                  setPartyConfig((prev) => ({
+                    ...prev,
+                    skipVotesThreshold: Math.max(1, Number(e.target.value) || 3),
+                  }))
+                }
+                className="w-16 bg-[#0a0e17] border border-[#232b42] rounded-lg px-2.5 py-1.5 text-white font-bold text-center"
+              />
             </div>
           </div>
         </section>
