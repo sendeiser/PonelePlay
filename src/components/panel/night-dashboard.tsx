@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BallChip } from "@/components/ball-chip";
-import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import { partitionQueueAndProposals } from "@/lib/domain/queue";
 import {
   DEFAULT_BAR_PARTY_CONFIG,
   resolveEffectiveQueueThreshold,

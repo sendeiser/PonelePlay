@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { Check, Plus, Sparkles } from "lucide-react";
+import { Check, Flame, Plus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { QueueItemView } from "@/lib/api/contracts";
 import { MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
@@ -9,7 +9,10 @@ import { MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
 interface CandidateRowProps {
   item: QueueItemView;
   rank: number;
+  targetVotes?: number;
   onVote: () => void;
+  onTurboVote?: () => void;
+  turboAvailable?: boolean;
   disabled?: boolean;
 }
 
@@ -34,13 +37,16 @@ function formatDuration(seconds: number | null): string {
 export const CandidateRow = memo(function CandidateRow({
   item,
   rank,
+  targetVotes = MIN_VOTES_FOR_QUEUE,
   onVote,
+  onTurboVote,
+  turboAvailable = false,
   disabled,
 }: CandidateRowProps) {
   const title = decodeHtmlEntities(item.title);
   const artist = decodeHtmlEntities(item.artist);
   const votes = item.voteCount;
-  const target = MIN_VOTES_FOR_QUEUE;
+  const target = Math.max(1, targetVotes);
   const progressPct = Math.min(100, Math.round((votes / target) * 100));
   const votesNeeded = Math.max(0, target - votes);
 
@@ -63,15 +69,44 @@ export const CandidateRow = memo(function CandidateRow({
                   🏆 Líder
                 </span>
               )}
+              {item.isKaraoke && (
+                <span className="shrink-0 text-[9px] font-mono font-bold bg-pink-500/20 text-pink-200 border border-pink-400/40 px-1.5 py-0.5 rounded">
+                  🎤 Karaoke
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 truncate mt-0.5">
               {artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
+              {item.guestName ? ` · 🎉 ${item.guestName}` : ""}
             </p>
+            {item.dedication && (
+              <p className="mt-1 text-[11px] text-fuchsia-200 italic truncate">
+                💬 &ldquo;{item.dedication}&rdquo;
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Right: Vote Action */}
-        <div className="flex shrink-0 items-center">
+        {/* Right: Vote Actions */}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onTurboVote && (
+            <button
+              type="button"
+              onClick={onTurboVote}
+              disabled={disabled || !turboAvailable}
+              title={turboAvailable ? "Fueguito Turbo (+3 votos de golpe)" : "Fueguito recargando..."}
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-2.5 min-h-[44px] rounded-xl font-mono text-xs font-extrabold transition-all active:scale-95 touch-manipulation",
+                turboAvailable && !disabled
+                  ? "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-md shadow-amber-500/25"
+                  : "bg-[#181b25] border border-[#232b42] text-slate-500 cursor-not-allowed",
+              )}
+            >
+              <Flame className="size-3.5" aria-hidden="true" />
+              <span>+3</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onVote}
@@ -105,7 +140,7 @@ export const CandidateRow = memo(function CandidateRow({
         </div>
       </div>
 
-      {/* Vote Progress Bar towards 5 votes */}
+      {/* Vote Progress Bar towards target votes */}
       <div className="mt-2.5 pt-2 border-t border-[#1C2336]/80 flex items-center justify-between gap-2 sm:gap-3 font-mono text-[11px] min-w-0">
         <div className="flex items-center gap-1.5 text-amber-300 font-semibold shrink-0">
           <Sparkles className="size-3 text-amber-400" />

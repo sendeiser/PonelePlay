@@ -46,6 +46,19 @@ export const nightMeSchema = z
   })
   .nullable();
 
+export const partyConfigSchema = z
+  .object({
+    venueType: z.enum(["bar", "party"]).default("bar"),
+    partyMode: z.enum(["democratic", "hybrid_turbo", "party_games"]).default("hybrid_turbo"),
+    votesPerGuest: z.number().int().nonnegative().default(0),
+    minVotesToQueue: z.number().int().positive().default(1),
+    allowDedications: z.boolean().default(true),
+    allowGuestKaraoke: z.boolean().default(true),
+    turboCooldownSeconds: z.number().int().positive().default(180),
+  })
+  .nullable()
+  .optional();
+
 export const nightSettingsSchema = z.object({
   proposalsEnabled: z.boolean(),
   explicitFilterEnabled: z.boolean(),
@@ -54,6 +67,7 @@ export const nightSettingsSchema = z.object({
   maxSongDurationSeconds: z.number().int().positive(),
   defaultCreditsPerCode: z.number().int().positive(),
   maxCreditsPerCode: z.number().int().positive(),
+  partyConfig: partyConfigSchema,
 });
 
 export const nightPlayerSchema = z
@@ -77,19 +91,6 @@ export const votingRoundSchema = z
   .optional();
 
 export type VotingRound = z.infer<typeof votingRoundSchema>;
-
-export const partyConfigSchema = z
-  .object({
-    venueType: z.enum(["bar", "party"]).default("bar"),
-    partyMode: z.enum(["democratic", "hybrid_turbo", "party_games"]).default("hybrid_turbo"),
-    votesPerGuest: z.number().int().nonnegative().default(0),
-    minVotesToQueue: z.number().int().positive().default(1),
-    allowDedications: z.boolean().default(true),
-    allowGuestKaraoke: z.boolean().default(true),
-    turboCooldownSeconds: z.number().int().positive().default(180),
-  })
-  .nullable()
-  .optional();
 
 export const nightStateSchema = z.object({
   venue: nightVenueSchema,

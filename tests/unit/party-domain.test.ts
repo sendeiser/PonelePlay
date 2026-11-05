@@ -123,3 +123,4 @@ describe("Party Mode domain & queue rules", () => {
     expect(parsed.nowPlaying?.isKaraoke).toBe(true);
   });
 });
+

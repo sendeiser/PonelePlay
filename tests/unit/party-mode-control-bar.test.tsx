@@ -30,3 +30,4 @@ describe("PartyModeControlBar component", () => {
     expect(onReloadVotes).toHaveBeenCalledTimes(1);
   });
 });
+

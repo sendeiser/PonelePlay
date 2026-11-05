@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
-import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import { partitionQueueAndProposals } from "@/lib/domain/queue";
 import {
   DEFAULT_BAR_PARTY_CONFIG,
   resolveEffectiveQueueThreshold,
@@ -1432,12 +1432,12 @@ export function PanelPlaybackFooter({
                             <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.artist}</p>
                             <div className="flex items-center gap-2 mt-1">
                               <span className="font-mono text-[10px] text-amber-300 font-bold">
-                                {item.voteCount}/{MIN_VOTES_FOR_QUEUE} votos
+                                {item.voteCount}/{effectiveThreshold} votos
                               </span>
                               <div className="w-16 h-1.5 rounded-full bg-[#181F33] overflow-hidden">
                                 <div
                                   className="h-full bg-amber-400 rounded-full"
-                                  style={{ width: `${Math.min(100, (item.voteCount / MIN_VOTES_FOR_QUEUE) * 100)}%` }}
+                                  style={{ width: `${Math.min(100, (item.voteCount / effectiveThreshold) * 100)}%` }}
                                 />
                               </div>
                             </div>

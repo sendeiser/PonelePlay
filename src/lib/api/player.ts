@@ -16,6 +16,8 @@ export const playerTrackSchema = z.object({
   createdAt: z.string().nullable().optional(),
   position: z.number().optional(),
   isKaraoke: z.boolean().optional(),
+  guestName: z.string().nullable().optional(),
+  dedication: z.string().nullable().optional(),
 });
 
 export type PlayerTrack = z.infer<typeof playerTrackSchema>;
@@ -128,4 +130,3 @@ export async function sendPlayerEvent(
     throw new Error(res.error || `Error al notificar evento ${action}`);
   }
 }
-

@@ -6,7 +6,9 @@ import {
   BadgeCheck,
   Disc3,
   Download,
+  Flame,
   Info,
+  Swords,
 } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/brand";
 import { usePwa } from "@/components/pwa-provider";
@@ -17,9 +19,20 @@ import { castVote, voteErrorMessage } from "@/lib/api/votes";
 import { useNightState } from "@/hooks/use-night-state";
 import {
   partitionQueueAndProposals,
-  MIN_VOTES_FOR_QUEUE,
   PROPOSAL_COOLDOWN_SECONDS,
 } from "@/lib/domain/queue";
+import {
+  DEFAULT_BAR_PARTY_CONFIG,
+  canGuestCastVote,
+  resolveEffectiveQueueThreshold,
+  type PartyConfig,
+} from "@/lib/domain/party";
+import {
+  castPartyDuelVote,
+  castPartyTurboVote,
+  getStoredPartyConfig,
+  type PartyDuelState,
+} from "@/lib/api/party-control";
 import { OfflineBanner } from "./parts/offline-banner";
 import { ClosedState } from "./parts/closed-state";
 import { NowPlayingCard } from "./parts/now-playing-card";
@@ -32,14 +45,23 @@ import { cn } from "@/lib/cn";
 
 type TabId = "vivo" | "proponer" | "canjear" | "actividad";
 
-const navigationTabs = [
+const barNavigationTabs = [
   { id: "vivo" as const, label: "En Vivo", icon: "graphic_eq" },
   { id: "proponer" as const, label: "Proponer", icon: "queue_music" },
   { id: "canjear" as const, label: "Canjear", icon: "confirmation_number" },
   { id: "actividad" as const, label: "Mi Mesa", icon: "person" },
 ];
 
+const partyNavigationTabs = [
+  { id: "vivo" as const, label: "En Vivo", icon: "graphic_eq" },
+  { id: "proponer" as const, label: "Pedir Tema", icon: "queue_music" },
+  { id: "actividad" as const, label: "Mi Fiesta", icon: "celebration" },
+];
+
 const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
+const GUEST_NAME_KEY_PREFIX = "poneleplay.guestName.";
+const GUEST_VOTES_USED_KEY_PREFIX = "poneleplay.partyVotesUsed.";
+const GUEST_LAST_TURBO_KEY_PREFIX = "poneleplay.lastTurboVote.";
 
 export function ClientNight({ slug }: { slug: string }) {
   const { isInstallable, isInstalled, promptInstall } = usePwa();
@@ -54,9 +76,151 @@ export function ClientNight({ slug }: { slug: string }) {
   } | null>(null);
 
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [partyConfig, setPartyConfig] = useState<PartyConfig>(DEFAULT_BAR_PARTY_CONFIG);
+  const [guestName, setGuestName] = useState<string>("");
+  const [guestVotesUsed, setGuestVotesUsed] = useState<number>(0);
+  const [turboCooldownLeft, setTurboCooldownLeft] = useState<number>(0);
+  const [activeDuel, setActiveDuel] = useState<PartyDuelState | null>(null);
+  const [duelVotedChoice, setDuelVotedChoice] = useState<"A" | "B" | null>(null);
+
+  const isParty = partyConfig.venueType === "party";
+
+  // Sync PartyConfig, guestName, and local vote quota
+  useEffect(() => {
+    setPartyConfig(getStoredPartyConfig(slug, state?.settings?.partyConfig));
+    try {
+      const savedName = localStorage.getItem(`${GUEST_NAME_KEY_PREFIX}${slug}`);
+      if (savedName) setGuestName(savedName);
+      const savedUsed = parseInt(localStorage.getItem(`${GUEST_VOTES_USED_KEY_PREFIX}${slug}`) || "0", 10);
+      if (!Number.isNaN(savedUsed)) setGuestVotesUsed(savedUsed);
+    } catch {
+      // Ignore storage errors
+    }
+
+    const onPartyChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug?: string; config?: PartyConfig }>).detail;
+      if (!detail?.slug || detail.slug === slug) {
+        setPartyConfig(detail?.config ?? getStoredPartyConfig(slug, state?.settings?.partyConfig));
+      }
+    };
+
+    const onVotesReloaded = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug?: string }>).detail;
+      if (!detail?.slug || detail.slug === slug) {
+        setGuestVotesUsed(0);
+        try {
+          localStorage.setItem(`${GUEST_VOTES_USED_KEY_PREFIX}${slug}`, "0");
+        } catch {
+          // Ignore
+        }
+        setToast({
+          message: "🔄 ¡El anfitrión recargó los votos para todos!",
+          tone: "ok",
+        });
+      }
+    };
+
+    const onPartyEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{ type?: string; duel?: PartyDuelState }>).detail;
+      if (detail?.type === "party_duel_start" && detail.duel) {
+        setActiveDuel(detail.duel);
+        setDuelVotedChoice(null);
+      }
+    };
+
+    window.addEventListener("poneleplay:party-config-changed", onPartyChange);
+    window.addEventListener("poneleplay:party-votes-reloaded", onVotesReloaded);
+    window.addEventListener("poneleplay:party-event", onPartyEvent);
+
+    return () => {
+      window.removeEventListener("poneleplay:party-config-changed", onPartyChange);
+      window.removeEventListener("poneleplay:party-votes-reloaded", onVotesReloaded);
+      window.removeEventListener("poneleplay:party-event", onPartyEvent);
+    };
+  }, [slug, state?.settings?.partyConfig]);
+
+  // Listen to Realtime party_event broadcasts from Cabina
+  useEffect(() => {
+    let active = true;
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+
+    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+      if (!active) return;
+      try {
+        const supabase = createBrowserSupabase();
+        channel = supabase
+          .channel(`guest-party:${slug}`)
+          .on(
+            "broadcast",
+            { event: "party_event" },
+            (msg: { payload?: Record<string, unknown> }) => {
+              if (!active || !msg.payload) return;
+              const p = msg.payload;
+              if (p.type === "party_config_updated" && p.partyConfig) {
+                setPartyConfig(p.partyConfig as PartyConfig);
+              } else if (p.type === "party_votes_reloaded") {
+                setGuestVotesUsed(0);
+                try {
+                  localStorage.setItem(`${GUEST_VOTES_USED_KEY_PREFIX}${slug}`, "0");
+                } catch {
+                  // Ignore
+                }
+                setToast({
+                  message: "🔄 ¡El anfitrión recargó tus votos disponibles!",
+                  tone: "ok",
+                });
+              } else if (p.type === "party_duel_start" && p.duel) {
+                setActiveDuel(p.duel as PartyDuelState);
+                setDuelVotedChoice(null);
+              }
+            },
+          )
+          .subscribe();
+      } catch {
+        // Non-blocking fallback
+      }
+    });
+
+    return () => {
+      active = false;
+      if (channel) {
+        void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+          try {
+            const supabase = createBrowserSupabase();
+            void supabase.removeChannel(channel!);
+          } catch {
+            // Ignore
+          }
+        });
+      }
+    };
+  }, [slug]);
+
+  // Auto-dismiss duel overlay after durationSeconds
+  useEffect(() => {
+    if (!activeDuel) return;
+    const timer = setTimeout(() => {
+      setActiveDuel(null);
+      setDuelVotedChoice(null);
+    }, (activeDuel.durationSeconds || 30) * 1000);
+    return () => clearTimeout(timer);
+  }, [activeDuel]);
+
+  // Turbo vote cooldown ticker
+  useEffect(() => {
+    if (turboCooldownLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTurboCooldownLeft((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [turboCooldownLeft]);
 
   // Load and tick 2-minute cooldown
   useEffect(() => {
+    if (isParty) {
+      setCooldownSeconds(0);
+      return;
+    }
     try {
       const saved = localStorage.getItem(LAST_PROPOSAL_KEY);
       if (saved) {
@@ -69,7 +233,7 @@ export function ClientNight({ slug }: { slug: string }) {
     } catch {
       // Ignore
     }
-  }, []);
+  }, [isParty]);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -95,7 +259,16 @@ export function ClientNight({ slug }: { slug: string }) {
     setToast({ message, tone });
   }
 
-  const credits = state?.me?.credits ?? 0;
+  const rawCredits = state?.me?.credits ?? 0;
+  const democraticVotesRemaining = useMemo(() => {
+    if (!isParty) return rawCredits;
+    if (partyConfig.partyMode === "democratic" && partyConfig.votesPerGuest > 0) {
+      return Math.max(0, partyConfig.votesPerGuest - guestVotesUsed);
+    }
+    return 99999;
+  }, [isParty, partyConfig.partyMode, partyConfig.votesPerGuest, guestVotesUsed, rawCredits]);
+
+  const credits = isParty ? democraticVotesRemaining : rawCredits;
   const stateQueue = state?.queue;
   const stateCandidates = state?.candidates;
 
@@ -120,13 +293,24 @@ export function ClientNight({ slug }: { slug: string }) {
     return () => clearInterval(interval);
   }, [state?.votingRound?.enabled, state?.votingRound?.durationSeconds, refresh]);
 
+  const effectiveThreshold = useMemo(
+    () => resolveEffectiveQueueThreshold(partyConfig),
+    [partyConfig],
+  );
+
   // Partition queue into active playback queue and candidate proposals
   const { activeQueue, candidateProposals } = useMemo(() => {
-    return partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? []);
-  }, [stateQueue, stateCandidates]);
+    return partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? [], effectiveThreshold);
+  }, [stateQueue, stateCandidates, effectiveThreshold]);
 
   async function handleVote(queueItemId: string) {
-    if (credits <= 0) {
+    if (isParty) {
+      const check = canGuestCastVote(partyConfig, democraticVotesRemaining);
+      if (!check.allowed) {
+        notify(check.reason ?? "Alcanzaste el límite de votos por persona.", "error");
+        return;
+      }
+    } else if (credits <= 0) {
       notify("Te quedaste sin créditos. Canjeá un código para sumar votos.", "error");
       setTab("canjear");
       return;
@@ -136,11 +320,20 @@ export function ClientNight({ slug }: { slug: string }) {
     try {
       const res = await castVote(queueItemId);
       if (res.ok) {
+        if (isParty && partyConfig.partyMode === "democratic" && partyConfig.votesPerGuest > 0) {
+          const nextUsed = guestVotesUsed + 1;
+          setGuestVotesUsed(nextUsed);
+          try {
+            localStorage.setItem(`${GUEST_VOTES_USED_KEY_PREFIX}${slug}`, String(nextUsed));
+          } catch {
+            // Ignore
+          }
+        }
         notify("¡Voto computado con éxito! La lista se actualizó.", "ok");
         await refresh();
       } else {
         notify(voteErrorMessage(res.error), "error");
-        if (res.error === "no_credits") {
+        if (!isParty && res.error === "no_credits") {
           setTab("canjear");
         }
       }
@@ -154,6 +347,58 @@ export function ClientNight({ slug }: { slug: string }) {
       });
     }
   }
+
+  async function handleTurboVote(queueItemId: string) {
+    if (turboCooldownLeft > 0) {
+      notify(`⏳ Tu Fueguito Turbo se recarga en ${turboCooldownLeft}s.`, "info");
+      return;
+    }
+
+    setPendingVotes((prev) => new Set(prev).add(queueItemId));
+    try {
+      await castPartyTurboVote(slug, queueItemId);
+      const cooldown = partyConfig.turboCooldownSeconds || 180;
+      setTurboCooldownLeft(cooldown);
+      try {
+        localStorage.setItem(`${GUEST_LAST_TURBO_KEY_PREFIX}${slug}`, String(Date.now()));
+      } catch {
+        // Ignore
+      }
+      notify("🔥 ¡Fueguito Turbo activado! Sumaste +3 votos de golpe.", "ok");
+      await refresh();
+    } catch {
+      notify("Error al lanzar Fueguito Turbo.", "error");
+    } finally {
+      setPendingVotes((prev) => {
+        const next = new Set(prev);
+        next.delete(queueItemId);
+        return next;
+      });
+    }
+  }
+
+  async function handleDuelChoice(choice: "A" | "B") {
+    if (!activeDuel || duelVotedChoice) return;
+    setDuelVotedChoice(choice);
+    const chosenTrack = choice === "A" ? activeDuel.trackA : activeDuel.trackB;
+    try {
+      await castPartyDuelVote(slug, activeDuel.duelId, choice, chosenTrack.id);
+      await castVote(chosenTrack.id);
+      notify(`⚡ ¡Votaste por «${chosenTrack.title}» en el Duelo!`, "ok");
+      await refresh();
+    } catch {
+      notify("Voto de duelo enviado.", "info");
+    }
+  }
+
+  const handleSaveGuestName = (val: string) => {
+    setGuestName(val);
+    try {
+      localStorage.setItem(`${GUEST_NAME_KEY_PREFIX}${slug}`, val);
+    } catch {
+      // Ignore
+    }
+  };
 
   const formatRemainingTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -186,6 +431,9 @@ export function ClientNight({ slug }: { slug: string }) {
     );
   }
 
+  const navigationTabs = isParty ? partyNavigationTabs : barNavigationTabs;
+  const showTurboButtons = isParty && partyConfig.partyMode === "hybrid_turbo";
+
   return (
     <div className="min-h-screen bg-[#090D16] relative flex flex-col shadow-2xl text-[#dfe2ef]">
       {offline ? <OfflineBanner /> : null}
@@ -201,8 +449,15 @@ export function ClientNight({ slug }: { slug: string }) {
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
                   <Wordmark className="text-base" />
-                  <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/15 text-[#c0c1ff] border border-indigo-500/25 shrink-0">
-                    Live
+                  <span
+                    className={cn(
+                      "font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0",
+                      isParty
+                        ? "bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/40"
+                        : "bg-indigo-500/15 text-[#c0c1ff] border border-indigo-500/25",
+                    )}
+                  >
+                    {isParty ? "🎉 Fiesta" : "Live"}
                   </span>
                 </div>
                 <p className="truncate font-mono text-[10px] text-slate-400">
@@ -211,7 +466,7 @@ export function ClientNight({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {/* Live Badges: Install App & Credits Balance */}
+            {/* Live Badges: Install App & Credits / Party Status */}
             <div className="flex items-center gap-2 shrink-0">
               {isInstallable && !isInstalled && (
                 <button
@@ -226,23 +481,49 @@ export function ClientNight({ slug }: { slug: string }) {
                 </button>
               )}
 
-              {/* Credits Pill */}
-              <button
-                type="button"
-                onClick={() => setTab("canjear")}
-                aria-label={`Tenés ${credits} créditos de votación. Tocá para canjear más.`}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/15 to-violet-500/15 border border-indigo-500/30 hover:border-indigo-400 active:scale-95 transition-all"
-              >
-                <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-                  token
-                </span>
-                <span className="font-mono text-xs font-bold text-white">
-                  {credits}
-                </span>
-                <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
-                  {credits === 1 ? "voto" : "votos"}
-                </span>
-              </button>
+              {isParty ? (
+                partyConfig.partyMode === "democratic" && partyConfig.votesPerGuest > 0 ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-400/40">
+                    <span className="text-xs">🗳️</span>
+                    <span className="font-mono text-xs font-bold text-white">
+                      {democraticVotesRemaining}
+                    </span>
+                    <span className="text-[10px] font-mono uppercase text-cyan-200 font-semibold">
+                      votos disp.
+                    </span>
+                  </div>
+                ) : partyConfig.partyMode === "hybrid_turbo" ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/40">
+                    <Flame className="size-3.5 text-amber-400" />
+                    <span className="font-mono text-[11px] font-bold text-amber-200">
+                      {turboCooldownLeft > 0 ? `Turbo ${turboCooldownLeft}s` : "🔥 Turbo Listo"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-fuchsia-500/15 border border-fuchsia-400/40">
+                    <span className="font-mono text-[11px] font-bold text-fuchsia-200">
+                      ♾️ Votos Libres
+                    </span>
+                  </div>
+                )
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setTab("canjear")}
+                  aria-label={`Tenés ${credits} créditos de votación. Tocá para canjear más.`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/15 to-violet-500/15 border border-indigo-500/30 hover:border-indigo-400 active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    token
+                  </span>
+                  <span className="font-mono text-xs font-bold text-white">
+                    {credits}
+                  </span>
+                  <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+                    {credits === 1 ? "voto" : "votos"}
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -282,8 +563,100 @@ export function ClientNight({ slug }: { slug: string }) {
           )}
         </AnimatePresence>
 
+        {/* LIVE 1v1 DUEL MODAL OVERLAY FOR GUESTS */}
+        {activeDuel && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl border-2 border-amber-400/60 bg-gradient-to-b from-[#1a132c] to-[#0e121f] p-5 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 px-3 py-1 text-xs font-mono font-extrabold text-amber-300">
+                  <Swords className="size-3.5" />
+                  ⚡ DUELO 1 vs 1 EN VIVO
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveDuel(null)}
+                  className="text-xs font-mono text-slate-400 hover:text-white"
+                >
+                  Cerrar ✕
+                </button>
+              </div>
+              <p className="text-xs text-slate-300">
+                ¡Elegí cuál de estos dos temas tiene que sonar ahora en la fiesta!
+              </p>
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  type="button"
+                  disabled={Boolean(duelVotedChoice)}
+                  onClick={() => void handleDuelChoice("A")}
+                  className={cn(
+                    "p-3.5 rounded-xl border text-left transition-all flex items-center justify-between",
+                    duelVotedChoice === "A"
+                      ? "border-emerald-400 bg-emerald-500/20 text-white"
+                      : "border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-white",
+                  )}
+                >
+                  <div className="min-w-0 pr-2">
+                    <span className="text-[10px] font-mono font-bold text-cyan-300 uppercase">
+                      Esquina A
+                    </span>
+                    <h4 className="text-sm font-extrabold truncate">{activeDuel.trackA.title}</h4>
+                    <p className="text-xs text-slate-300 truncate">{activeDuel.trackA.artist}</p>
+                  </div>
+                  <span className="shrink-0 rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-mono font-extrabold text-slate-950">
+                    {duelVotedChoice === "A" ? "✓ Votado" : "Votar A"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={Boolean(duelVotedChoice)}
+                  onClick={() => void handleDuelChoice("B")}
+                  className={cn(
+                    "p-3.5 rounded-xl border text-left transition-all flex items-center justify-between",
+                    duelVotedChoice === "B"
+                      ? "border-emerald-400 bg-emerald-500/20 text-white"
+                      : "border-fuchsia-400/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-white",
+                  )}
+                >
+                  <div className="min-w-0 pr-2">
+                    <span className="text-[10px] font-mono font-bold text-fuchsia-300 uppercase">
+                      Esquina B
+                    </span>
+                    <h4 className="text-sm font-extrabold truncate">{activeDuel.trackB.title}</h4>
+                    <p className="text-xs text-slate-300 truncate">{activeDuel.trackB.artist}</p>
+                  </div>
+                  <span className="shrink-0 rounded-lg bg-fuchsia-400 px-3 py-1.5 text-xs font-mono font-extrabold text-slate-950">
+                    {duelVotedChoice === "B" ? "✓ Votado" : "Votar B"}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* MAIN BODY CONTENT AREA */}
         <main className="flex-1 p-3.5 space-y-4">
+          {/* PARTY WELCOME & NICKNAME BAR */}
+          {isParty && tab === "vivo" && (
+            <section className="rounded-xl border border-fuchsia-500/35 bg-gradient-to-r from-fuchsia-950/35 via-[#141829] to-amber-950/25 p-3 flex items-center justify-between gap-2.5">
+              <div className="min-w-0 flex-1">
+                <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-fuchsia-300">
+                  🎉 Modo Fiesta Desbloqueado · Sin Códigos
+                </span>
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="text"
+                    maxLength={28}
+                    value={guestName}
+                    onChange={(e) => handleSaveGuestName(e.target.value)}
+                    placeholder="Tu nombre o apodo para la TV..."
+                    className="w-full rounded-lg bg-[#0c101b]/90 border border-white/15 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-fuchsia-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* TAB 1: EN VIVO */}
           {tab === "vivo" && (
             <motion.div
@@ -309,15 +682,19 @@ export function ClientNight({ slug }: { slug: string }) {
                     </div>
                     <div>
                       <p className="text-sm text-white font-bold leading-tight">
-                        ¿Querés proponer una canción?
+                        {isParty ? "¿Qué tema querés escuchar o dedicar?" : "¿Querés proponer una canción?"}
                       </p>
-                      {cooldownSeconds > 0 ? (
+                      {!isParty && cooldownSeconds > 0 ? (
                         <p className="text-xs text-amber-300 mt-0.5 font-mono flex items-center gap-1 font-semibold">
                           <span>⏳ Podrás proponer en {formatRemainingTime(cooldownSeconds)}</span>
                         </p>
                       ) : (
                         <p className="text-xs text-slate-400 mt-0.5">
-                          Proponé libremente · Con 5 votos pasa a la TV
+                          {isParty
+                            ? effectiveThreshold <= 1
+                              ? "Pedí gratis + Dedicatoria en TV y Karaoke 🎤"
+                              : `Pedí gratis · Con ${effectiveThreshold} votos sube a la cola`
+                            : "Proponé libremente · Con 5 votos pasa a la TV"}
                         </p>
                       )}
                     </div>
@@ -346,7 +723,7 @@ export function ClientNight({ slug }: { slug: string }) {
                   </div>
                   <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-indigo-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    {activeQueue.length} {activeQueue.length === 1 ? "en cola" : "en cola"}
+                    {activeQueue.length} en cola
                   </span>
                 </div>
 
@@ -357,7 +734,13 @@ export function ClientNight({ slug }: { slug: string }) {
                       No hay canciones en la cola activa
                     </p>
                     <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
-                      Las canciones propuestas necesitan <strong>{MIN_VOTES_FOR_QUEUE} votos</strong> para entrar aquí y sonar en la TV.
+                      {effectiveThreshold <= 1 ? (
+                        "Pedí el primer tema de la noche para que empiece la fiesta."
+                      ) : (
+                        <>
+                          Las canciones propuestas necesitan <strong>{effectiveThreshold} votos</strong> para entrar aquí y sonar en la TV.
+                        </>
+                      )}
                     </p>
                   </div>
                 ) : (
@@ -369,6 +752,8 @@ export function ClientNight({ slug }: { slug: string }) {
                         rank={index + 1}
                         disabled={pendingVotes.has(item.id)}
                         onVote={() => void handleVote(item.id)}
+                        onTurboVote={showTurboButtons ? () => void handleTurboVote(item.id) : undefined}
+                        turboAvailable={turboCooldownLeft <= 0}
                       />
                     ))}
                   </div>
@@ -376,78 +761,83 @@ export function ClientNight({ slug }: { slug: string }) {
               </section>
 
               {/* ================= SECTION 2: PROPUESTAS EN VOTACIÓN POPULAR ================= */}
-              <section className="space-y-2.5 pt-2">
-                <div className="flex items-center justify-between px-0.5">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm text-white font-bold tracking-tight">
-                        Propuestas en Votación
-                      </h3>
-                      <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
-                        Pre-Cola
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Pedidos del público · Con {MIN_VOTES_FOR_QUEUE} votos o al terminar la ronda entra la más votada
-                    </p>
-                  </div>
-                  <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-amber-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    {candidateProposals.length} {candidateProposals.length === 1 ? "candidata" : "candidatas"}
-                  </span>
-                </div>
-
-                {/* Voting Round Live Banner for Customers */}
-                {state?.votingRound?.enabled && (
-                  <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-indigo-500/15 border border-amber-500/30 flex items-center justify-between gap-3 text-xs font-mono">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="material-symbols-outlined text-amber-400 text-lg animate-pulse shrink-0">timer</span>
-                      <div className="min-w-0">
-                        <span className="font-bold text-white block truncate">
-                          Ronda #{state.votingRound?.roundNumber ?? 1} en Vivo
-                        </span>
-                        <span className="text-[10px] text-slate-300 block truncate">
-                          ¡Votá tu favorita! Al terminar, la más votada entra a sonar en la TV.
+              {(effectiveThreshold > 1 || candidateProposals.length > 0) && (
+                <section className="space-y-2.5 pt-2">
+                  <div className="flex items-center justify-between px-0.5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm text-white font-bold tracking-tight">
+                          Propuestas en Votación
+                        </h3>
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
+                          Pre-Cola
                         </span>
                       </div>
+                      <p className="text-xs text-slate-400">
+                        Pedidos del público · Con {effectiveThreshold} votos pasan a la cola activa
+                      </p>
                     </div>
-                    <span className="shrink-0 font-bold px-2.5 py-1 rounded-lg bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs">
-                      {Math.floor(clientRoundSeconds / 60)}:{(clientRoundSeconds % 60).toString().padStart(2, "0")}
+                    <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-amber-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      {candidateProposals.length} {candidateProposals.length === 1 ? "candidata" : "candidatas"}
                     </span>
                   </div>
-                )}
 
-                {candidateProposals.length === 0 ? (
-                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">
-                    <span className="material-symbols-outlined text-2xl text-slate-600">how_to_vote</span>
-                    <p className="mt-2 text-sm font-bold text-white">
-                      No hay propuestas en votación
-                    </p>
-                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
-                      ¿Querés escuchar tu música favorita? Proponé una canción para que todos la voten.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => setTab("proponer")}
-                      className="mt-3 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2 font-mono text-xs font-bold text-white shadow-md shadow-amber-600/20"
-                    >
-                      Proponer canción
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {candidateProposals.map((item, index) => (
-                      <CandidateRow
-                        key={item.id}
-                        item={item}
-                        rank={index + 1}
-                        disabled={pendingVotes.has(item.id)}
-                        onVote={() => void handleVote(item.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
+                  {/* Voting Round Live Banner for Customers */}
+                  {state?.votingRound?.enabled && (
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-indigo-500/15 border border-amber-500/30 flex items-center justify-between gap-3 text-xs font-mono">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="material-symbols-outlined text-amber-400 text-lg animate-pulse shrink-0">timer</span>
+                        <div className="min-w-0">
+                          <span className="font-bold text-white block truncate">
+                            Ronda #{state.votingRound?.roundNumber ?? 1} en Vivo
+                          </span>
+                          <span className="text-[10px] text-slate-300 block truncate">
+                            ¡Votá tu favorita! Al terminar, la más votada entra a sonar en la TV.
+                          </span>
+                        </div>
+                      </div>
+                      <span className="shrink-0 font-bold px-2.5 py-1 rounded-lg bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs">
+                        {Math.floor(clientRoundSeconds / 60)}:{(clientRoundSeconds % 60).toString().padStart(2, "0")}
+                      </span>
+                    </div>
+                  )}
+
+                  {candidateProposals.length === 0 ? (
+                    <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">
+                      <span className="material-symbols-outlined text-2xl text-slate-600">how_to_vote</span>
+                      <p className="mt-2 text-sm font-bold text-white">
+                        No hay propuestas en votación
+                      </p>
+                      <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
+                        ¿Querés escuchar tu música favorita? Proponé una canción para que todos la voten.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setTab("proponer")}
+                        className="mt-3 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2 font-mono text-xs font-bold text-white shadow-md shadow-amber-600/20"
+                      >
+                        Proponer canción
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {candidateProposals.map((item, index) => (
+                        <CandidateRow
+                          key={item.id}
+                          item={item}
+                          rank={index + 1}
+                          targetVotes={effectiveThreshold}
+                          disabled={pendingVotes.has(item.id)}
+                          onVote={() => void handleVote(item.id)}
+                          onTurboVote={showTurboButtons ? () => void handleTurboVote(item.id) : undefined}
+                          turboAvailable={turboCooldownLeft <= 0}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
             </motion.div>
           )}
 
@@ -463,6 +853,11 @@ export function ClientNight({ slug }: { slug: string }) {
                 queue={activeQueue}
                 candidates={candidateProposals}
                 proposalsEnabled={state.settings.proposalsEnabled}
+                isPartyMode={isParty}
+                defaultGuestName={guestName}
+                allowDedications={partyConfig.allowDedications}
+                allowGuestKaraoke={partyConfig.allowGuestKaraoke}
+                minVotesToQueue={effectiveThreshold}
                 onProposed={async () => {
                   await refresh();
                   setTab("vivo");
@@ -473,8 +868,8 @@ export function ClientNight({ slug }: { slug: string }) {
             </motion.div>
           )}
 
-          {/* TAB 3: CANJEAR */}
-          {tab === "canjear" && (
+          {/* TAB 3: CANJEAR (SOLO BAR) */}
+          {tab === "canjear" && !isParty && (
             <motion.div
               key="canjear"
               initial={{ opacity: 0, y: 6 }}
@@ -507,7 +902,7 @@ export function ClientNight({ slug }: { slug: string }) {
                 maxProposals={state.settings.maxProposalsPerParticipant}
                 queue={activeQueue}
                 nowPlaying={state.nowPlaying}
-                onGoToRedeem={() => setTab("canjear")}
+                onGoToRedeem={() => setTab(isParty ? "proponer" : "canjear")}
                 onGoToPropose={() => setTab("proponer")}
               />
             </motion.div>
@@ -516,7 +911,12 @@ export function ClientNight({ slug }: { slug: string }) {
 
         {/* BOTTOM NAVIGATION BAR */}
         <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220]/95 backdrop-blur-md border-t border-[#1E2538] shadow-[0_-4px_20px_rgba(0,0,0,0.5)] pb-[env(safe-area-inset-bottom,0px)]">
-          <div className="max-w-md mx-auto grid grid-cols-4 px-2 py-1">
+          <div
+            className={cn(
+              "max-w-md mx-auto grid px-2 py-1",
+              isParty ? "grid-cols-3" : "grid-cols-4",
+            )}
+          >
             {navigationTabs.map(({ id, label, icon }) => {
               const active = tab === id;
               return (

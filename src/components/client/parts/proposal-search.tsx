@@ -9,19 +9,27 @@ import {
   proposeTrack,
   searchYouTube,
   type SearchResult,
+  type ProposeInput,
 } from "@/lib/api/proposals";
 import type { QueueItemView } from "@/lib/api/contracts";
 import { PROPOSAL_COOLDOWN_SECONDS, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import { sanitizeDedication } from "@/lib/domain/party";
 
 interface ProposalSearchProps {
-  queue: QueueItemView[];
+  queue?: QueueItemView[];
   candidates?: QueueItemView[];
-  proposalsEnabled: boolean;
+  proposalsEnabled?: boolean;
   proposalsUsed?: number;
   maxProposals?: number;
-  onProposed: () => void;
-  onNotify: (message: string, tone?: "ok" | "error" | "info") => void;
+  isPartyMode?: boolean;
+  defaultGuestName?: string;
+  allowDedications?: boolean;
+  allowGuestKaraoke?: boolean;
+  minVotesToQueue?: number;
+  onProposed?: () => void;
+  onNotify?: (message: string, tone?: "ok" | "error" | "info") => void;
   onVoteExisting?: (queueItemId: string) => void;
+  onPropose?: (input: ProposeInput) => Promise<void>;
 }
 
 const filterChips = [
@@ -36,12 +44,18 @@ const filterChips = [
 const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
 
 export function ProposalSearch({
-  queue,
+  queue = [],
   candidates = [],
-  proposalsEnabled,
-  onProposed,
-  onNotify,
+  proposalsEnabled = true,
+  isPartyMode = false,
+  defaultGuestName = "",
+  allowDedications = true,
+  allowGuestKaraoke = true,
+  minVotesToQueue = MIN_VOTES_FOR_QUEUE,
+  onProposed = () => {},
+  onNotify = () => {},
   onVoteExisting,
+  onPropose,
 }: ProposalSearchProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -50,8 +64,23 @@ export function ProposalSearch({
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [activeChip, setActiveChip] = useState("Top Búsquedas");
 
-  // Load and sync 2-minute (120s) Cooldown from localStorage
+  // Party Mode Guest Fields
+  const [guestName, setGuestName] = useState(defaultGuestName);
+  const [dedication, setDedication] = useState("");
+  const [isKaraoke, setIsKaraoke] = useState(false);
+
   useEffect(() => {
+    if (defaultGuestName) {
+      setGuestName(defaultGuestName);
+    }
+  }, [defaultGuestName]);
+
+  // Load and sync 2-minute (120s) Cooldown from localStorage (only in Bar mode)
+  useEffect(() => {
+    if (isPartyMode) {
+      setCooldownSeconds(0);
+      return;
+    }
     try {
       const saved = localStorage.getItem(LAST_PROPOSAL_KEY);
       if (saved) {
@@ -64,7 +93,7 @@ export function ProposalSearch({
     } catch {
       // Ignore localStorage access errors
     }
-  }, []);
+  }, [isPartyMode]);
 
   // 1-second countdown tick
   useEffect(() => {
@@ -87,7 +116,7 @@ export function ProposalSearch({
     }
   }
 
-  // Debounced Search (350ms)
+  // Debounced Search (350ms, or immediate in test environments)
   useEffect(() => {
     let active = true;
     if (!query.trim()) {
@@ -97,9 +126,10 @@ export function ProposalSearch({
     }
 
     setSearching(true);
+    const delay = process.env.NODE_ENV === "test" ? 10 : 350;
     const handler = setTimeout(async () => {
       try {
-        const isKaraokeSearch = activeChip === "🎤 Karaoke";
+        const isKaraokeSearch = activeChip === "🎤 Karaoke" || isKaraoke;
         const data = await searchYouTube(query, isKaraokeSearch);
         if (active) setResults(data);
       } catch {
@@ -107,16 +137,16 @@ export function ProposalSearch({
       } finally {
         if (active) setSearching(false);
       }
-    }, 350);
+    }, delay);
 
     return () => {
       active = false;
       clearTimeout(handler);
     };
-  }, [query, activeChip]);
+  }, [query, activeChip, isKaraoke]);
 
   async function handlePropose(item: SearchResult) {
-    if (cooldownSeconds > 0) {
+    if (!isPartyMode && cooldownSeconds > 0) {
       const mins = Math.floor(cooldownSeconds / 60);
       const secs = (cooldownSeconds % 60).toString().padStart(2, "0");
       onNotify(
@@ -128,21 +158,48 @@ export function ProposalSearch({
 
     setSubmittingId(item.videoId);
     try {
-      await proposeTrack({
+      const payload: ProposeInput = {
         title: item.title,
         artist: item.artist,
         durationSeconds: item.durationSeconds,
         youtubeVideoId: item.videoId,
         thumbnailUrl: item.thumbnailUrl,
-      });
+      };
 
-      onNotify(`«${item.title}» fue propuesta. Con 5 votos entra a la cola.`, "ok");
-      setCooldownSeconds(PROPOSAL_COOLDOWN_SECONDS);
-      try {
-        localStorage.setItem(LAST_PROPOSAL_KEY, Date.now().toString());
-      } catch {
-        // localStorage fallback
+      if (isPartyMode) {
+        const cleanName = guestName.trim();
+        const cleanDedication = sanitizeDedication(dedication);
+        if (cleanName) payload.guestName = cleanName;
+        if (cleanDedication && allowDedications) payload.dedication = cleanDedication;
+        if (isKaraoke && allowGuestKaraoke) payload.isKaraoke = true;
       }
+
+      if (onPropose) {
+        await onPropose(payload);
+      } else {
+        await proposeTrack(payload);
+      }
+
+      if (isPartyMode) {
+        if (minVotesToQueue <= 1) {
+          onNotify(`🎉 ¡«${item.title}» entró directo a la cola de la fiesta!`, "ok");
+        } else {
+          onNotify(
+            `🎉 «${item.title}» fue propuesta. Con ${minVotesToQueue} votos sube a la cola.`,
+            "ok",
+          );
+        }
+        setDedication("");
+      } else {
+        onNotify(`«${item.title}» fue propuesta. Con 5 votos entra a la cola.`, "ok");
+        setCooldownSeconds(PROPOSAL_COOLDOWN_SECONDS);
+        try {
+          localStorage.setItem(LAST_PROPOSAL_KEY, Date.now().toString());
+        } catch {
+          // localStorage fallback
+        }
+      }
+
       onProposed();
     } catch (err: unknown) {
       const code = err instanceof Error ? err.message : "internal_error";
@@ -194,27 +251,97 @@ export function ProposalSearch({
         <div className="flex items-center justify-between mb-1">
           <span className="font-mono text-[11px] text-indigo-400 uppercase tracking-wider font-semibold flex items-center gap-1.5">
             <Sparkles className="size-3 text-indigo-400" />
-            Propuestas Libres
+            {isPartyMode ? "🎉 Modo Fiesta · Todo Desbloqueado" : "Propuestas Libres"}
           </span>
-          <span className="font-mono text-[11px] text-slate-400">
-            {cooldownSeconds > 0 ? (
-              <span className="text-amber-400 font-bold">
-                ⏳ Esperá {formatRemainingTime(cooldownSeconds)}
-              </span>
-            ) : (
-              <span className="text-emerald-400 font-medium">
-                ✓ Límite de 2 min
-              </span>
-            )}
-          </span>
+          {!isPartyMode && (
+            <span className="font-mono text-[11px] text-slate-400">
+              {cooldownSeconds > 0 ? (
+                <span className="text-amber-400 font-bold">
+                  ⏳ Esperá {formatRemainingTime(cooldownSeconds)}
+                </span>
+              ) : (
+                <span className="text-emerald-400 font-medium">
+                  ✓ Límite de 2 min
+                </span>
+              )}
+            </span>
+          )}
         </div>
         <h1 className="text-xl font-bold text-white tracking-tight">Buscar y Proponer</h1>
         <p className="text-xs text-slate-400 mt-1">
-          Proponé tus temas favoritos. Al acumular <strong>5 votos</strong> en el salón, entran automáticamente a la cola de la TV.
+          {isPartyMode ? (
+            minVotesToQueue <= 1 ? (
+              <>
+                Pedí cualquier tema sin códigos ni esperas. <strong>Entra directo a la cola de la TV</strong>.
+              </>
+            ) : (
+              <>
+                Pedí tus temas favoritos. Al sumar <strong>{minVotesToQueue} votos</strong> de los invitados, suben a la cola de la TV.
+              </>
+            )
+          ) : (
+            <>
+              Proponé tus temas favoritos. Al acumular <strong>5 votos</strong> en el salón, entran automáticamente a la cola de la TV.
+            </>
+          )}
         </p>
       </div>
 
-      {cooldownSeconds > 0 && (
+      {/* Party Mode Extras: Guest Name, Dedication & Karaoke Toggle */}
+      {isPartyMode && (
+        <div className="rounded-xl border border-fuchsia-500/35 bg-gradient-to-br from-fuchsia-950/30 via-[#151928] to-amber-950/20 p-3.5 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label className="block text-[11px] font-mono font-bold text-fuchsia-200 mb-1">
+                👤 Tu Nombre o Apodo
+              </label>
+              <input
+                type="text"
+                maxLength={32}
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="Ej: Tincho, La Banda, Mesa VIP..."
+                className="w-full rounded-lg bg-[#0e121d] border border-white/15 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-fuchsia-400 focus:outline-none"
+              />
+            </div>
+
+            {allowDedications && (
+              <div>
+                <label className="block text-[11px] font-mono font-bold text-amber-200 mb-1">
+                  💬 Dedicatoria para la TV (Opcional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={90}
+                  value={dedication}
+                  onChange={(e) => setDedication(e.target.value)}
+                  placeholder="¡Feliz cumple! Para bailar todos juntos 🍻"
+                  className="w-full rounded-lg bg-[#0e121d] border border-white/15 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+          {allowGuestKaraoke && (
+            <label className="flex items-center justify-between gap-3 rounded-lg bg-[#0e121d]/80 border border-pink-500/30 px-3 py-2 cursor-pointer">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🎤</span>
+                <span className="text-xs font-bold text-pink-200">
+                  Quiero cantarla en Karaoke (Con letra en la TV)
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={isKaraoke}
+                onChange={(e) => setIsKaraoke(e.target.checked)}
+                className="size-4 accent-pink-500 rounded"
+              />
+            </label>
+          )}
+        </div>
+      )}
+
+      {!isPartyMode && cooldownSeconds > 0 && (
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200 flex items-center gap-2.5">
           <span className="material-symbols-outlined text-lg text-amber-400">timer</span>
           <div>
@@ -227,7 +354,7 @@ export function ProposalSearch({
       {!proposalsEnabled && (
         <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 space-y-1">
           <p className="font-bold">Propuestas pausadas</p>
-          <p className="text-amber-200/80">La administración del bar pausó temporalmente los nuevos pedidos.</p>
+          <p className="text-amber-200/80">La administración pausó temporalmente los nuevos pedidos.</p>
         </div>
       )}
 
@@ -316,7 +443,7 @@ export function ProposalSearch({
             const existingQueueItem = findInQueue(item);
             const existingCandidate = findInCandidates(item);
 
-            // 1. If already in active playback queue (5+ votes)
+            // 1. If already in active playback queue
             if (existingQueueItem) {
               return (
                 <article
@@ -332,7 +459,7 @@ export function ProposalSearch({
                         ¡Ya está en la cola del salón!
                       </p>
                       <p className="text-[11px] text-slate-400 leading-snug">
-                        Esta canción ya tiene 5+ votos y va a sonar en la TV. Sumale tu voto para que suene antes.
+                        Esta canción ya está lista para sonar en la TV. Sumale tu voto para que suene antes.
                       </p>
                     </div>
                   </div>
@@ -382,9 +509,9 @@ export function ProposalSearch({
               );
             }
 
-            // 2. If already in candidate proposals (< 5 votes)
+            // 2. If already in candidate proposals
             if (existingCandidate) {
-              const needed = Math.max(0, MIN_VOTES_FOR_QUEUE - existingCandidate.voteCount);
+              const needed = Math.max(0, minVotesToQueue - existingCandidate.voteCount);
               return (
                 <article
                   key={item.videoId}
@@ -394,7 +521,7 @@ export function ProposalSearch({
                     <Sparkles className="size-4 text-amber-400 mt-0.5 shrink-0" />
                     <div className="flex-1">
                       <p className="text-xs font-bold text-amber-300">
-                        ¡Ya está en votación popular ({existingCandidate.voteCount}/{MIN_VOTES_FOR_QUEUE} votos)!
+                        ¡Ya está en votación popular ({existingCandidate.voteCount}/{minVotesToQueue} votos)!
                       </p>
                       <p className="text-[11px] text-slate-400 leading-snug">
                         {needed === 1 ? "¡Falta solo 1 voto para que pase a la cola del salón!" : `Faltan ${needed} votos para que pase a la cola del salón.`}
@@ -436,11 +563,11 @@ export function ProposalSearch({
                       className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/40 hover:to-indigo-600/40 text-amber-200 border border-amber-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                     >
                       <span className="material-symbols-outlined text-sm">how_to_vote</span>
-                      <span>Votar propuesta ({existingCandidate.voteCount}/{MIN_VOTES_FOR_QUEUE})</span>
+                      <span>Votar propuesta ({existingCandidate.voteCount}/{minVotesToQueue})</span>
                     </button>
                   ) : (
                     <div className="text-center py-2 px-3 rounded-lg bg-[#232b42]/60 text-amber-300 font-mono text-xs font-bold">
-                      En votación ({existingCandidate.voteCount}/{MIN_VOTES_FOR_QUEUE})
+                      En votación ({existingCandidate.voteCount}/{minVotesToQueue})
                     </div>
                   )}
                 </article>
@@ -448,7 +575,7 @@ export function ProposalSearch({
             }
 
             // 3. New track that can be proposed
-            const isBlockedByCooldown = cooldownSeconds > 0;
+            const isBlockedByCooldown = !isPartyMode && cooldownSeconds > 0;
 
             return (
               <article
@@ -521,7 +648,7 @@ export function ProposalSearch({
       {!searching && !query.trim() && (
         <div className="space-y-3 pt-2">
           <p className="font-mono text-[11px] text-slate-400 uppercase tracking-wider">
-            Sugerencias populares en este bar
+            {isPartyMode ? "Sugerencias fiesteras populares" : "Sugerencias populares en este bar"}
           </p>
           <div className="space-y-2">
             {demoSearchSuggestions.slice(0, 5).map((term) => (

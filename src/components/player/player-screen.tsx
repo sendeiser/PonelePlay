@@ -19,6 +19,16 @@ import { TvPairingModal } from "@/components/player/tv-pairing-modal";
 import { TvStandbyScreen } from "@/components/player/tv-standby-screen";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
+import {
+  DEFAULT_BAR_PARTY_CONFIG,
+  resolveEffectiveQueueThreshold,
+  type PartyConfig,
+} from "@/lib/domain/party";
+import {
+  getStoredPartyConfig,
+  type PartyDuelState,
+  type PartyRouletteState,
+} from "@/lib/api/party-control";
 
 interface PlayerScreenProps {
   slug: string;
@@ -51,11 +61,59 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   // Continuous Night State Realtime Sync (Live Queue & Now Playing)
   const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
   const { state: nightState, refresh: refreshNightState } = useNightState(nightSource, { pollMs: 3000 });
+  const [partyConfig, setPartyConfig] = useState<PartyConfig>(DEFAULT_BAR_PARTY_CONFIG);
+  const [activeDuel, setActiveDuel] = useState<PartyDuelState | null>(null);
+  const [activeRoulette, setActiveRoulette] = useState<PartyRouletteState | null>(null);
+
+  useEffect(() => {
+    setPartyConfig(getStoredPartyConfig(slug, nightState?.settings?.partyConfig));
+    const onPartyChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug?: string; config?: PartyConfig }>).detail;
+      if (!detail?.slug || detail.slug === slug) {
+        setPartyConfig(detail?.config ?? getStoredPartyConfig(slug, nightState?.settings?.partyConfig));
+      }
+    };
+    const onPartyEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        type?: string;
+        duel?: PartyDuelState;
+        roulette?: PartyRouletteState;
+      }>).detail;
+      if (detail?.type === "party_duel_start" && detail.duel) {
+        setActiveDuel(detail.duel);
+      } else if (detail?.type === "party_roulette_spin" && detail.roulette) {
+        setActiveRoulette(detail.roulette);
+      }
+    };
+    window.addEventListener("poneleplay:party-config-changed", onPartyChange);
+    window.addEventListener("poneleplay:party-event", onPartyEvent);
+    return () => {
+      window.removeEventListener("poneleplay:party-config-changed", onPartyChange);
+      window.removeEventListener("poneleplay:party-event", onPartyEvent);
+    };
+  }, [slug, nightState?.settings?.partyConfig]);
+
+  useEffect(() => {
+    if (!activeDuel) return;
+    const timer = setTimeout(() => setActiveDuel(null), (activeDuel.durationSeconds || 30) * 1000);
+    return () => clearTimeout(timer);
+  }, [activeDuel]);
+
+  useEffect(() => {
+    if (!activeRoulette) return;
+    const timer = setTimeout(() => setActiveRoulette(null), 10000);
+    return () => clearTimeout(timer);
+  }, [activeRoulette]);
+
+  const effectiveThreshold = useMemo(
+    () => resolveEffectiveQueueThreshold(partyConfig),
+    [partyConfig],
+  );
 
   const liveNightQueue: PlayerTrack[] = useMemo(() => {
     if (nightState?.queue && nightState.queue.length > 0) {
       return nightState.queue
-        .filter((item) => item.status === "queued" || item.voteCount >= 5)
+        .filter((item) => item.status === "queued" || item.voteCount >= effectiveThreshold)
         .map((item) => ({
         itemId: item.id,
         trackId: item.trackId,
@@ -66,10 +124,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         youtubeVideoId: item.youtubeVideoId || undefined,
         thumbnailUrl: item.thumbnailUrl ?? null,
         voteCount: item.voteCount,
+        isKaraoke: item.isKaraoke,
+        guestName: item.guestName ?? null,
+        dedication: item.dedication ?? null,
       }));
     }
     return [];
-  }, [nightState]);
+  }, [nightState, effectiveThreshold]);
 
   const liveNightNowPlaying: PlayerTrack | null = useMemo(() => {
     if (nightState?.nowPlaying) {
@@ -83,6 +144,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         youtubeVideoId: nightState.nowPlaying.youtubeVideoId || undefined,
         thumbnailUrl: nightState.nowPlaying.thumbnailUrl ?? null,
         voteCount: nightState.nowPlaying.voteCount,
+        isKaraoke: nightState.nowPlaying.isKaraoke,
+        guestName: nightState.nowPlaying.guestName ?? null,
+        dedication: nightState.nowPlaying.dedication ?? null,
       };
     }
     return null;
@@ -1086,6 +1150,29 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             setTimeout(() => setHudMessage(null), 3000);
           },
         )
+        .on(
+          "broadcast",
+          { event: "party_event" },
+          (msg: { payload?: Record<string, unknown> }) => {
+            if (!active || !msg.payload) return;
+            const p = msg.payload;
+            if (p.type === "party_config_updated" && p.partyConfig) {
+              setPartyConfig(p.partyConfig as PartyConfig);
+            } else if (p.type === "party_duel_start" && p.duel) {
+              setActiveDuel(p.duel as PartyDuelState);
+            } else if (p.type === "party_duel_vote") {
+              const choice = p.choice;
+              setActiveDuel((prev) => {
+                if (!prev) return prev;
+                if (choice === "A") return { ...prev, votesA: prev.votesA + 1 };
+                if (choice === "B") return { ...prev, votesB: prev.votesB + 1 };
+                return prev;
+              });
+            } else if (p.type === "party_roulette_spin" && p.roulette) {
+              setActiveRoulette(p.roulette as PartyRouletteState);
+            }
+          },
+        )
         .subscribe();
     });
 
@@ -1275,10 +1362,37 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <div className="w-full bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white font-mono text-xs font-black tracking-widest px-3 py-1.5 rounded-lg mb-2 shadow-lg shadow-pink-600/30 flex items-center justify-between shrink-0 animate-pulse">
               <div className="flex items-center gap-2">
                 <Mic className="size-3.5 text-yellow-300 animate-bounce" />
-                <span>MODO KARAOKE EN VIVO · ¡CANTÁ CON LA PANTALLA!</span>
+                <span>
+                  MODO KARAOKE EN VIVO ·{" "}
+                  {nowPlaying?.guestName
+                    ? `¡CANTA ${nowPlaying.guestName.toUpperCase()}!`
+                    : "¡CANTÁ CON LA PANTALLA!"}
+                </span>
               </div>
               <span className="text-[9px] uppercase font-bold bg-black/40 px-2 py-0.5 rounded border border-white/20">
                 Letras en Pantalla
+              </span>
+            </div>
+          )}
+
+          {/* PARTY DEDICATION & GUEST BANNER OVERLAY */}
+          {!isVideoFullscreen && videoMode && (nowPlaying?.dedication || nowPlaying?.guestName) && (
+            <div className="w-full bg-gradient-to-r from-fuchsia-600/90 via-purple-700/90 to-amber-600/90 text-white font-mono text-xs px-3 py-1.5 rounded-lg mb-2 shadow-lg flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span>🎉</span>
+                {nowPlaying.guestName && (
+                  <span className="font-black text-amber-200 shrink-0">
+                    Pedido por {nowPlaying.guestName}:
+                  </span>
+                )}
+                {nowPlaying.dedication && (
+                  <span className="font-bold text-white truncate">
+                    &ldquo;{nowPlaying.dedication}&rdquo;
+                  </span>
+                )}
+              </div>
+              <span className="text-[9px] uppercase font-bold bg-black/30 px-2 py-0.5 rounded shrink-0">
+                Modo Fiesta
               </span>
             </div>
           )}
@@ -2162,6 +2276,88 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         <div className="fixed bottom-12 left-6 z-50 bg-[#0f1424]/95 text-white font-mono text-xs font-bold px-4 py-2.5 rounded-xl border border-cyan-400/50 shadow-2xl animate-in slide-in-from-bottom duration-200 flex items-center gap-2.5 pointer-events-none">
           <span className="material-symbols-outlined text-cyan-400 text-base">{liveToast.icon}</span>
           <span>{liveToast.message}</span>
+        </div>
+      )}
+
+      {/* PARTY LIVE 1v1 DUEL TV OVERLAY */}
+      {activeDuel && (
+        <div className="fixed inset-x-6 bottom-12 z-[90] mx-auto max-w-4xl rounded-3xl border-2 border-amber-400 bg-gradient-to-r from-[#1d1130]/95 via-[#0e1222]/95 to-[#281228]/95 p-5 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center justify-between mb-3">
+            <span className="rounded-full bg-amber-400 px-3 py-1 font-mono text-xs font-black uppercase text-slate-950">
+              ⚡ DUELO FIESTERO 1 vs 1 EN VIVO · ¡VOTÁ EN TU CELULAR!
+            </span>
+            <button
+              type="button"
+              onClick={() => setActiveDuel(null)}
+              className="font-mono text-xs text-slate-400 hover:text-white"
+            >
+              Cerrar ✕
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4 items-center">
+            <div className="rounded-2xl border border-cyan-400/50 bg-cyan-500/15 p-4 flex items-center justify-between">
+              <div className="min-w-0 pr-3">
+                <span className="font-mono text-[10px] font-bold uppercase text-cyan-300">
+                  ESQUINA A
+                </span>
+                <h3 className="text-lg font-black text-white truncate">{activeDuel.trackA.title}</h3>
+                <p className="text-xs text-slate-300 truncate">{activeDuel.trackA.artist}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-2xl font-black font-mono text-cyan-300">{activeDuel.votesA}</span>
+                <span className="block text-[10px] font-mono text-cyan-200">VOTOS</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-fuchsia-400/50 bg-fuchsia-500/15 p-4 flex items-center justify-between">
+              <div className="min-w-0 pr-3">
+                <span className="font-mono text-[10px] font-bold uppercase text-fuchsia-300">
+                  ESQUINA B
+                </span>
+                <h3 className="text-lg font-black text-white truncate">{activeDuel.trackB.title}</h3>
+                <p className="text-xs text-slate-300 truncate">{activeDuel.trackB.artist}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-2xl font-black font-mono text-fuchsia-300">{activeDuel.votesB}</span>
+                <span className="block text-[10px] font-mono text-fuchsia-200">VOTOS</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PARTY LIVE ROULETTE TV OVERLAY */}
+      {activeRoulette && (
+        <div className="fixed inset-0 z-[95] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="max-w-lg w-full rounded-3xl border-2 border-fuchsia-400 bg-gradient-to-b from-[#231238] to-[#0f1322] p-8 text-center shadow-2xl space-y-4">
+            <div className="text-4xl animate-bounce">🎡</div>
+            <span className="inline-block rounded-full bg-fuchsia-500/20 border border-fuchsia-400/40 px-4 py-1 font-mono text-xs font-black uppercase text-fuchsia-200">
+              RULETA FIESTERA EN VIVO
+            </span>
+            <h2 className="text-2xl font-black text-white">
+              ¡Tema Ganador del Sorteo!
+            </h2>
+            <div className="rounded-2xl border border-amber-400/60 bg-amber-500/15 p-5">
+              <h3 className="text-xl font-black text-amber-200 truncate">
+                {activeRoulette.winner.title}
+              </h3>
+              <p className="text-sm text-slate-200 mt-1 truncate">
+                {activeRoulette.winner.artist}
+              </p>
+              {activeRoulette.winner.guestName && (
+                <p className="text-xs font-mono text-fuchsia-300 mt-2">
+                  🎉 Propuesto por {activeRoulette.winner.guestName}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveRoulette(null)}
+              className="rounded-xl bg-white/10 hover:bg-white/20 px-4 py-2 font-mono text-xs text-white"
+            >
+              Continuar
+            </button>
+          </div>
         </div>
       )}
 

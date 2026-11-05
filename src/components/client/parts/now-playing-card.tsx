@@ -235,14 +235,27 @@ export function NowPlayingCard({ item, slug }: NowPlayingCardProps) {
           <p className="text-sm text-slate-300 truncate font-medium mt-0.5">
             {item.artist}
           </p>
-          <div className="flex items-center gap-1.5 mt-2">
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
             <span className="material-symbols-outlined text-indigo-400 text-[14px]">
               table_restaurant
             </span>
             <span className="font-mono text-[11px] text-slate-400 font-medium">
-              Pedido por <strong className="text-white font-semibold">Salón Principal</strong>
+              Pedido por{" "}
+              <strong className="text-white font-semibold">
+                {item.guestName ? `🎉 ${item.guestName}` : "Salón Principal"}
+              </strong>
             </span>
+            {item.isKaraoke && (
+              <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-200 border border-pink-400/40 font-mono text-[9px] uppercase font-bold">
+                🎤 Karaoke
+              </span>
+            )}
           </div>
+          {item.dedication && (
+            <p className="mt-1.5 text-[11px] text-fuchsia-200 bg-fuchsia-950/40 border border-fuchsia-500/30 rounded-lg px-2 py-1 truncate">
+              💬 &ldquo;{item.dedication}&rdquo;
+            </p>
+          )}
         </div>
       </div>
 

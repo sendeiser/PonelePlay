@@ -486,3 +486,4 @@ Expected: All unit tests PASS and Next.js production build succeeds with exit co
 git add src/components/client/ src/components/player/ src/app/api/tv/ tests/unit/party-guest-and-tv.test.tsx
 git commit -m "feat(party): unlock guest experience with dedications, karaoke, turbo votes and TV duel/roulette overlays"
 ```
+

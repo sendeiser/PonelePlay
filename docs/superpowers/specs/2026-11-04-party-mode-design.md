@@ -152,3 +152,4 @@ Se creará una nueva migración SQL retrocompatible (`supabase/migrations/202611
   - Tests de componentes para el selector de modo Fiesta y formulario de dedicatorias/karaoke.
 - **Build de Producción (`npm run build`):**
   - Compilación limpia de tipos TypeScript y rutas de Next.js.
+
