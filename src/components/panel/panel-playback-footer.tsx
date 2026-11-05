@@ -26,6 +26,12 @@ import {
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import {
+  DEFAULT_BAR_PARTY_CONFIG,
+  resolveEffectiveQueueThreshold,
+  type PartyConfig,
+} from "@/lib/domain/party";
+import { getStoredPartyConfig } from "@/lib/api/party-control";
 import { vetoItem } from "@/lib/api/panel-actions";
 import { castVote } from "@/lib/api/votes";
 import type { QueueItemView } from "@/lib/api/contracts";
@@ -142,9 +148,32 @@ export function PanelPlaybackFooter({
     };
   }, [slug]);
 
+  const [partyConfig, setPartyConfig] = useState<PartyConfig>(DEFAULT_BAR_PARTY_CONFIG);
+
+  useEffect(() => {
+    setPartyConfig(getStoredPartyConfig(slug, nightState?.settings?.partyConfig));
+    const onPartyChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug?: string; config?: PartyConfig }>).detail;
+      if (!detail?.slug || detail.slug === slug) {
+        setPartyConfig(detail?.config ?? getStoredPartyConfig(slug, nightState?.settings?.partyConfig));
+      }
+    };
+    window.addEventListener("poneleplay:party-config-changed", onPartyChange);
+    return () => window.removeEventListener("poneleplay:party-config-changed", onPartyChange);
+  }, [slug, nightState?.settings?.partyConfig]);
+
+  const effectiveThreshold = useMemo(
+    () => resolveEffectiveQueueThreshold(partyConfig),
+    [partyConfig],
+  );
+
   const { activeQueue, candidateProposals } = useMemo(() => {
-    return partitionQueueAndProposals(nightState?.queue ?? [], nightState?.candidates ?? []);
-  }, [nightState?.queue, nightState?.candidates]);
+    return partitionQueueAndProposals(
+      nightState?.queue ?? [],
+      nightState?.candidates ?? [],
+      effectiveThreshold,
+    );
+  }, [nightState?.queue, nightState?.candidates, effectiveThreshold]);
 
   const effectiveFallbackTracks: PlayerTrack[] = useMemo(() => {
     if (fallbackTracks.length > 0) return fallbackTracks;

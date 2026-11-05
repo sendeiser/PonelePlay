@@ -7,6 +7,17 @@ import { useSearchParams } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BallChip } from "@/components/ball-chip";
 import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import {
+  DEFAULT_BAR_PARTY_CONFIG,
+  resolveEffectiveQueueThreshold,
+  type PartyConfig,
+} from "@/lib/domain/party";
+import {
+  getStoredPartyConfig,
+  resetPartyGuestVotes,
+  updatePartyConfig,
+} from "@/lib/api/party-control";
+import { PartyModeControlBar } from "./party-mode-control-bar";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import {
@@ -65,6 +76,32 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [printQrModalOpen, setPrintQrModalOpen] = useState(false);
   const [lastTvProgressAt, setLastTvProgressAt] = useState<number>(0);
   const [roundSecondsLeft, setRoundSecondsLeft] = useState<number>(180);
+  const [partyConfig, setPartyConfig] = useState<PartyConfig>(DEFAULT_BAR_PARTY_CONFIG);
+
+  // Sync party config from localStorage and server state
+  useEffect(() => {
+    setPartyConfig(getStoredPartyConfig(slug, state?.settings?.partyConfig));
+    const onPartyChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug?: string; config?: PartyConfig }>).detail;
+      if (!detail?.slug || detail.slug === slug) {
+        setPartyConfig(detail?.config ?? getStoredPartyConfig(slug, state?.settings?.partyConfig));
+      }
+    };
+    window.addEventListener("poneleplay:party-config-changed", onPartyChange);
+    return () => window.removeEventListener("poneleplay:party-config-changed", onPartyChange);
+  }, [slug, state?.settings?.partyConfig]);
+
+  const handlePartyConfigChange = useCallback(
+    async (patch: Partial<PartyConfig>) => {
+      const next = await updatePartyConfig(slug, patch);
+      setPartyConfig(next);
+    },
+    [slug],
+  );
+
+  const handleReloadPartyVotes = useCallback(async () => {
+    await resetPartyGuestVotes(slug, partyConfig.votesPerGuest);
+  }, [slug, partyConfig.votesPerGuest]);
 
   // Sync remaining seconds from voting round
   useEffect(() => {
@@ -380,9 +417,17 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
 
   const stateQueue = state?.queue;
   const stateCandidates = state?.candidates;
+  const effectiveThreshold = useMemo(
+    () => resolveEffectiveQueueThreshold(partyConfig),
+    [partyConfig],
+  );
   const { activeQueue, candidateProposals } = useMemo(
-    () => partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? []),
-    [stateQueue, stateCandidates],
+    () => partitionQueueAndProposals(stateQueue ?? [], stateCandidates ?? [], effectiveThreshold),
+    [stateQueue, stateCandidates, effectiveThreshold],
+  );
+  const allPoolItems = useMemo(
+    () => [...activeQueue, ...candidateProposals],
+    [activeQueue, candidateProposals],
   );
   const queue = activeQueue;
   const nowPlaying = state?.nowPlaying ?? null;
@@ -574,6 +619,19 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         </div>
       </section>
 
+      {/* ==================== PARTY MODE CONTROL BAR (WHEN VENUE_TYPE === 'PARTY') ==================== */}
+      {partyConfig.venueType === "party" && (
+        <PartyModeControlBar
+          slug={slug}
+          venueName={state?.venue.name}
+          config={partyConfig}
+          queueItems={allPoolItems}
+          onConfigChange={handlePartyConfigChange}
+          onReloadGuestVotes={handleReloadPartyVotes}
+          onOpenQrInvite={() => setPrintQrModalOpen(true)}
+        />
+      )}
+
       {errorMsg && (
         <div
           role="alert"
@@ -657,15 +715,29 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                 <h2 className="text-lg font-bold text-white tracking-tight truncate leading-tight mt-0.5">
                   {nowPlaying?.title || "Música de fondo activa"}
                 </h2>
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
                   <span className="px-2 py-0.5 rounded-md bg-[#0a0e17] font-mono text-[10px] text-slate-300 border border-[#1E2333] flex items-center gap-1">
                     <span className="material-symbols-outlined text-xs text-indigo-400">table_bar</span>
-                    <span>Pedido por Mesa Salón</span>
+                    <span>
+                      {nowPlaying?.guestName
+                        ? `🎉 Pedido por ${nowPlaying.guestName}`
+                        : "Pedido por Mesa Salón"}
+                    </span>
                   </span>
+                  {nowPlaying?.isKaraoke && (
+                    <span className="px-2 py-0.5 rounded-md bg-pink-500/20 font-mono text-[10px] text-pink-200 border border-pink-400/40 font-bold">
+                      🎤 Karaoke
+                    </span>
+                  )}
                   <span className="font-mono text-[10px] text-slate-400">
                     {formatDuration(nowPlaying?.durationSeconds ?? 0)}
                   </span>
                 </div>
+                {nowPlaying?.dedication && (
+                  <p className="mt-1.5 text-xs font-medium text-fuchsia-200 bg-fuchsia-950/40 border border-fuchsia-500/30 rounded-lg px-2.5 py-1 truncate">
+                    💬 &ldquo;{nowPlaying.dedication}&rdquo;
+                  </p>
+                )}
               </div>
             </div>
 
@@ -931,13 +1003,29 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                       <p className="text-xs text-slate-400 truncate mt-0.5">
                         {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
                       </p>
-                      <div className="flex items-center gap-2 mt-1 font-mono text-[10px] text-slate-400">
+                      <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[10px] text-slate-400">
                         <span className="text-indigo-400 font-semibold">
                           {item.voteCount >= 9999 || item.voteCount === 0 ? "⭐ Selección Cabina" : `${item.voteCount} votos`}
                         </span>
                         <span className="text-slate-600">•</span>
-                        <span>{item.voteCount >= 9999 || item.voteCount === 0 ? "Puesto por Operador" : "Mesa en vivo"}</span>
+                        <span>
+                          {item.guestName
+                            ? `🎉 ${item.guestName}`
+                            : item.voteCount >= 9999 || item.voteCount === 0
+                              ? "Puesto por Operador"
+                              : "Mesa en vivo"}
+                        </span>
+                        {item.isKaraoke && (
+                          <span className="text-pink-300 font-bold bg-pink-500/15 border border-pink-400/30 px-1.5 py-0.2 rounded">
+                            🎤 Karaoke
+                          </span>
+                        )}
                       </div>
+                      {item.dedication && (
+                        <p className="mt-1 text-[11px] text-fuchsia-200 italic truncate">
+                          💬 &ldquo;{item.dedication}&rdquo;
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -965,10 +1053,10 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               <div>
                 <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
                   <span className="material-symbols-outlined text-amber-400 text-base">how_to_vote</span>
-                  Propuestas en Votación ({MIN_VOTES_FOR_QUEUE} votos requeridos)
+                  Propuestas en Votación ({effectiveThreshold} votos requeridos)
                 </h3>
                 <p className="font-mono text-[11px] text-slate-400">
-                  Temas propuestos por clientes · Con 5 votos entran directo a la TV, o al terminar la ronda entra la más votada
+                  Temas propuestos · Con {effectiveThreshold} {effectiveThreshold === 1 ? "voto entran" : "votos entran"} directo a la TV, o al terminar la ronda entra la más votada
                 </p>
               </div>
 
@@ -1030,11 +1118,22 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                         <p className="text-xs text-slate-400 truncate mt-0.5">
                           {item.artist}
                         </p>
-                        <div className="flex items-center gap-2 mt-1 font-mono text-[10px]">
-                          <span className="text-amber-400 font-semibold">{item.voteCount} / {MIN_VOTES_FOR_QUEUE} votos</span>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[10px]">
+                          <span className="text-amber-400 font-semibold">{item.voteCount} / {effectiveThreshold} votos</span>
                           <span className="text-slate-600">•</span>
-                          <span className="text-slate-400">Faltan {Math.max(0, MIN_VOTES_FOR_QUEUE - item.voteCount)} para entrada directa</span>
+                          <span className="text-slate-400">Faltan {Math.max(0, effectiveThreshold - item.voteCount)} para entrada directa</span>
+                          {item.guestName && (
+                            <span className="text-fuchsia-300 font-semibold">· 🎉 {item.guestName}</span>
+                          )}
+                          {item.isKaraoke && (
+                            <span className="text-pink-300 font-bold">· 🎤 Karaoke</span>
+                          )}
                         </div>
+                        {item.dedication && (
+                          <p className="mt-1 text-[11px] text-fuchsia-200 italic truncate">
+                            💬 &ldquo;{item.dedication}&rdquo;
+                          </p>
+                        )}
                       </div>
                     </div>
 
