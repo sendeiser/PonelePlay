@@ -242,6 +242,7 @@ private fun buildPlayerHtml(
             var currentTvState = -1;
             var isPreloadSent = false;
             var isFadingOut = false;
+            var localTrackLock = { id: null, until: 0 };
             var originalVolume = currentVolume > 0 ? currentVolume : 85;
 
             // Send command directly to YouTube iframe via postMessage AND player instance
@@ -323,11 +324,25 @@ private fun buildPlayerHtml(
             // Load video cleanly: start at volume 0 and smoothly fade in over 1.5s!
             function loadVideo(id, startSec) {
               if (!id) return;
+              var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
+
+              // If an authoritative play_now command just locked a new video, reject any
+              // stale HTTP poll or background sync trying to load a different (older) video!
+              if (localTrackLock.id && Date.now() < localTrackLock.until && id !== localTrackLock.id) {
+                return;
+              }
+
+              // If already playing/loading this exact video, never reload/restart it!
+              if (currentVideoId === id) {
+                if (sec > 0) seekTo(sec);
+                return;
+              }
+
               isEndedSent = false;
               isPreloadSent = false;
               isFadingOut = false;
               currentVideoId = id;
-              var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
+              currentDuration = 0;
 
               // Give 8-second grace period for initial buffering without seek interruptions
               lastSyncSeekAt = Date.now() + 8000;
@@ -584,7 +599,8 @@ private fun buildPlayerHtml(
                         var trk = p.track || eventPayload.track;
                         if (trk && trk.youtubeVideoId) {
                           desiredPaused = false;
-                          currentVideoId = trk.youtubeVideoId;
+                          localTrackLock = { id: trk.youtubeVideoId, until: Date.now() + 10000 };
+                          currentTvTime = 0;
                           loadVideo(trk.youtubeVideoId, 0);
                         }
                       }
@@ -607,7 +623,9 @@ private fun buildPlayerHtml(
 
                       // Sync Track if changed
                       if (trk && trk.youtubeVideoId && trk.youtubeVideoId !== currentVideoId) {
-                        currentVideoId = trk.youtubeVideoId;
+                        if (localTrackLock.id && now < localTrackLock.until && trk.youtubeVideoId !== localTrackLock.id) {
+                          return;
+                        }
                         loadVideo(trk.youtubeVideoId, typeof curr === 'number' && curr > 0 ? curr : 0);
                         return;
                       }

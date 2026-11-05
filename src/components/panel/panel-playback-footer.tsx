@@ -61,6 +61,12 @@ function formatDuration(seconds: number | null): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+/** Real audio identity of a track (video id / file), independent of queue item ids. */
+function trackAudioKey(t: PlayerTrack | null | undefined): string {
+  if (!t) return "";
+  return String(t.youtubeVideoId || t.storagePath || t.trackId || t.itemId || "");
+}
+
 export function PanelPlaybackFooter({
   slug,
   isSidebarCollapsed = false,
@@ -168,22 +174,59 @@ export function PanelPlaybackFooter({
     ];
   }, [fallbackTracks]);
 
+  // ---------------------------------------------------------------------------
+  // SINGLE SOURCE OF TRUTH FOR THE CABINA TRACK
+  // The Cabina is the master. Any local track change (skip / play now) takes a
+  // short "lock" so that stale echoes from the server (nightState refresh,
+  // postgres_changes, loadState) can NEVER revert the audio to the previous song.
+  // Tracks are compared by the real audio identity (video id / file), not by
+  // itemId, because the server uses different ids (queue uuid vs "manual-…").
+  // ---------------------------------------------------------------------------
+  const localTrackLockRef = useRef<{ key: string; until: number } | null>(null);
+  const lastLiveKeyRef = useRef<string>("");
+  const lastCommandSeqRef = useRef<number>(0);
+
+  const setLocalTrack = useCallback((track: PlayerTrack) => {
+    localTrackLockRef.current = { key: trackAudioKey(track), until: Date.now() + 12000 };
+    currentTrackRef.current = track;
+    setCurrentTrack(track);
+  }, []);
+
+  const applyExternalTrack = useCallback((track: PlayerTrack | null | undefined) => {
+    if (!track) return;
+    const key = trackAudioKey(track);
+    if (!key) return;
+    const lock = localTrackLockRef.current;
+    // Ignore stale echoes of a different song while the local change is fresh
+    if (lock && Date.now() < lock.until && key !== lock.key) return;
+    const cur = currentTrackRef.current;
+    // Same audio already playing: never reload / restart it
+    if (cur && trackAudioKey(cur) === key) return;
+    currentTrackRef.current = track;
+    setCurrentTrack(track);
+  }, []);
+
   // Synchronize currentTrack with nightState, queue, or fallback tracks
   useEffect(() => {
     if (nightState?.nowPlaying) {
       const live = nightState.nowPlaying;
-      if (!currentTrack || currentTrack.itemId !== live.id) {
-        setCurrentTrack({
-          itemId: live.id,
-          trackId: live.trackId,
-          title: live.title,
-          artist: live.artist,
-          source: live.source,
-          durationSeconds: live.durationSeconds ?? 210,
-          youtubeVideoId: live.youtubeVideoId || undefined,
-          thumbnailUrl: live.thumbnailUrl ?? null,
-          voteCount: live.voteCount,
-        });
+      const liveTrack: PlayerTrack = {
+        itemId: live.id,
+        trackId: live.trackId,
+        title: live.title,
+        artist: live.artist,
+        source: live.source,
+        durationSeconds: live.durationSeconds ?? 210,
+        youtubeVideoId: live.youtubeVideoId || undefined,
+        thumbnailUrl: live.thumbnailUrl ?? null,
+        voteCount: live.voteCount,
+      };
+      // Only react when the SERVER's now-playing actually changes (transition),
+      // never re-apply it just because the local track changed.
+      const liveKey = trackAudioKey(liveTrack);
+      if (liveKey && liveKey !== lastLiveKeyRef.current) {
+        lastLiveKeyRef.current = liveKey;
+        applyExternalTrack(liveTrack);
       }
       return;
     }
@@ -205,7 +248,7 @@ export function PanelPlaybackFooter({
         setCurrentTrack(effectiveFallbackTracks[0]);
       }
     }
-  }, [currentTrack, nightState?.nowPlaying, activeQueue, effectiveFallbackTracks]);
+  }, [currentTrack, nightState?.nowPlaying, activeQueue, effectiveFallbackTracks, applyExternalTrack]);
 
   // Drawer Actions: Play now, Veto, Boost vote
   const handlePlayQueueItemNow = async (item: QueueItemView) => {
@@ -225,6 +268,7 @@ export function PanelPlaybackFooter({
       setIsPaused(false);
       setElapsed(0);
       setVideoDuration(null);
+      setLocalTrack(selectedTrack as PlayerTrack);
       audioEngineRef.current?.unlockAudio();
       broadcastControl("play_now", { track: selectedTrack });
       await sendPlaybackCommand(slug, "play_now", {
@@ -275,7 +319,7 @@ export function PanelPlaybackFooter({
   const loadState = useCallback(async () => {
     try {
       const st = await fetchPlaybackState(slug);
-      if (st.currentTrack && !nightState?.nowPlaying) setCurrentTrack(st.currentTrack);
+      if (st.currentTrack && !nightState?.nowPlaying) applyExternalTrack(st.currentTrack);
       setIsPaused(st.isPaused);
       setVolume(st.volume ?? 85);
       setIsMuted(st.isMuted ?? false);
@@ -283,7 +327,7 @@ export function PanelPlaybackFooter({
     } catch {
       // Non-blocking fallback
     }
-  }, [slug, nightState?.nowPlaying]);
+  }, [slug, nightState?.nowPlaying, applyExternalTrack]);
 
   useEffect(() => {
     void loadState();
@@ -330,7 +374,8 @@ export function PanelPlaybackFooter({
             else if (cmd === "seek" && typeof p.seconds === "number") {
               setElapsed(Math.floor(p.seconds));
             } else if (cmd === "play_now" && p.track) {
-              setCurrentTrack(p.track as PlayerTrack);
+              // Explicit play command from another operator: authoritative
+              setLocalTrack(p.track as PlayerTrack);
               setIsPaused(false);
               setElapsed(0);
               setVideoDuration(null);
@@ -372,14 +417,20 @@ export function PanelPlaybackFooter({
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "venue_playback_state" },
-          (payload: { new?: { is_paused?: boolean; volume?: number; is_muted?: boolean; karaoke_mode?: boolean; current_track?: PlayerTrack } }) => {
+          (payload: { new?: { is_paused?: boolean; volume?: number; is_muted?: boolean; karaoke_mode?: boolean; current_track?: PlayerTrack; command_seq?: number } }) => {
             if (!active || !payload.new) return;
             const st = payload.new;
+            // Drop out-of-order (stale) database events
+            const seq = Number(st.command_seq ?? 0);
+            if (seq > 0) {
+              if (seq < lastCommandSeqRef.current) return;
+              lastCommandSeqRef.current = seq;
+            }
             if (typeof st.is_paused === "boolean") setIsPaused(st.is_paused);
             if (typeof st.volume === "number") setVolume(st.volume);
             if (typeof st.is_muted === "boolean") setIsMuted(st.is_muted);
             if (typeof st.karaoke_mode === "boolean") setKaraokeMode(st.karaoke_mode);
-            if (st.current_track) setCurrentTrack(st.current_track);
+            if (st.current_track) applyExternalTrack(st.current_track);
           },
         )
         .subscribe();
@@ -457,58 +508,58 @@ export function PanelPlaybackFooter({
     }, 2500);
 
     showToast("⏭️ Salteando a la siguiente canción...");
+    // Always read the LIVE current track (never a stale render closure)
+    const cur = currentTrackRef.current;
+    const curKey = trackAudioKey(cur);
     let nextTrack: PlayerTrack | null = null;
+
+    const toTrack = (item: (typeof activeQueue)[number]): PlayerTrack => ({
+      itemId: item.id,
+      trackId: item.trackId,
+      title: item.title,
+      artist: item.artist,
+      source: item.source || "catalog",
+      durationSeconds: item.durationSeconds ?? 210,
+      youtubeVideoId: item.youtubeVideoId || undefined,
+      thumbnailUrl: item.thumbnailUrl ?? null,
+      voteCount: item.voteCount,
+    });
 
     if (activeQueue.length > 0) {
       const curIdx = activeQueue.findIndex(
         (t) =>
-          t.id === currentTrack?.itemId ||
-          t.trackId === currentTrack?.trackId ||
-          t.youtubeVideoId === currentTrack?.youtubeVideoId ||
-          t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
+          t.id === cur?.itemId ||
+          (!!curKey && trackAudioKey(toTrack(t)) === curKey),
       );
-      if (curIdx >= 0 && curIdx < activeQueue.length - 1) {
-        const item = activeQueue[curIdx + 1];
-        nextTrack = {
-          itemId: item.id,
-          trackId: item.trackId,
-          title: item.title,
-          artist: item.artist,
-          source: item.source || "catalog",
-          durationSeconds: item.durationSeconds ?? 210,
-          youtubeVideoId: item.youtubeVideoId || undefined,
-          thumbnailUrl: item.thumbnailUrl ?? null,
-          voteCount: item.voteCount,
-        };
-      } else if (curIdx === -1) {
-        const item = activeQueue[0];
-        nextTrack = {
-          itemId: item.id,
-          trackId: item.trackId,
-          title: item.title,
-          artist: item.artist,
-          source: item.source || "catalog",
-          durationSeconds: item.durationSeconds ?? 210,
-          youtubeVideoId: item.youtubeVideoId || undefined,
-          thumbnailUrl: item.thumbnailUrl ?? null,
-          voteCount: item.voteCount,
-        };
+      // Next song AFTER the current one; never the one that is ending
+      const startIdx = curIdx >= 0 ? curIdx + 1 : 0;
+      for (let i = startIdx; i < activeQueue.length; i++) {
+        const candidate = toTrack(activeQueue[i]);
+        if (trackAudioKey(candidate) !== curKey) {
+          nextTrack = candidate;
+          break;
+        }
       }
     }
 
     if (!nextTrack && effectiveFallbackTracks.length > 0) {
       const curIdx = effectiveFallbackTracks.findIndex(
-        (t) =>
-          t.trackId === currentTrack?.trackId ||
-          t.youtubeVideoId === currentTrack?.youtubeVideoId ||
-          t.title.toLowerCase() === currentTrack?.title.toLowerCase(),
+        (t) => !!curKey && trackAudioKey(t) === curKey,
       );
-      const nextIdx = curIdx >= 0 ? (curIdx + 1) % effectiveFallbackTracks.length : 0;
-      nextTrack = effectiveFallbackTracks[nextIdx];
+      const total = effectiveFallbackTracks.length;
+      for (let step = 1; step <= total; step++) {
+        const candidate = effectiveFallbackTracks[((curIdx >= 0 ? curIdx : -1) + step + total) % total];
+        if (trackAudioKey(candidate) !== curKey) {
+          nextTrack = candidate;
+          break;
+        }
+      }
     }
 
     if (nextTrack) {
-      setCurrentTrack(nextTrack);
+      // Lock locally FIRST so no stale server echo can bring back the old song
+      lastLiveKeyRef.current = trackAudioKey(nextTrack);
+      setLocalTrack(nextTrack);
       setElapsed(0);
       setVideoDuration(null);
       setIsPaused(false);
@@ -530,6 +581,13 @@ export function PanelPlaybackFooter({
     }
   };
 
+  // Always-fresh refs for global keyboard shortcuts (avoid stale closures that
+  // would compute the "next" song from an old render and replay a past song)
+  const handleSkipNextRef = useRef(handleSkipNext);
+  handleSkipNextRef.current = handleSkipNext;
+  const handleTogglePlayRef = useRef(handleTogglePlay);
+  handleTogglePlayRef.current = handleTogglePlay;
+
   // Keyboard shortcuts in Admin panel (Space = Play/Pause, S = Skip)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -542,10 +600,10 @@ export function PanelPlaybackFooter({
       }
       if (e.key.toLowerCase() === "s") {
         e.preventDefault();
-        void handleSkipNext();
+        void handleSkipNextRef.current();
       } else if (e.code === "Space") {
         e.preventDefault();
-        void handleTogglePlay();
+        void handleTogglePlayRef.current();
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -959,7 +1017,7 @@ export function PanelPlaybackFooter({
         isPaused={isPaused}
         volume={volume}
         isMuted={isMuted}
-        onTrackEnded={() => void handleSkipNext()}
+        onTrackEnded={() => void handleSkipNextRef.current()}
         onProgress={(curr, dur) => {
           setElapsed(Math.floor(curr));
           if (dur) setVideoDuration(dur);

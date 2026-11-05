@@ -66,6 +66,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
     const lastReportedTimeRef = useRef<number>(0);
+    const trackLoadedAtRef = useRef<number>(0);
     const capturedWidgetIdRef = useRef<number | string | null>(null);
 
     // Reset elapsed timer on track change
@@ -266,8 +267,16 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           return;
         }
         currentVideoIdRef.current = videoId;
+        trackLoadedAtRef.current = Date.now();
+        lastReportedTimeRef.current = 0;
         try {
+          // Silence & stop the previous song immediately so it can never leak
+          playerRef.current.setVolume(0);
+          try {
+            playerRef.current.stopVideo();
+          } catch {}
           playerRef.current.loadVideoById(videoId);
+          playerRef.current.seekTo(0, true);
           playerRef.current.setVolume(0);
           if (isMutedRef.current) {
             playerRef.current.mute();
@@ -350,7 +359,9 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
               },
               onStateChange: (event) => {
                 // event.data === 0 is YT.PlayerState.ENDED
-                if (event.data === 0) {
+                // Ignore spurious ENDED events that occur within 6s of loading a track
+                // (caused by stopVideo or YouTube releasing the previous video)
+                if (event.data === 0 && Date.now() - trackLoadedAtRef.current > 6000) {
                   onTrackEndedRef.current();
                 }
               },
@@ -358,7 +369,9 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                 console.warn("YouTube audio playback error code:", event.data);
                 if (event.data === 150 || event.data === 101 || event.data === 2) {
                   setTimeout(() => {
-                    onTrackEndedRef.current();
+                    if (Date.now() - trackLoadedAtRef.current > 3000) {
+                      onTrackEndedRef.current();
+                    }
                   }, 800);
                 }
               },
@@ -433,10 +446,18 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           if (d > 0) duration = d;
         } else if (playerRef.current && ytInitializedRef.current) {
           try {
-            const t = playerRef.current.getCurrentTime() || 0;
-            const d = Math.floor(playerRef.current.getDuration() || 0);
-            if (t > 0) currentTime = Math.round(t * 10) / 10;
-            if (d > 0) duration = d;
+            // Ignore readings that still belong to the PREVIOUS video right after a switch
+            const vd = (playerRef.current as unknown as { getVideoData?: () => { video_id?: string } }).getVideoData?.();
+            const loadedId = vd?.video_id;
+            const isStale =
+              (loadedId && currentVideoIdRef.current && loadedId !== currentVideoIdRef.current) ||
+              Date.now() - trackLoadedAtRef.current < 1200;
+            if (!isStale) {
+              const t = playerRef.current.getCurrentTime() || 0;
+              const d = Math.floor(playerRef.current.getDuration() || 0);
+              if (t > 0) currentTime = Math.round(t * 10) / 10;
+              if (d > 0) duration = d;
+            }
           } catch {
             // Ignore
           }
