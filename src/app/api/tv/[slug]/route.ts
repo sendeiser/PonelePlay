@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { partitionQueueAndProposals } from "@/lib/domain/queue";
-import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
+import {
+  resolveActiveSkipVoteForTrack,
+  resolveEffectiveQueueThreshold,
+} from "@/lib/domain/party";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 
 interface QueueItemFeed {
@@ -165,7 +168,12 @@ export async function GET(
         activeRoulette = null;
       }
     }
-    const activeSkipVote = partyConfig.activeSkipVote ?? null;
+    // Only show the vote-to-skip badge while the voted song is still playing
+    const activeSkipVote = resolveActiveSkipVoteForTrack(
+      partyConfig.activeSkipVote ?? null,
+      nowPlayingTrack,
+      nowMs,
+    );
 
     return NextResponse.json(
       {

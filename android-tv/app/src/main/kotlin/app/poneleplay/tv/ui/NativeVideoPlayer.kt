@@ -125,6 +125,12 @@ fun NativeVideoPlayer(
         }
     }
 
+    // Follow the server pause state (and force PLAY on every new track so the
+    // YouTube pause overlay never stays frozen after a skip / vote-to-skip)
+    LaunchedEffect(isPaused, videoId) {
+        if (isPaused) controller.pause() else controller.play()
+    }
+
     // React to mute
     LaunchedEffect(isMuted) {
         if (isMuted) controller.mute() else controller.unMute()
@@ -278,6 +284,19 @@ private fun buildPlayerHtml(
             setInterval(pingListening, 1500);
             setTimeout(pingListening, 400);
 
+            // Anti-freeze watchdog: if the video should be playing but YouTube stays
+            // PAUSED / CUED / UNSTARTED (pause icon frozen on screen after a skip), resume it.
+            var lastLoadAt = 0;
+            setInterval(function() {
+              try {
+                if (desiredPaused || isEndedSent || !currentVideoId) return;
+                if (Date.now() - lastLoadAt < 2500) return;
+                if (currentTvState === 2 || currentTvState === 5 || currentTvState === -1) {
+                  playVideo();
+                }
+              } catch(_) {}
+            }, 2500);
+
             function playVideo() {
               desiredPaused = false;
               sendCommand('playVideo', []);
@@ -343,6 +362,8 @@ private fun buildPlayerHtml(
               isFadingOut = false;
               currentVideoId = id;
               currentDuration = 0;
+              currentTvState = -1;
+              lastLoadAt = Date.now();
 
               // Give 8-second grace period for initial buffering without seek interruptions
               lastSyncSeekAt = Date.now() + 8000;

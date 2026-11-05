@@ -5,6 +5,28 @@ import type { PartySkipVoteState } from "@/lib/domain/party";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Server-side realtime broadcast (REST delivery) so the Cabina, the Web TV and
+ * the native Android TV react instantly even if the guest's socket is not joined.
+ */
+async function broadcastFromServer(
+  admin: ReturnType<typeof createAdminSupabase>,
+  topic: string,
+  event: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const channel = admin.channel(topic);
+    try {
+      await channel.httpSend(event, payload, { timeout: 4000 });
+    } finally {
+      await admin.removeChannel(channel);
+    }
+  } catch {
+    // Non-blocking: clients also poll /api/tv and night state
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -68,6 +90,7 @@ export async function POST(req: NextRequest) {
     let nextSkipState: PartySkipVoteState | null = {
       trackId: targetTrackKey,
       itemId: itemId || String(curTrack?.itemId || ""),
+      videoId: curTrack?.youtubeVideoId ? String(curTrack.youtubeVideoId) : undefined,
       title: title || String(curTrack?.title || "Canción actual"),
       artist: artist || String(curTrack?.artist || "Artista"),
       voterIds: existingVoters,
@@ -196,6 +219,31 @@ export async function POST(req: NextRequest) {
         description: JSON.stringify(nextConfig),
         is_active: false,
       });
+    }
+
+    // Notify every screen in realtime
+    const timestamp = Date.now();
+    await broadcastFromServer(admin, `playback-control:${slug}`, "party_event", {
+      type: "party_skip_vote_updated",
+      activeSkipVote: nextSkipState,
+      skipped: shouldSkip,
+      nextTrack: nextTrackPayload,
+      timestamp,
+    });
+    if (shouldSkip) {
+      // Authoritative command: same path as the DJ pressing "Skip" in the Cabina.
+      // play_now forces the TV to un-pause and load the next video immediately.
+      await broadcastFromServer(admin, `playback-control:${slug}`, "playback_command", nextTrackPayload
+        ? {
+            command: "play_now",
+            payload: { track: nextTrackPayload, fromSkipVote: true },
+            timestamp,
+          }
+        : {
+            command: "skip",
+            payload: { fromSkipVote: true },
+            timestamp,
+          });
     }
 
     return NextResponse.json({

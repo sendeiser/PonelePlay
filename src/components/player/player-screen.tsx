@@ -21,6 +21,7 @@ import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import {
   DEFAULT_BAR_PARTY_CONFIG,
+  resolveActiveSkipVoteForTrack,
   resolveEffectiveQueueThreshold,
   type PartyConfig,
   type PartySkipVoteState,
@@ -1311,8 +1312,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setRouletteSpinFinished(false);
               setRouletteSpinIndex(0);
               setActiveRoulette(p.roulette as PartyRouletteState);
-            } else if (p.type === "party_skip_vote_updated" && p.activeSkipVote) {
-              setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+            } else if (p.type === "party_skip_vote_updated") {
+              if (p.skipped || !p.activeSkipVote) {
+                setActiveSkipVote(null);
+                if (p.skipped) {
+                  setHudMessage("⏭️ ¡Votación aprobada! Cambiando a la siguiente canción...");
+                  setTimeout(() => setHudMessage(null), 3500);
+                  void refreshNightState();
+                }
+              } else {
+                setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+              }
             } else if (p.type === "party_skip_vote_passed") {
               setActiveSkipVote(null);
               setHudMessage("⏭️ ¡Votación aprobada! Cambiando a la siguiente canción...");
@@ -2445,8 +2455,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </div>
       )}
 
-      {/* LIVE VOTE-TO-SKIP INDICATOR ON TV */}
-      {activeSkipVote && activeSkipVote.votes > 0 && (
+      {/* LIVE VOTE-TO-SKIP INDICATOR ON TV (only while the voted song is still playing) */}
+      {(() => {
+        const visibleSkipVote = resolveActiveSkipVoteForTrack(
+          activeSkipVote,
+          (nowPlaying as unknown as Record<string, unknown> | null) ?? null,
+        );
+        if (!visibleSkipVote) return null;
+        return (
         <div className="fixed top-14 right-6 z-[82] rounded-2xl border border-rose-500/50 bg-[#0d101b]/95 px-4 py-2.5 shadow-2xl backdrop-blur-md flex items-center gap-3 animate-fade-in">
           <span className="text-lg animate-pulse">⏭️</span>
           <div>
@@ -2454,11 +2470,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               Votación para cambiar canción
             </span>
             <span className="block font-mono text-xs font-bold text-white">
-              {activeSkipVote.votes} / {activeSkipVote.threshold} votos en sala
+              {visibleSkipVote.votes} / {visibleSkipVote.threshold} votos en sala
             </span>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* PARTY LIVE 1v1 DUEL TV OVERLAY */}
       {activeDuel && (

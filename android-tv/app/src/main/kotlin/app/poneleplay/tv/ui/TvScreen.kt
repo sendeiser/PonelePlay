@@ -195,6 +195,7 @@ fun TvScreen(
                     if (!localIsMuted) videoController.unMute()
                 }
                 "skip" -> onVideoEnded()
+                "play_now" -> videoController.play()
             }
         }
     }

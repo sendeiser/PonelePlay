@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import {
+  resolveActiveSkipVoteForTrack,
   resolveEffectiveQueueThreshold,
   type PartyConfig,
 } from "@/lib/domain/party";
@@ -17,10 +18,28 @@ export async function GET(req: NextRequest) {
     }
 
     const admin = createAdminSupabase();
-    const { partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
+    const { venueId, partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
 
     const now = Date.now();
     const cleanedConfig = { ...partyConfig };
+
+    // Vote-to-skip only stays alive while the voted song is still playing
+    if (cleanedConfig.activeSkipVote) {
+      let currentTrack: Record<string, unknown> | null = null;
+      if (venueId) {
+        const { data: playState } = await admin
+          .from("venue_playback_state")
+          .select("current_track")
+          .eq("venue_id", venueId)
+          .maybeSingle();
+        currentTrack = (playState?.current_track as Record<string, unknown> | null) ?? null;
+      }
+      cleanedConfig.activeSkipVote = resolveActiveSkipVoteForTrack(
+        cleanedConfig.activeSkipVote,
+        currentTrack,
+        now,
+      );
+    }
     if (
       cleanedConfig.activeDuel &&
       typeof cleanedConfig.activeDuel === "object" &&
@@ -116,6 +135,9 @@ export async function POST(req: NextRequest) {
     const safePatch: Partial<PartyConfig> = {
       ...patch,
       activeDuel: updatedDuel,
+      // Vote-to-skip state is owned exclusively by /api/party/vote-skip.
+      // Never let a stale client copy (localStorage) resurrect a finished poll.
+      activeSkipVote: current.activeSkipVote ?? null,
       venueType: current.venueType === "party" ? "party" : (patch.venueType ?? current.venueType),
     };
 

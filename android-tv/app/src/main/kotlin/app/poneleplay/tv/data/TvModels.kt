@@ -266,13 +266,25 @@ object TvFeedParser {
             } else null
         } else null
 
-        // Parse activeSkipVote
-        val skipObj = root.optJSONObject("activeSkipVote") ?: partyCfgObj?.optJSONObject("activeSkipVote")
-        val activeSkipVote = if (skipObj != null && skipObj.optInt("votes", 0) > 0) {
+        // Parse activeSkipVote (root value is authoritative: the server already filters it
+        // so it disappears as soon as the voted song stops playing)
+        val skipObj = if (root.has("activeSkipVote")) {
+            root.optJSONObject("activeSkipVote")
+        } else {
+            partyCfgObj?.optJSONObject("activeSkipVote")
+        }
+        val skipVotesCount = skipObj?.let {
+            maxOf(
+                it.optInt("votes", 0),
+                it.optInt("votesCount", 0),
+                it.optJSONArray("voterIds")?.length() ?: 0
+            )
+        } ?: 0
+        val activeSkipVote = if (skipObj != null && skipVotesCount > 0) {
             TvSkipVote(
                 trackId = skipObj.optString("trackId", ""),
                 title = skipObj.optString("title", ""),
-                votes = skipObj.optInt("votes", 0),
+                votes = skipVotesCount,
                 threshold = skipObj.optInt("threshold", 3)
             )
         } else null

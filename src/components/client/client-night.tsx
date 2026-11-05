@@ -24,6 +24,7 @@ import {
 import {
   DEFAULT_BAR_PARTY_CONFIG,
   canGuestCastVote,
+  resolveActiveSkipVoteForTrack,
   resolveEffectiveQueueThreshold,
   type PartyConfig,
   type PartySkipVoteState,
@@ -97,9 +98,7 @@ export function ClientNight({ slug }: { slug: string }) {
     setPartyConfig(getStoredPartyConfig(slug, state?.settings?.partyConfig));
     void fetchServerPartyConfig(slug).then(({ partyConfig: serverCfg }) => {
       setPartyConfig(serverCfg);
-      if (serverCfg.activeSkipVote) {
-        setActiveSkipVote(serverCfg.activeSkipVote);
-      }
+      setActiveSkipVote(serverCfg.activeSkipVote ?? null);
       if (serverCfg.activeDuel) {
         const duelObj = serverCfg.activeDuel as unknown as PartyDuelState;
         const startedMs = new Date(duelObj.startedAt).getTime();
@@ -192,8 +191,13 @@ export function ClientNight({ slug }: { slug: string }) {
               } else if (p.type === "party_duel_start" && p.duel) {
                 setActiveDuel(p.duel as PartyDuelState);
                 setDuelVotedChoice(null);
-              } else if (p.type === "party_skip_vote_updated" && p.activeSkipVote) {
-                setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+              } else if (p.type === "party_skip_vote_updated") {
+                if (p.skipped || !p.activeSkipVote) {
+                  setActiveSkipVote(null);
+                  setVotedSkipTrackId(null);
+                } else {
+                  setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+                }
               } else if (p.type === "party_skip_vote_passed") {
                 setActiveSkipVote(null);
                 setVotedSkipTrackId(null);
@@ -756,7 +760,10 @@ export function ClientNight({ slug }: { slug: string }) {
                 slug={slug}
                 skipVoteEnabled={partyConfig.skipVoteEnabled ?? true}
                 skipVotesThreshold={partyConfig.skipVotesThreshold ?? 3}
-                activeSkipVote={activeSkipVote}
+                activeSkipVote={resolveActiveSkipVoteForTrack(
+                  activeSkipVote,
+                  state.nowPlaying as unknown as Record<string, unknown> | null,
+                )}
                 hasVotedSkip={
                   Boolean(
                     state.nowPlaying &&

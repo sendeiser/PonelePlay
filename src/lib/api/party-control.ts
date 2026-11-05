@@ -566,6 +566,7 @@ export async function castSkipTrackVote(
         void broadcastPartyEvent(slug, "party_skip_vote_updated", {
           activeSkipVote: data.activeSkipVote ?? null,
           skipped: Boolean(data.skipped),
+          nextTrack: data.nextTrack ?? null,
         });
         return {
           ok: true,

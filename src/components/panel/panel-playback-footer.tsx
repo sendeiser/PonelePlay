@@ -450,7 +450,14 @@ export function PanelPlaybackFooter({
               setElapsed(Math.floor(p.seconds));
             } else if (cmd === "play_now" && p.track) {
               // Explicit play command from another operator: authoritative
-              setLocalTrack(p.track as PlayerTrack);
+              const incoming = p.track as PlayerTrack;
+              const cur = currentTrackRef.current;
+              if (cur && trackAudioKey(cur) === trackAudioKey(incoming)) {
+                setIsPaused(false);
+                return;
+              }
+              lastLiveKeyRef.current = trackAudioKey(incoming);
+              setLocalTrack(incoming);
               setIsPaused(false);
               setElapsed(0);
               setVideoDuration(null);
@@ -464,7 +471,21 @@ export function PanelPlaybackFooter({
             if (!active || !msg.payload) return;
             const p = msg.payload;
             if (p.type === "party_skip_vote_updated" && p.skipped) {
-              void handleSkipNextRef.current();
+              const next = p.nextTrack as PlayerTrack | null | undefined;
+              if (next && (next.youtubeVideoId || next.itemId)) {
+                // The server already advanced the queue: just follow it (never skip twice)
+                const nextKey = trackAudioKey(next);
+                const cur = currentTrackRef.current;
+                if (cur && trackAudioKey(cur) === nextKey) return;
+                lastLiveKeyRef.current = nextKey;
+                setLocalTrack(next);
+                setIsPaused(false);
+                setElapsed(0);
+                setVideoDuration(null);
+                showToast("⏭️ La sala votó cambiar la canción");
+              } else {
+                void handleSkipNextRef.current();
+              }
             }
           },
         )
