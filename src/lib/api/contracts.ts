@@ -13,6 +13,9 @@ export const queueItemViewSchema = z.object({
   createdAt: z.string(),
   status: z.enum(["proposed", "queued", "playing"]),
   myVote: z.boolean(),
+  guestName: z.string().nullable().optional(),
+  dedication: z.string().nullable().optional(),
+  isKaraoke: z.boolean().optional(),
 });
 
 export type QueueItemView = z.infer<typeof queueItemViewSchema>;
@@ -75,6 +78,19 @@ export const votingRoundSchema = z
 
 export type VotingRound = z.infer<typeof votingRoundSchema>;
 
+export const partyConfigSchema = z
+  .object({
+    venueType: z.enum(["bar", "party"]).default("bar"),
+    partyMode: z.enum(["democratic", "hybrid_turbo", "party_games"]).default("hybrid_turbo"),
+    votesPerGuest: z.number().int().nonnegative().default(0),
+    minVotesToQueue: z.number().int().positive().default(1),
+    allowDedications: z.boolean().default(true),
+    allowGuestKaraoke: z.boolean().default(true),
+    turboCooldownSeconds: z.number().int().positive().default(180),
+  })
+  .nullable()
+  .optional();
+
 export const nightStateSchema = z.object({
   venue: nightVenueSchema,
   night: nightSessionSchema,
@@ -84,6 +100,7 @@ export const nightStateSchema = z.object({
   votingRound: votingRoundSchema,
   me: nightMeSchema,
   settings: nightSettingsSchema,
+  partyConfig: partyConfigSchema,
   player: nightPlayerSchema,
   serverTime: z.string(),
 });

@@ -28,6 +28,16 @@ export function partitionQueueAndProposals<
 ): { activeQueue: T[]; candidateProposals: T[] } {
   // If candidates are provided explicitly from backend RPC
   if (candidateItems && candidateItems.length > 0) {
+    if (threshold < MIN_VOTES_FOR_QUEUE) {
+      const combined = [...queueItems, ...candidateItems.filter((c) => !queueItems.some((q) => q.id === c.id))];
+      const active = sortQueue(
+        combined.filter((i) => i.status !== "playing" && (i.status === "queued" || i.voteCount >= threshold)),
+      );
+      const cand = sortQueue(
+        combined.filter((i) => i.status !== "playing" && i.status !== "queued" && i.voteCount < threshold),
+      );
+      return { activeQueue: active, candidateProposals: cand };
+    }
     const active = sortQueue(queueItems.filter((i) => i.status !== "proposed" && (i.status === "queued" || i.voteCount >= threshold)));
     const cand = sortQueue([...candidateItems]);
     return { activeQueue: active, candidateProposals: cand };
@@ -40,7 +50,7 @@ export function partitionQueueAndProposals<
   for (const item of queueItems) {
     if (item.status === "playing") continue;
 
-    if (item.status === "proposed" || item.voteCount < threshold) {
+    if (item.voteCount < threshold || (threshold >= MIN_VOTES_FOR_QUEUE && item.status === "proposed")) {
       cand.push(item);
     } else {
       active.push(item);
