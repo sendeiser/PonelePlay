@@ -74,11 +74,13 @@ export async function signUpOwner(input: {
   password: string;
   venueName: string;
   slug: string;
+  venueType?: "bar" | "party";
 }): Promise<AuthResult> {
   const cleanEmail = input.email.trim().toLowerCase();
   const cleanPassword = input.password.trim();
   const cleanVenueName = input.venueName.trim();
   const cleanSlug = input.slug.trim().toLowerCase();
+  const cleanVenueType = input.venueType === "party" ? "party" : "bar";
 
   try {
     // 1. Call server-side registration endpoint (runs with admin privileges to avoid RLS errors)
@@ -92,6 +94,7 @@ export async function signUpOwner(input: {
         password: cleanPassword,
         venueName: cleanVenueName,
         slug: cleanSlug,
+        venueType: cleanVenueType,
       }),
     });
 

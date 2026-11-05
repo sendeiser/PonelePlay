@@ -5,6 +5,13 @@ import Image from "next/image";
 import QRCode from "qrcode";
 import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 import { fetchNightSummary, venueQrUrl, type NightSummary } from "@/lib/api/owner-ops";
+import {
+  DEFAULT_PARTY_CONFIG,
+  type PartyConfig,
+  type PartyMode,
+  type VenueType,
+} from "@/lib/domain/party";
+import { getStoredPartyConfig, updatePartyConfig } from "@/lib/api/party-control";
 import { PrintQrModal } from "./print-qr-modal";
 
 interface SettingsManagerProps {
@@ -24,6 +31,9 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
   const [maxQueue, setMaxQueue] = useState(30);
   const [votingRoundsEnabled, setVotingRoundsEnabled] = useState(true);
   const [votingRoundSeconds, setVotingRoundSeconds] = useState(180);
+  const [partyConfig, setPartyConfig] = useState<PartyConfig>(() =>
+    getStoredPartyConfig(slug),
+  );
 
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [summary, setSummary] = useState<NightSummary | null>(null);
@@ -78,6 +88,13 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           max_queue_size: number;
           voting_rounds_enabled?: boolean;
           voting_round_seconds?: number;
+          venue_type?: VenueType;
+          party_mode?: PartyMode;
+          party_votes_per_guest?: number;
+          party_min_votes_to_queue?: number;
+          allow_dedications?: boolean;
+          allow_guest_karaoke?: boolean;
+          turbo_cooldown_seconds?: number;
         };
         setExplicitFilter(s.explicit_filter_enabled);
         setKeywords(s.explicit_keywords?.join(", ") || "");
@@ -86,6 +103,19 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
         setMaxQueue(s.max_queue_size || 30);
         setVotingRoundsEnabled(s.voting_rounds_enabled ?? true);
         setVotingRoundSeconds(s.voting_round_seconds ?? 180);
+        if (s.venue_type) {
+          setPartyConfig(
+            getStoredPartyConfig(slug, {
+              venueType: s.venue_type,
+              partyMode: s.party_mode,
+              votesPerGuest: s.party_votes_per_guest,
+              minVotesToQueue: s.party_min_votes_to_queue,
+              allowDedications: s.allow_dedications,
+              allowGuestKaraoke: s.allow_guest_karaoke,
+              turboCooldownSeconds: s.turbo_cooldown_seconds,
+            }),
+          );
+        }
       }
 
       const sum = await fetchNightSummary(v.id).catch(() => null);
@@ -99,38 +129,40 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!venueId) return;
-
     setSaving(true);
     setError(null);
     try {
-      const supabase = createBrowserSupabase();
-      await supabase
-        .from("venues")
-        .update({
-          name: venueName,
-          accent_color: accentColor,
-          join_message: joinMessage || null,
-        })
-        .eq("id", venueId);
+      await updatePartyConfig(slug, partyConfig);
 
-      const splitKeywords = keywords
-        .split(",")
-        .map((k) => k.trim())
-        .filter(Boolean);
+      if (venueId) {
+        const supabase = createBrowserSupabase();
+        await supabase
+          .from("venues")
+          .update({
+            name: venueName,
+            accent_color: accentColor,
+            join_message: joinMessage || null,
+          })
+          .eq("id", venueId);
 
-      await supabase
-        .from("venue_settings")
-        .update({
-          explicit_filter_enabled: explicitFilter,
-          explicit_keywords: splitKeywords,
-          max_song_duration_seconds: maxDuration,
-          max_proposals_per_participant: maxProposals,
-          max_queue_size: maxQueue,
-          voting_rounds_enabled: votingRoundsEnabled,
-          voting_round_seconds: votingRoundSeconds,
-        })
-        .eq("venue_id", venueId);
+        const splitKeywords = keywords
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean);
+
+        await supabase
+          .from("venue_settings")
+          .update({
+            explicit_filter_enabled: explicitFilter,
+            explicit_keywords: splitKeywords,
+            max_song_duration_seconds: maxDuration,
+            max_proposals_per_participant: maxProposals,
+            max_queue_size: maxQueue,
+            voting_rounds_enabled: votingRoundsEnabled,
+            voting_round_seconds: votingRoundSeconds,
+          })
+          .eq("venue_id", venueId);
+      }
 
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -160,10 +192,14 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
             </span>
           </div>
           <h1 className="text-xl font-bold text-white tracking-tight">
-            Ajustes y Configuración del Bar
+            {partyConfig.venueType === "party"
+              ? "🎉 Ajustes de la Fiesta / Cumpleaños"
+              : "Ajustes y Configuración del Bar"}
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Reglas de jukebox, políticas de filtrado acústico y pairing en tiempo real.
+            {partyConfig.venueType === "party"
+              ? "Configurá las reglas democráticas, los Fueguitos Turbo, las dedicatorias en TV y el QR para tus invitados."
+              : "Reglas de jukebox, políticas de filtrado acústico y pairing en tiempo real."}
           </p>
         </div>
 
@@ -191,6 +227,146 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           <span>{error}</span>
         </div>
       )}
+
+      {/* SELECTOR DE MODO DE SALA: BAR VS FIESTA / CUMPLEAÑOS */}
+      <section className="bg-gradient-to-r from-[#181b25] via-[#1c162c] to-[#181b25] rounded-2xl border border-pink-500/30 p-5 shadow-md space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-pink-400 font-bold">
+              <span>✨ Modalidad del Sistema</span>
+            </span>
+            <h2 className="text-base font-bold text-white mt-0.5">
+              Tipo de Sala: Bar Comercial vs Fiesta / Joda / Cumpleaños
+            </h2>
+            <p className="text-xs text-slate-400">
+              Cambiá entre la versión para Bares (con códigos y mozos) o la versión Fiesta (todo desbloqueado, modos de juego, karaoke y dedicatorias).
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const next: PartyConfig = { ...partyConfig, venueType: "bar" };
+                setPartyConfig(next);
+                void updatePartyConfig(slug, next);
+              }}
+              className={`px-3.5 py-2 rounded-xl font-mono text-xs font-bold border transition-all ${
+                partyConfig.venueType === "bar"
+                  ? "bg-indigo-600 text-white border-indigo-400 shadow-md"
+                  : "bg-[#0d111a] text-slate-400 border-[#232b42] hover:text-white"
+              }`}
+            >
+              🍻 Modo Bar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const next: PartyConfig = {
+                  ...DEFAULT_PARTY_CONFIG,
+                  ...partyConfig,
+                  venueType: "party",
+                };
+                setPartyConfig(next);
+                void updatePartyConfig(slug, next);
+              }}
+              className={`px-3.5 py-2 rounded-xl font-mono text-xs font-bold border transition-all ${
+                partyConfig.venueType === "party"
+                  ? "bg-gradient-to-r from-pink-600 to-purple-600 text-white border-pink-400 shadow-md"
+                  : "bg-[#0d111a] text-slate-400 border-[#232b42] hover:text-white"
+              }`}
+            >
+              🎉 Modo Fiesta / Cumple
+            </button>
+          </div>
+        </div>
+
+        {partyConfig.venueType === "party" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-pink-500/20">
+            <div className="bg-[#0d111a]/90 p-3.5 rounded-xl border border-[#232b42]">
+              <label className="block text-[11px] font-mono text-pink-300 font-bold uppercase mb-1.5">
+                Límite de votos por persona (Modo Democrático)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={partyConfig.votesPerGuest}
+                  onChange={(e) =>
+                    setPartyConfig((prev) => ({
+                      ...prev,
+                      votesPerGuest: Math.max(0, Number(e.target.value) || 0),
+                    }))
+                  }
+                  className="w-24 rounded-lg bg-[#141824] border border-[#232b42] px-3 py-1.5 text-white font-mono text-xs"
+                />
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {partyConfig.votesPerGuest === 0
+                    ? "Ilimitado (Todo libre)"
+                    : `${partyConfig.votesPerGuest} votos por invitado`}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-[#0d111a]/90 p-3.5 rounded-xl border border-[#232b42]">
+              <label className="block text-[11px] font-mono text-cyan-300 font-bold uppercase mb-1.5">
+                Votos para que la canción suba a la cola
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={partyConfig.minVotesToQueue}
+                  onChange={(e) =>
+                    setPartyConfig((prev) => ({
+                      ...prev,
+                      minVotesToQueue: Math.max(1, Number(e.target.value) || 1),
+                    }))
+                  }
+                  className="w-24 rounded-lg bg-[#141824] border border-[#232b42] px-3 py-1.5 text-white font-mono text-xs"
+                />
+                <span className="text-[11px] text-slate-400 font-mono">
+                  {partyConfig.minVotesToQueue <= 1
+                    ? "Pasa directo a la cola (1 voto)"
+                    : `Sube con ${partyConfig.minVotesToQueue} votos`}
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-[#0d111a]/90 p-3.5 rounded-xl border border-[#232b42] flex flex-col justify-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={partyConfig.allowDedications}
+                  onChange={(e) =>
+                    setPartyConfig((prev) => ({
+                      ...prev,
+                      allowDedications: e.target.checked,
+                    }))
+                  }
+                  className="accent-pink-500"
+                />
+                <span>💬 Permitir Dedicatorias en TV</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={partyConfig.allowGuestKaraoke}
+                  onChange={(e) =>
+                    setPartyConfig((prev) => ({
+                      ...prev,
+                      allowGuestKaraoke: e.target.checked,
+                    }))
+                  }
+                  className="accent-pink-500"
+                />
+                <span>🎤 Permitir Karaoke desde el celular</span>
+              </label>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Grid: Bento Sections */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

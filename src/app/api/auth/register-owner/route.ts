@@ -8,6 +8,8 @@ export async function POST(req: NextRequest) {
     const password = typeof body?.password === "string" ? body.password.trim() : "";
     const venueName = typeof body?.venueName === "string" ? body.venueName.trim() : "";
     const slug = typeof body?.slug === "string" ? body.slug.trim().toLowerCase() : "";
+    const venueType = body?.venueType === "party" ? "party" : "bar";
+    const isParty = venueType === "party";
 
     if (!email || !email.includes("@")) {
       return NextResponse.json(
@@ -152,8 +154,10 @@ export async function POST(req: NextRequest) {
         owner_id: userId,
         name: venueName,
         slug,
-        accent_color: "#6366F1",
-        join_message: "¡Bienvenido! Escaneá el QR para pedir y votar canciones.",
+        accent_color: isParty ? "#EC4899" : "#6366F1",
+        join_message: isParty
+          ? "¡Bienvenido a la fiesta! Escaneá el QR para pedir canciones, votar y mandar dedicatorias 🎉"
+          : "¡Bienvenido! Escaneá el QR para pedir y votar canciones.",
       })
       .select()
       .single();
@@ -190,7 +194,28 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (!existingSettings) {
-        await admin.from("venue_settings").insert({ venue_id: newVenue.id });
+        await admin.from("venue_settings").insert({
+          venue_id: newVenue.id,
+          explicit_filter_enabled: !isParty,
+          max_proposals_per_participant: isParty ? 999 : 3,
+          max_queue_size: isParty ? 100 : 30,
+          default_credits_per_code: isParty ? 999 : 3,
+          max_credits_per_code: isParty ? 999 : 10,
+        });
+      }
+
+      if (isParty) {
+        await admin
+          .from("venue_settings")
+          .update({
+            venue_type: "party",
+            party_mode: "hybrid_turbo",
+            party_votes_per_guest: 0,
+            party_min_votes_to_queue: 1,
+            allow_dedications: true,
+            allow_guest_karaoke: true,
+          } as never)
+          .eq("venue_id", newVenue.id);
       }
     } catch (stErr) {
       console.warn("Could not ensure venue settings:", stErr);
@@ -200,6 +225,7 @@ export async function POST(req: NextRequest) {
       ok: true,
       slug,
       venueId: newVenue.id,
+      venueType,
     });
   } catch (err: unknown) {
     console.error("Unexpected error in /api/auth/register-owner:", err);

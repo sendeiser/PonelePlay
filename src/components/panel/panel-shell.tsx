@@ -3,7 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type PanelRole, panelNavFor } from "@/lib/domain/permissions";
+import { type PanelRole, type PanelNavItem, panelNavFor } from "@/lib/domain/permissions";
+import { type VenueType } from "@/lib/domain/party";
+import { getStoredPartyConfig, updatePartyConfig } from "@/lib/api/party-control";
+import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 import { LogoutButton } from "./logout-button";
 import { PanelPlaybackFooter } from "./panel-playback-footer";
 
@@ -15,16 +18,30 @@ interface PanelShellProps {
 
 const iconMap: Record<string, string> = {
   Noche: "sports_bar",
+  Fiesta: "celebration",
   Catálogo: "queue_music",
   Códigos: "receipt_long",
   Personal: "badge",
   Ajustes: "tune",
 };
 
+export function getVisiblePanelNavItems(
+  venueType: VenueType,
+  role: PanelRole,
+  slug: string,
+): PanelNavItem[] {
+  const all = panelNavFor(role, slug);
+  if (venueType === "party") {
+    return all.filter(
+      (item) => !item.href.endsWith("/codigos") && !item.href.endsWith("/personal"),
+    );
+  }
+  return all;
+}
+
 export function PanelShell({ slug, role, children }: PanelShellProps) {
   const pathname = usePathname();
-  const nav = panelNavFor(role, slug);
-
+  const [venueType, setVenueType] = useState<VenueType>("bar");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
@@ -33,8 +50,72 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       if (saved !== null) {
         setIsSidebarCollapsed(saved === "true");
       }
+      const cfg = getStoredPartyConfig(slug);
+      setVenueType(cfg.venueType);
     }
-  }, []);
+
+    // Also fetch from Supabase venue_settings if available
+    let active = true;
+    const supabase = createBrowserSupabase();
+    void (async () => {
+      try {
+        const { data: v } = await supabase
+          .from("venues")
+          .select("id")
+          .eq("slug", slug)
+          .maybeSingle();
+        if (v?.id && active) {
+          const { data: s } = await supabase
+            .from("venue_settings")
+            .select("venue_type, party_mode, party_votes_per_guest, party_min_votes_to_queue, allow_dedications, allow_guest_karaoke, turbo_cooldown_seconds")
+            .eq("venue_id", v.id)
+            .maybeSingle();
+          const row = s as {
+            venue_type?: VenueType;
+            party_mode?: "democratic" | "hybrid_turbo" | "party_games";
+            party_votes_per_guest?: number;
+            party_min_votes_to_queue?: number;
+            allow_dedications?: boolean;
+            allow_guest_karaoke?: boolean;
+            turbo_cooldown_seconds?: number;
+          } | null;
+          if (row?.venue_type && active) {
+            setVenueType(row.venue_type);
+            const merged = getStoredPartyConfig(slug, {
+              venueType: row.venue_type,
+              partyMode: row.party_mode,
+              votesPerGuest: row.party_votes_per_guest,
+              minVotesToQueue: row.party_min_votes_to_queue,
+              allowDedications: row.allow_dedications,
+              allowGuestKaraoke: row.allow_guest_karaoke,
+              turboCooldownSeconds: row.turbo_cooldown_seconds,
+            });
+            setVenueType(merged.venueType);
+          }
+        }
+      } catch {
+        // Fallback to local config
+      }
+    })();
+
+    const onPartyConfigChanged = (e: Event) => {
+      const detail = (e as CustomEvent<{ slug?: string; config?: { venueType?: VenueType } }>).detail;
+      if (!detail?.slug || detail.slug === slug) {
+        if (detail?.config?.venueType) {
+          setVenueType(detail.config.venueType);
+        }
+      }
+    };
+
+    window.addEventListener("poneleplay:party-config-changed", onPartyConfigChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("poneleplay:party-config-changed", onPartyConfigChanged);
+    };
+  }, [slug]);
+
+  const nav = getVisiblePanelNavItems(venueType, role, slug);
+  const isParty = venueType === "party";
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed((prev) => {
@@ -44,6 +125,12 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       }
       return next;
     });
+  };
+
+  const handleToggleVenueType = async () => {
+    const nextType: VenueType = isParty ? "bar" : "party";
+    setVenueType(nextType);
+    await updatePartyConfig(slug, { venueType: nextType });
   };
 
   return (
@@ -66,25 +153,41 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
           </button>
 
           <div className="flex items-center gap-2.5">
-            <span className="size-8 rounded-lg bg-indigo-600 border border-indigo-400/30 flex items-center justify-center text-white shadow-md shrink-0">
+            <span
+              className={`size-8 rounded-lg border flex items-center justify-center text-white shadow-md shrink-0 ${
+                isParty
+                  ? "bg-gradient-to-br from-pink-600 to-purple-600 border-pink-400/40"
+                  : "bg-indigo-600 border-indigo-400/30"
+              }`}
+            >
               <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
-                sports_bar
+                {isParty ? "celebration" : "sports_bar"}
               </span>
             </span>
             <div className="flex flex-col">
               <span className="font-bold text-white text-sm sm:text-base tracking-tight capitalize truncate max-w-[130px] xs:max-w-[180px] sm:max-w-none">
-                {slug.replace("-", " ")}
+                {slug.replace(/-/g, " ")}
               </span>
               <span className="text-emerald-400 font-mono text-[10px] flex items-center gap-1 leading-none mt-0.5">
                 <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Sala Activa
+                {isParty ? "🎉 Fiesta Desbloqueada" : "Sala Activa"}
               </span>
             </div>
           </div>
 
-          <span className="hidden md:inline-block px-2.5 py-0.5 rounded text-xs font-mono bg-[#181b25] text-indigo-300 border border-[#2a3045]">
-            Terminal #{role === "owner" ? "Admin" : "Mozo"}
-          </span>
+          <button
+            type="button"
+            onClick={() => void handleToggleVenueType()}
+            title="Alternar entre Modo Bar (Con códigos y mozos) y Modo Fiesta/Cumpleaños (Todo desbloqueado)"
+            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold border transition-all active:scale-95 ${
+              isParty
+                ? "bg-pink-500/20 text-pink-300 border-pink-500/40 hover:bg-pink-500/30"
+                : "bg-[#181b25] text-indigo-300 border-[#2a3045] hover:border-indigo-500/40"
+            }`}
+          >
+            <span>{isParty ? "🎉 Modo Fiesta" : "🍻 Modo Bar"}</span>
+            <span className="text-[10px] opacity-75">(Cambiar)</span>
+          </button>
         </div>
 
         {/* Central Telemetry (Desktop only) */}
@@ -92,7 +195,8 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
           <div className="flex items-center gap-2 text-indigo-300 font-medium">
             <span className="size-2 rounded-full bg-emerald-400 pulse-dot" />
             <span className="text-white">
-              Noche Activa <span className="text-emerald-400 font-bold">(Abierta)</span>
+              {isParty ? "Fiesta en Vivo" : "Noche Activa"}{" "}
+              <span className="text-emerald-400 font-bold">(Abierta)</span>
             </span>
           </div>
           <div className="flex items-center gap-1.5 text-slate-400">
@@ -104,30 +208,36 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
               token
             </span>
             <span>
-              Rol: <strong className="text-white uppercase">{role}</strong>
+              Modo: <strong className="text-white uppercase">{isParty ? "FIESTA LIBRE" : role}</strong>
             </span>
           </div>
         </div>
 
         {/* Trailing Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <Link
-            href={`/panel/${slug}/codigos?openModal=1`}
-            prefetch={true}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold active:scale-95 transition-all shadow-md shadow-indigo-600/30"
-          >
-            <span className="material-symbols-outlined text-base">confirmation_number</span>
-            <span className="hidden sm:inline">Nuevo Ticket</span>
-          </Link>
+          {!isParty && (
+            <Link
+              href={`/panel/${slug}/codigos?openModal=1`}
+              prefetch={true}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 sm:px-3.5 py-1.5 rounded-lg font-mono text-xs font-bold active:scale-95 transition-all shadow-md shadow-indigo-600/30"
+            >
+              <span className="material-symbols-outlined text-base">confirmation_number</span>
+              <span className="hidden sm:inline">Nuevo Ticket</span>
+            </Link>
+          )}
 
           <Link
             href={`/p/${slug}`}
             target="_blank"
-            className="hidden sm:flex items-center gap-1.5 bg-[#181b25] text-slate-300 hover:bg-[#202534] hover:text-white px-3 py-1.5 rounded-lg font-mono text-xs border border-[#1E2333] transition-colors"
-            title="Vista de cliente QR"
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono text-xs border transition-colors ${
+              isParty
+                ? "bg-gradient-to-r from-pink-600/25 to-purple-600/25 text-pink-200 border-pink-500/40 hover:text-white"
+                : "bg-[#181b25] text-slate-300 hover:bg-[#202534] hover:text-white border-[#1E2333]"
+            }`}
+            title={isParty ? "Abrir vista de Invitado QR (Todo desbloqueado)" : "Vista de cliente QR"}
           >
             <span className="material-symbols-outlined text-sm text-indigo-400">qr_code</span>
-            <span>Cliente QR ↗</span>
+            <span>{isParty ? "Invitado QR ↗" : "Cliente QR ↗"}</span>
           </Link>
 
           <div className="md:hidden flex items-center">
@@ -163,7 +273,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                       Ponele<span className="text-cyan-400 font-bold">Play</span>
                     </span>
                     <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mt-0.5">
-                      Control Central
+                      {isParty ? "Cabina de Fiesta" : "Control Central"}
                     </span>
                   </div>
                 </div>
@@ -194,14 +304,15 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
             <nav className="flex flex-col gap-1.5 mt-1">
               {nav.map((item) => {
                 const isActive = pathname === item.href;
-                const icon = iconMap[item.label] || "circle";
+                const displayLabel = isParty && item.label === "Noche" ? "Cabina en Vivo" : item.label;
+                const icon = isParty && item.label === "Noche" ? "celebration" : iconMap[item.label] || "circle";
 
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     prefetch={true}
-                    title={item.label}
+                    title={displayLabel}
                     className={`flex items-center ${
                       isSidebarCollapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3.5 py-2.5"
                     } rounded-lg font-medium transition-all text-xs font-mono border ${
@@ -218,7 +329,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                     >
                       {icon}
                     </span>
-                    {!isSidebarCollapsed && <span>{item.label}</span>}
+                    {!isSidebarCollapsed && <span>{displayLabel}</span>}
                   </Link>
                 );
               })}
@@ -246,15 +357,15 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
               className={`flex items-center ${
                 isSidebarCollapsed ? "justify-center px-0" : "gap-2.5 px-2"
               } py-1`}
-              title={role === "owner" ? "Administrador" : "Personal de Barra"}
+              title={isParty ? "Anfitrión de la Fiesta" : role === "owner" ? "Administrador" : "Personal de Barra"}
             >
               <div className="size-8 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold font-mono text-xs shrink-0">
-                {role === "owner" ? "OP" : "ST"}
+                {isParty ? "DJ" : role === "owner" ? "OP" : "ST"}
               </div>
               {!isSidebarCollapsed && (
                 <div className="flex flex-col min-w-0">
                   <span className="text-xs font-bold text-white truncate">
-                    {role === "owner" ? "Administrador" : "Personal de Barra"}
+                    {isParty ? "Anfitrión / DJ" : role === "owner" ? "Administrador" : "Personal de Barra"}
                   </span>
                   <span className="text-[10px] font-mono text-slate-500 uppercase">
                     {slug}
@@ -284,7 +395,8 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0c101c]/95 backdrop-blur-md border-t border-[#1E2333] flex items-center justify-around px-1 min-h-[64px] pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-10px_30px_rgba(0,0,0,0.8)]">
         {nav.map((item) => {
           const isActive = pathname === item.href;
-          const icon = iconMap[item.label] || "circle";
+          const displayLabel = isParty && item.label === "Noche" ? "Fiesta" : item.label;
+          const icon = isParty && item.label === "Noche" ? "celebration" : iconMap[item.label] || "circle";
 
           return (
             <Link
@@ -310,7 +422,7 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
                 </span>
               </div>
               <span className="text-[10px] font-mono tracking-tight mt-0.5">
-                {item.label}
+                {displayLabel}
               </span>
             </Link>
           );
