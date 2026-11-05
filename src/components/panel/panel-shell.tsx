@@ -5,8 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type PanelRole, type PanelNavItem, panelNavFor } from "@/lib/domain/permissions";
 import { type VenueType } from "@/lib/domain/party";
-import { getStoredPartyConfig, updatePartyConfig } from "@/lib/api/party-control";
-import { createBrowserSupabase } from "@/lib/api/supabase/browser";
+import { fetchServerPartyConfig, getStoredPartyConfig } from "@/lib/api/party-control";
 import { LogoutButton } from "./logout-button";
 import { PanelPlaybackFooter } from "./panel-playback-footer";
 
@@ -54,49 +53,13 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       setVenueType(cfg.venueType);
     }
 
-    // Also fetch from Supabase venue_settings if available
+    // Fetch persisted party config from server
     let active = true;
-    const supabase = createBrowserSupabase();
-    void (async () => {
-      try {
-        const { data: v } = await supabase
-          .from("venues")
-          .select("id")
-          .eq("slug", slug)
-          .maybeSingle();
-        if (v?.id && active) {
-          const { data: s } = await supabase
-            .from("venue_settings")
-            .select("venue_type, party_mode, party_votes_per_guest, party_min_votes_to_queue, allow_dedications, allow_guest_karaoke, turbo_cooldown_seconds")
-            .eq("venue_id", v.id)
-            .maybeSingle();
-          const row = s as {
-            venue_type?: VenueType;
-            party_mode?: "democratic" | "hybrid_turbo" | "party_games";
-            party_votes_per_guest?: number;
-            party_min_votes_to_queue?: number;
-            allow_dedications?: boolean;
-            allow_guest_karaoke?: boolean;
-            turbo_cooldown_seconds?: number;
-          } | null;
-          if (row?.venue_type && active) {
-            setVenueType(row.venue_type);
-            const merged = getStoredPartyConfig(slug, {
-              venueType: row.venue_type,
-              partyMode: row.party_mode,
-              votesPerGuest: row.party_votes_per_guest,
-              minVotesToQueue: row.party_min_votes_to_queue,
-              allowDedications: row.allow_dedications,
-              allowGuestKaraoke: row.allow_guest_karaoke,
-              turboCooldownSeconds: row.turbo_cooldown_seconds,
-            });
-            setVenueType(merged.venueType);
-          }
-        }
-      } catch {
-        // Fallback to local config
+    void fetchServerPartyConfig(slug).then(({ partyConfig }) => {
+      if (active) {
+        setVenueType(partyConfig.venueType);
       }
-    })();
+    });
 
     const onPartyConfigChanged = (e: Event) => {
       const detail = (e as CustomEvent<{ slug?: string; config?: { venueType?: VenueType } }>).detail;
@@ -125,12 +88,6 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
       }
       return next;
     });
-  };
-
-  const handleToggleVenueType = async () => {
-    const nextType: VenueType = isParty ? "bar" : "party";
-    setVenueType(nextType);
-    await updatePartyConfig(slug, { venueType: nextType });
   };
 
   return (
@@ -175,19 +132,15 @@ export function PanelShell({ slug, role, children }: PanelShellProps) {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void handleToggleVenueType()}
-            title="Alternar entre Modo Bar (Con códigos y mozos) y Modo Fiesta/Cumpleaños (Todo desbloqueado)"
-            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold border transition-all active:scale-95 ${
+          <div
+            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-mono font-bold border ${
               isParty
-                ? "bg-pink-500/20 text-pink-300 border-pink-500/40 hover:bg-pink-500/30"
-                : "bg-[#181b25] text-indigo-300 border-[#2a3045] hover:border-indigo-500/40"
+                ? "bg-pink-500/20 text-pink-300 border-pink-500/40"
+                : "bg-[#181b25] text-indigo-300 border-[#2a3045]"
             }`}
           >
             <span>{isParty ? "🎉 Modo Fiesta" : "🍻 Modo Bar"}</span>
-            <span className="text-[10px] opacity-75">(Cambiar)</span>
-          </button>
+          </div>
         </div>
 
         {/* Central Telemetry (Desktop only) */}

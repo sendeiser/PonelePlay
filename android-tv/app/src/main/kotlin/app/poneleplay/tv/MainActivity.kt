@@ -316,20 +316,24 @@ fun NativeTvApp(
     onDisplayConfig: (String) -> Unit,
     onExitApp: () -> Unit
 ) {
-    val defaultCloud = "https://poneleplay.netlify.app"
-    val savedServer = prefs.getString("server_url", null)
-    var serverUrl by remember {
-        mutableStateOf(
-            if (savedServer == null || savedServer.contains("poneleplay.app")) defaultCloud else savedServer
-        )
-    }
+    val serverUrl = "https://poneleplay.netlify.app"
 
     var venueSlug by remember {
-        mutableStateOf(prefs.getString("venue_slug", "billar-aurora") ?: "billar-aurora")
+        val rawSaved = prefs.getString("venue_slug", "") ?: ""
+        val pairedFlag = prefs.getBoolean("is_tv_paired", false)
+        // Start at zero (unlinked) if not explicitly paired via PIN
+        val initialSlug = if (!pairedFlag || rawSaved == "billar-aurora" || rawSaved == "billar-pool") {
+            if (!pairedFlag) "" else rawSaved
+        } else {
+            rawSaved
+        }
+        mutableStateOf(initialSlug)
     }
 
     var isPaired by remember {
-        mutableStateOf(prefs.getBoolean("is_tv_paired", false))
+        val pairedFlag = prefs.getBoolean("is_tv_paired", false)
+        val savedSlug = prefs.getString("venue_slug", "") ?: ""
+        mutableStateOf(pairedFlag && savedSlug.isNotBlank())
     }
 
     var feed by remember { mutableStateOf<TvFeed?>(null) }
@@ -346,9 +350,9 @@ fun NativeTvApp(
         }
     }
 
-    // Background Telemetry Poller: fetches /api/tv/[slug] every 3.5s when paired
+    // Background Telemetry Poller: fetches /api/tv/[slug] when paired
     LaunchedEffect(serverUrl, venueSlug, isPaired) {
-        if (!isPaired) return@LaunchedEffect
+        if (!isPaired || venueSlug.isBlank()) return@LaunchedEffect
 
         isLoading = feed == null
         while (isActive) {
@@ -399,23 +403,24 @@ fun NativeTvApp(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (!isPaired) {
+        if (!isPaired || venueSlug.isBlank()) {
             TvPairingScreen(
                 serverUrl = serverUrl,
                 venueSlug = venueSlug,
-                onPaired = { token, deviceId ->
-                    prefs.edit()
-                        .putBoolean("is_tv_paired", true)
-                        .putString("tv_player_token", token)
-                        .putString("tv_device_id", deviceId)
-                        .apply()
-                    isPaired = true
+                onPaired = { token, deviceId, pairedSlug ->
+                    val targetSlug = pairedSlug.ifBlank { venueSlug }
+                    if (targetSlug.isNotBlank()) {
+                        venueSlug = targetSlug
+                        prefs.edit()
+                            .putBoolean("is_tv_paired", true)
+                            .putString("venue_slug", targetSlug)
+                            .putString("tv_player_token", token)
+                            .putString("tv_device_id", deviceId)
+                            .apply()
+                        isPaired = true
+                    }
                 },
                 onOpenSettings = onOpenSettings,
-                onBypass = {
-                    prefs.edit().putBoolean("is_tv_paired", true).apply()
-                    isPaired = true
-                },
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -495,26 +500,18 @@ fun NativeTvApp(
         TvSettingsDialog(
             isOpen = showSettings,
             currentSlug = venueSlug,
-            currentServer = serverUrl,
             currentMode = screenMode,
             isMuted = isMuted,
-            onSelectSlug = { newSlug ->
-                if (venueSlug != newSlug) {
-                    venueSlug = newSlug
-                    prefs.edit().putString("venue_slug", newSlug).apply()
-                    isPaired = false
-                    prefs.edit().putBoolean("is_tv_paired", false).apply()
-                    feed = null
-                }
-            },
-            onSelectServer = { newServer ->
-                serverUrl = newServer
-                prefs.edit().putString("server_url", newServer).apply()
-            },
             onToggleMode = onToggleMode,
             onToggleMute = onToggleMute,
             onUnpair = {
-                prefs.edit().putBoolean("is_tv_paired", false).remove("tv_player_token").apply()
+                prefs.edit()
+                    .putBoolean("is_tv_paired", false)
+                    .putString("venue_slug", "")
+                    .remove("tv_player_token")
+                    .remove("tv_device_id")
+                    .apply()
+                venueSlug = ""
                 isPaired = false
                 feed = null
                 onDismissSettings()

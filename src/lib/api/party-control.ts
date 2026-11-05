@@ -139,18 +139,71 @@ async function broadcastPartyEvent(
   }
 }
 
+export async function fetchServerPartyConfig(
+  slug: string,
+): Promise<{
+  partyConfig: PartyConfig;
+  itemMeta: Record<string, { guestName?: string | null; dedication?: string | null; isKaraoke?: boolean }>;
+}> {
+  const fallback = getStoredPartyConfig(slug);
+  try {
+    const res = await fetch(`/api/party/config?slug=${encodeURIComponent(slug)}`, {
+      cache: "no-store",
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok && data?.partyConfig) {
+        const merged = normalizePartyConfigPatch(data.partyConfig, fallback);
+        saveStoredPartyConfig(slug, merged);
+        return {
+          partyConfig: merged,
+          itemMeta: data.itemMeta || {},
+        };
+      }
+    }
+  } catch {
+    // Non-blocking fallback
+  }
+  return { partyConfig: fallback, itemMeta: {} };
+}
+
 export async function updatePartyConfig(
   slug: string,
   patch: Partial<PartyConfig>,
 ): Promise<PartyConfig> {
   const current = getStoredPartyConfig(slug);
-  const next = normalizePartyConfigPatch(patch, current);
+  // Lock Party Mode: once a venue is in party mode, it cannot switch to bar mode
+  const safePatch: Partial<PartyConfig> = {
+    ...patch,
+    venueType: current.venueType === "party" ? "party" : (patch.venueType ?? current.venueType),
+  };
+  const next = normalizePartyConfigPatch(safePatch, current);
   saveStoredPartyConfig(slug, next);
 
   void broadcastPartyEvent(slug, "party_config_updated", {
     partyConfig: next,
   });
 
+  // 1. Persist via Next.js server route (/api/party/config) using Service Role
+  try {
+    const res = await fetch("/api/party/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, patch: next }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok && data?.partyConfig) {
+        const merged = normalizePartyConfigPatch(data.partyConfig, next);
+        saveStoredPartyConfig(slug, merged);
+        return merged;
+      }
+    }
+  } catch {
+    // Continue to RPC fallback
+  }
+
+  // 2. Fallback RPC if available
   try {
     const supabase = createBrowserSupabase();
     const { data, error } = await supabase.rpc("update_party_settings" as never, {
@@ -201,10 +254,85 @@ export async function resetPartyGuestVotes(
   return { ok: true, creditsResetTo };
 }
 
+export async function castPartyVote(
+  slug: string,
+  queueItemId: string,
+): Promise<{ ok: boolean; itemId?: string; voteCount?: number; error?: string }> {
+  try {
+    const res = await fetch("/api/party/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug,
+        queueItemId,
+        isTurbo: false,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok) {
+        return {
+          ok: true,
+          itemId: data.itemId ?? queueItemId,
+          voteCount: Number(data.voteCount ?? 1),
+        };
+      }
+      return { ok: false, error: data?.error || "unknown" };
+    }
+  } catch {
+    // Fallback to Supabase RPC if /api/party/vote is unreachable
+  }
+
+  try {
+    const supabase = createBrowserSupabase();
+    const { data, error } = await supabase.rpc("cast_vote" as never, {
+      p_queue_item_id: queueItemId,
+    } as never);
+    if (!error && data && typeof data === "object") {
+      const payload = data as { ok?: boolean; itemId?: string; voteCount?: number; error?: string };
+      if (payload.ok) {
+        return {
+          ok: true,
+          itemId: payload.itemId ?? queueItemId,
+          voteCount: Number(payload.voteCount ?? 1),
+        };
+      }
+    }
+  } catch {
+    // Ignore
+  }
+
+  return { ok: false, error: "unknown" };
+}
+
 export async function castPartyTurboVote(
   slug: string,
   queueItemId: string,
 ): Promise<{ itemId: string; voteCount: number }> {
+  // 1. Primary path: /api/party/vote with isTurbo: true (bypasses credit check & uses Service Role)
+  try {
+    const res = await fetch("/api/party/vote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        slug,
+        queueItemId,
+        isTurbo: true,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.ok) {
+        return {
+          itemId: data.itemId ?? queueItemId,
+          voteCount: Number(data.voteCount ?? 3),
+        };
+      }
+    }
+  } catch {
+    // Continue to RPC fallback
+  }
+
   try {
     const supabase = createBrowserSupabase();
     const { data, error } = await supabase.rpc("cast_party_turbo_vote" as never, {

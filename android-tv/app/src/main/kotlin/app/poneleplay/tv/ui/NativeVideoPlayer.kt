@@ -108,7 +108,7 @@ class VideoPlayerController {
 @Composable
 fun NativeVideoPlayer(
     videoId: String,
-    venueSlug: String = "billar-aurora",
+    venueSlug: String = "",
     deviceId: String = "",
     isPaused: Boolean = false,
     volume: Int = 85,
@@ -235,7 +235,7 @@ private fun buildPlayerHtml(
             var desiredPaused = ${if (isPaused) "true" else "false"};
             var currentVolume = ${if (isMuted) 0 else volume};
             var currentMuted = ${if (isMuted) "true" else "false"};
-            var venueSlug = '${venueSlug.ifBlank { "billar-aurora" }}';
+            var venueSlug = '${venueSlug.trim()}';
             var lastSyncSeekAt = 0;
             var currentTvTime = 0;
             var currentDuration = 0;

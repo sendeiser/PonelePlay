@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
-import { partitionQueueAndProposals, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/queue";
+import { partitionQueueAndProposals } from "@/lib/domain/queue";
+import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
+import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 
 interface QueueItemFeed {
   id: string;
+  trackId?: string;
   title: string;
   artist: string;
   youtubeVideoId?: string | null;
@@ -12,6 +15,9 @@ interface QueueItemFeed {
   voteCount: number;
   createdAt: string;
   status?: string;
+  guestName?: string | null;
+  dedication?: string | null;
+  isKaraoke?: boolean;
 }
 
 export const dynamic = "force-dynamic";
@@ -56,15 +62,20 @@ export async function GET(
     const rawQueue = (rawState.queue as QueueItemFeed[]) || [];
     const rawCandidates = (rawState.candidates as QueueItemFeed[]) || [];
 
+    // 4. Load Party Mode config & guest metadata
+    const { partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
+    const effectiveThreshold = resolveEffectiveQueueThreshold(partyConfig);
+
     // Map now playing track
     const nowPlayingTrack = playState?.current_track
       ? (playState.current_track as Record<string, unknown>)
       : (rawState.nowPlaying as Record<string, unknown>) || null;
 
-    // Partition queue items and candidate proposals
+    // Partition queue items and candidate proposals using effective threshold
     const { activeQueue, candidateProposals } = partitionQueueAndProposals<QueueItemFeed>(
       rawQueue,
       rawCandidates,
+      effectiveThreshold,
     );
 
     const sanitizeVoteCount = (count: unknown): number => {
@@ -110,6 +121,19 @@ export async function GET(
       // Fallback to default
     }
 
+    const resolveMeta = (item: Record<string, unknown>) => {
+      const id = String(item.itemId || item.id || "");
+      const trackId = String(item.trackId || "");
+      const meta = itemMeta[id] || (trackId ? itemMeta[trackId] : undefined);
+      return {
+        guestName: (item.guestName as string | null) ?? meta?.guestName ?? null,
+        dedication: (item.dedication as string | null) ?? meta?.dedication ?? null,
+        isKaraoke: Boolean(item.isKaraoke ?? meta?.isKaraoke ?? false),
+      };
+    };
+
+    const nowMeta = nowPlayingTrack ? resolveMeta(nowPlayingTrack) : null;
+
     return NextResponse.json(
       {
         ok: true,
@@ -117,7 +141,9 @@ export async function GET(
           id: venue.id,
           name: venue.name,
           slug: venue.slug,
+          venueType: partyConfig.venueType,
         },
+        partyConfig,
         isOpen: rawState.night ? (rawState.night as Record<string, unknown>).status === "open" : false,
         playback: {
           isPaused: Boolean(playState?.is_paused),
@@ -138,28 +164,42 @@ export async function GET(
               thumbnailUrl: nowPlayingTrack.thumbnailUrl ? String(nowPlayingTrack.thumbnailUrl) : null,
               durationSeconds: Number(nowPlayingTrack.durationSeconds ?? 210),
               voteCount: sanitizeVoteCount(nowPlayingTrack.voteCount),
-              isKaraoke: Boolean(nowPlayingTrack.isKaraoke),
+              isKaraoke: nowMeta?.isKaraoke ?? false,
+              guestName: nowMeta?.guestName ?? null,
+              dedication: nowMeta?.dedication ?? null,
             }
           : null,
-        queue: activeQueue.map((item, idx) => ({
-          id: item.id,
-          title: item.title,
-          artist: item.artist,
-          youtubeVideoId: item.youtubeVideoId,
-          thumbnailUrl: item.thumbnailUrl,
-          durationSeconds: item.durationSeconds,
-          voteCount: sanitizeVoteCount(item.voteCount),
-          position: idx + 1,
-        })),
-        proposals: candidateProposals.map((item) => ({
-          id: item.id,
-          title: item.title,
-          artist: item.artist,
-          youtubeVideoId: item.youtubeVideoId,
-          thumbnailUrl: item.thumbnailUrl,
-          voteCount: sanitizeVoteCount(item.voteCount),
-          neededVotes: MIN_VOTES_FOR_QUEUE,
-        })),
+        queue: activeQueue.map((item, idx) => {
+          const meta = resolveMeta(item as unknown as Record<string, unknown>);
+          return {
+            id: item.id,
+            title: item.title,
+            artist: item.artist,
+            youtubeVideoId: item.youtubeVideoId,
+            thumbnailUrl: item.thumbnailUrl,
+            durationSeconds: item.durationSeconds,
+            voteCount: sanitizeVoteCount(item.voteCount),
+            position: idx + 1,
+            isKaraoke: meta.isKaraoke,
+            guestName: meta.guestName,
+            dedication: meta.dedication,
+          };
+        }),
+        proposals: candidateProposals.map((item) => {
+          const meta = resolveMeta(item as unknown as Record<string, unknown>);
+          return {
+            id: item.id,
+            title: item.title,
+            artist: item.artist,
+            youtubeVideoId: item.youtubeVideoId,
+            thumbnailUrl: item.thumbnailUrl,
+            voteCount: sanitizeVoteCount(item.voteCount),
+            neededVotes: effectiveThreshold,
+            isKaraoke: meta.isKaraoke,
+            guestName: meta.guestName,
+            dedication: meta.dedication,
+          };
+        }),
         clientUrl,
         serverTime: new Date().toISOString(),
       },

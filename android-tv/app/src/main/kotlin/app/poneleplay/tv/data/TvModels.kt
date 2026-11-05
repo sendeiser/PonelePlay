@@ -5,7 +5,8 @@ import org.json.JSONObject
 data class TvVenue(
     val id: String,
     val name: String,
-    val slug: String
+    val slug: String,
+    val venueType: String = "bar"
 )
 
 data class TvPlayback(
@@ -28,7 +29,9 @@ data class TvTrack(
     val durationSeconds: Int,
     val voteCount: Int,
     val position: Int? = null,
-    val isKaraoke: Boolean = false
+    val isKaraoke: Boolean = false,
+    val guestName: String? = null,
+    val dedication: String? = null
 )
 
 data class TvProposal(
@@ -38,7 +41,10 @@ data class TvProposal(
     val youtubeVideoId: String?,
     val thumbnailUrl: String?,
     val voteCount: Int,
-    val neededVotes: Int
+    val neededVotes: Int,
+    val isKaraoke: Boolean = false,
+    val guestName: String? = null,
+    val dedication: String? = null
 )
 
 data class TvFeed(
@@ -64,19 +70,32 @@ data class TvPairingInfo(
 data class TvPairingCheck(
     val ok: Boolean,
     val paired: Boolean,
+    val slug: String? = null,
     val token: String? = null,
     val deviceId: String? = null,
     val error: String? = null
 )
 
 object TvFeedParser {
+    private fun optNullableString(obj: JSONObject, key: String): String? {
+        if (obj.isNull(key)) return null
+        val v = obj.optString(key, "").trim()
+        return if (v.isEmpty() || v == "null") null else v
+    }
+
     fun parse(jsonString: String): TvFeed {
         val root = JSONObject(jsonString)
         val venueObj = root.optJSONObject("venue") ?: JSONObject()
+        val partyCfgObj = root.optJSONObject("partyConfig")
+        val resolvedVenueType = venueObj.optString(
+            "venueType",
+            partyCfgObj?.optString("venueType", "bar") ?: "bar"
+        )
         val venue = TvVenue(
             id = venueObj.optString("id", ""),
             name = venueObj.optString("name", "Salón Principal"),
-            slug = venueObj.optString("slug", "billar-aurora")
+            slug = venueObj.optString("slug", ""),
+            venueType = if (resolvedVenueType == "party") "party" else "bar"
         )
 
         val playObj = root.optJSONObject("playback") ?: JSONObject()
@@ -98,11 +117,13 @@ object TvFeedParser {
                 id = nowObj.optString("id", ""),
                 title = nowObj.optString("title", "Sin título"),
                 artist = nowObj.optString("artist", "Desconocido"),
-                youtubeVideoId = if (nowObj.isNull("youtubeVideoId")) null else nowObj.optString("youtubeVideoId"),
-                thumbnailUrl = if (nowObj.isNull("thumbnailUrl")) null else nowObj.optString("thumbnailUrl"),
+                youtubeVideoId = optNullableString(nowObj, "youtubeVideoId"),
+                thumbnailUrl = optNullableString(nowObj, "thumbnailUrl"),
                 durationSeconds = nowObj.optInt("durationSeconds", 210),
                 voteCount = nowObj.optInt("voteCount", 0),
-                isKaraoke = nowObj.optBoolean("isKaraoke", false)
+                isKaraoke = nowObj.optBoolean("isKaraoke", false),
+                guestName = optNullableString(nowObj, "guestName"),
+                dedication = optNullableString(nowObj, "dedication")
             )
         } else {
             null
@@ -118,11 +139,14 @@ object TvFeedParser {
                         id = item.optString("id", ""),
                         title = item.optString("title", ""),
                         artist = item.optString("artist", ""),
-                        youtubeVideoId = if (item.isNull("youtubeVideoId")) null else item.optString("youtubeVideoId"),
-                        thumbnailUrl = if (item.isNull("thumbnailUrl")) null else item.optString("thumbnailUrl"),
+                        youtubeVideoId = optNullableString(item, "youtubeVideoId"),
+                        thumbnailUrl = optNullableString(item, "thumbnailUrl"),
                         durationSeconds = item.optInt("durationSeconds", 210),
                         voteCount = item.optInt("voteCount", 0),
-                        position = item.optInt("position", i + 1)
+                        position = item.optInt("position", i + 1),
+                        isKaraoke = item.optBoolean("isKaraoke", false),
+                        guestName = optNullableString(item, "guestName"),
+                        dedication = optNullableString(item, "dedication")
                     )
                 )
             }
@@ -138,10 +162,13 @@ object TvFeedParser {
                         id = item.optString("id", ""),
                         title = item.optString("title", ""),
                         artist = item.optString("artist", ""),
-                        youtubeVideoId = if (item.isNull("youtubeVideoId")) null else item.optString("youtubeVideoId"),
-                        thumbnailUrl = if (item.isNull("thumbnailUrl")) null else item.optString("thumbnailUrl"),
+                        youtubeVideoId = optNullableString(item, "youtubeVideoId"),
+                        thumbnailUrl = optNullableString(item, "thumbnailUrl"),
                         voteCount = item.optInt("voteCount", 0),
-                        neededVotes = item.optInt("neededVotes", 5)
+                        neededVotes = item.optInt("neededVotes", 5),
+                        isKaraoke = item.optBoolean("isKaraoke", false),
+                        guestName = optNullableString(item, "guestName"),
+                        dedication = optNullableString(item, "dedication")
                     )
                 )
             }
@@ -160,4 +187,3 @@ object TvFeedParser {
         )
     }
 }
-

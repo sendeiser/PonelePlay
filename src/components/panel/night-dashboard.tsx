@@ -13,6 +13,7 @@ import {
   type PartyConfig,
 } from "@/lib/domain/party";
 import {
+  fetchServerPartyConfig,
   getStoredPartyConfig,
   resetPartyGuestVotes,
   updatePartyConfig,
@@ -81,6 +82,9 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   // Sync party config from localStorage and server state
   useEffect(() => {
     setPartyConfig(getStoredPartyConfig(slug, state?.settings?.partyConfig));
+    void fetchServerPartyConfig(slug).then(({ partyConfig: serverCfg }) => {
+      setPartyConfig(serverCfg);
+    });
     const onPartyChange = (e: Event) => {
       const detail = (e as CustomEvent<{ slug?: string; config?: PartyConfig }>).detail;
       if (!detail?.slug || detail.slug === slug) {

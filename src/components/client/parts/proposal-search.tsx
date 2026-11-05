@@ -16,6 +16,7 @@ import { PROPOSAL_COOLDOWN_SECONDS, MIN_VOTES_FOR_QUEUE } from "@/lib/domain/que
 import { sanitizeDedication } from "@/lib/domain/party";
 
 interface ProposalSearchProps {
+  slug?: string;
   queue?: QueueItemView[];
   candidates?: QueueItemView[];
   proposalsEnabled?: boolean;
@@ -44,6 +45,7 @@ const filterChips = [
 const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
 
 export function ProposalSearch({
+  slug,
   queue = [],
   candidates = [],
   proposalsEnabled = true,
@@ -172,6 +174,10 @@ export function ProposalSearch({
         if (cleanName) payload.guestName = cleanName;
         if (cleanDedication && allowDedications) payload.dedication = cleanDedication;
         if (isKaraoke && allowGuestKaraoke) payload.isKaraoke = true;
+        if (slug) {
+          payload.slug = slug;
+          payload.isPartyMode = true;
+        }
       }
 
       if (onPropose) {

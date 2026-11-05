@@ -151,6 +151,8 @@ export interface ProposeInput {
   guestName?: string | null;
   dedication?: string | null;
   isKaraoke?: boolean;
+  slug?: string;
+  isPartyMode?: boolean;
 }
 
 export interface ProposeResult {
@@ -163,8 +165,6 @@ export interface ProposeResult {
 export async function proposeTrack(
   input: ProposeInput,
 ): Promise<ProposeResult> {
-  const supabase = createBrowserSupabase();
-
   const dedupeKey =
     input.dedupeKey ||
     (input.youtubeVideoId
@@ -183,6 +183,45 @@ export async function proposeTrack(
   if (input.guestName) payload.guestName = input.guestName;
   if (input.dedication) payload.dedication = input.dedication;
   if (typeof input.isKaraoke === "boolean") payload.isKaraoke = input.isKaraoke;
+
+  // In Party Mode, use /api/party/propose so there is no bar cooldown and threshold/metadata are applied
+  if (input.isPartyMode && input.slug) {
+    try {
+      const partyRes = await fetch("/api/party/propose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: input.slug,
+          track: payload,
+        }),
+      });
+      const partyData = await partyRes.json();
+      if (partyData?.ok) {
+        return {
+          itemId: partyData.itemId ?? "",
+          trackId: partyData.trackId ?? "",
+          duplicate: Boolean(partyData.duplicate),
+          voteCount: Number(partyData.voteCount ?? 1),
+        };
+      }
+      if (partyData?.error === "duplicate_active") {
+        throw new Error("duplicate_active");
+      }
+      if (partyData?.error === "night_closed") {
+        throw new Error("night_closed");
+      }
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        (err.message === "duplicate_active" || err.message === "night_closed")
+      ) {
+        throw err;
+      }
+      // Otherwise fall through to Supabase RPC
+    }
+  }
+
+  const supabase = createBrowserSupabase();
 
   const { data, error } = await supabase.rpc("propose_track" as never, {
     p_track: payload,

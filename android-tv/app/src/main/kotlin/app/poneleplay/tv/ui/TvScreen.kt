@@ -325,7 +325,7 @@ private fun TvModeVideoOverlays(
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = item.title,
+                                text = if (item.isKaraoke) "🎤 ${item.title}" else item.title,
                                 color = Color.White,
                                 fontSize = (12f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
@@ -333,9 +333,14 @@ private fun TvModeVideoOverlays(
                                 overflow = TextOverflow.Ellipsis,
                                 style = TextStyle(shadow = textShadow)
                             )
+                            val subText = if (!item.guestName.isNullOrBlank()) {
+                                "${item.artist} • 🎉 ${item.guestName}"
+                            } else {
+                                item.artist
+                            }
                             Text(
-                                text = item.artist,
-                                color = Color(0xFFCBD5E1),
+                                text = subText,
+                                color = if (!item.guestName.isNullOrBlank()) Color(0xFFF472B6) else Color(0xFFCBD5E1),
                                 fontSize = (10.5f * scaleFactor).sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1,
@@ -344,9 +349,9 @@ private fun TvModeVideoOverlays(
                             )
                         }
                         Spacer(modifier = Modifier.width((6 * scaleFactor).dp))
-                        val isBar = item.voteCount >= 9999 || item.voteCount <= 0
+                        val isBar = (item.voteCount >= 9999 || item.voteCount <= 0) && item.guestName.isNullOrBlank()
                         Text(
-                            text = if (isBar) "⭐ BAR" else "${item.voteCount}v",
+                            text = if (isBar) (if (feed.venue.venueType == "party") "⭐ DJ" else "⭐ BAR") else "${item.voteCount}v",
                             color = if (isBar) theme.badgeColor else Color(0xFF6EE7B7),
                             fontSize = (10f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
@@ -403,16 +408,28 @@ private fun TvModeVideoOverlays(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = prop.title,
-                            color = Color.White,
-                            fontSize = (12f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = TextStyle(shadow = textShadow),
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (prop.isKaraoke) "🎤 ${prop.title}" else prop.title,
+                                color = Color.White,
+                                fontSize = (12f * scaleFactor).sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = TextStyle(shadow = textShadow)
+                            )
+                            if (!prop.guestName.isNullOrBlank()) {
+                                Text(
+                                    text = "🎉 Pedido por ${prop.guestName}",
+                                    color = Color(0xFFF472B6),
+                                    fontSize = (10f * scaleFactor).sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = TextStyle(shadow = textShadow)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
                         Text(
                             text = "${prop.voteCount}/${prop.neededVotes}v",
@@ -465,19 +482,29 @@ private fun TvModeVideoOverlays(
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "EN AIRE",
+                            text = if (feed.venue.venueType == "party") "🎉 EN AIRE • FIESTA" else "EN AIRE",
                             color = theme.secondaryColor,
                             fontSize = (10f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
-                        if (feed.nowPlaying?.isKaraoke == true) {
+                        if (feed.nowPlaying?.isKaraoke == true || feed.playback.karaokeMode) {
                             Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
                             Text(
                                 text = "🎤 KARAOKE",
                                 color = Color(0xFFF43F5E),
                                 fontSize = (10f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        if (!feed.nowPlaying?.guestName.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
+                            Text(
+                                text = "🎉 Pedido por ${feed.nowPlaying?.guestName}",
+                                color = Color(0xFFF472B6),
+                                fontSize = (10.5f * scaleFactor).sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 fontFamily = FontFamily.Monospace
                             )
                         }
@@ -497,6 +524,24 @@ private fun TvModeVideoOverlays(
                         fontWeight = FontWeight.Medium,
                         maxLines = 1
                     )
+                    if (!feed.nowPlaying?.dedication.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height((4 * scaleFactor).dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xD93B0764), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(8.dp))
+                                .padding(horizontal = (10 * scaleFactor).dp, vertical = (4 * scaleFactor).dp)
+                        ) {
+                            Text(
+                                text = "💬 \"${feed.nowPlaying?.dedication}\"",
+                                color = Color(0xFFFDF2F8),
+                                fontSize = (11.5f * scaleFactor).sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
             }
 
@@ -596,7 +641,11 @@ private fun TvModePlaylistOverlays(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (feed.isOpen) "NOCHE ABIERTA" else "CERRADO",
+                                text = if (feed.isOpen) {
+                                    if (feed.venue.venueType == "party") "🎉 FIESTA EN VIVO" else "NOCHE ABIERTA"
+                                } else {
+                                    "CERRADO"
+                                },
                                 color = theme.primaryColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -728,6 +777,38 @@ private fun TvModePlaylistOverlays(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+
+                            if (!feed.nowPlaying?.guestName.isNullOrBlank() || !feed.nowPlaying?.dedication.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color(0x55831843), RoundedCornerShape(10.dp))
+                                        .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(10.dp))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                ) {
+                                    if (!feed.nowPlaying?.guestName.isNullOrBlank()) {
+                                        Text(
+                                            text = "🎉 Pedido por ${feed.nowPlaying?.guestName}",
+                                            color = Color(0xFFF472B6),
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                    if (!feed.nowPlaying?.dedication.isNullOrBlank()) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "💬 \"${feed.nowPlaying?.dedication}\"",
+                                            color = Color(0xFFFDF2F8),
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                     // Bottom: Live Votes for Now Playing
@@ -942,7 +1023,7 @@ private fun QueueItemRow(item: TvTrack, index: Int, theme: TvDesignTheme = getTv
         // Title and Artist: Takes up maximum width without badge obstruction
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = item.title,
+                text = if (item.isKaraoke) "🎤 ${item.title}" else item.title,
                 color = Color.White,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -950,9 +1031,14 @@ private fun QueueItemRow(item: TvTrack, index: Int, theme: TvDesignTheme = getTv
                 overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(1.5.dp))
+            val subText = if (!item.guestName.isNullOrBlank()) {
+                "${item.artist} • 🎉 ${item.guestName}"
+            } else {
+                item.artist
+            }
             Text(
-                text = item.artist,
-                color = Color(0xFF94A3B8),
+                text = subText,
+                color = if (!item.guestName.isNullOrBlank()) Color(0xFFF472B6) else Color(0xFF94A3B8),
                 fontSize = 10.5.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -962,7 +1048,7 @@ private fun QueueItemRow(item: TvTrack, index: Int, theme: TvDesignTheme = getTv
         Spacer(modifier = Modifier.width(6.dp))
 
         // Votes Badge: Sleek & Compact so it NEVER covers or truncates the song title
-        val isBar = item.voteCount >= 9999 || item.voteCount <= 0
+        val isBar = (item.voteCount >= 9999 || item.voteCount <= 0) && item.guestName.isNullOrBlank()
         Box(
             modifier = Modifier
                 .background(
@@ -977,7 +1063,7 @@ private fun QueueItemRow(item: TvTrack, index: Int, theme: TvDesignTheme = getTv
                 .padding(horizontal = 6.dp, vertical = 2.5.dp)
         ) {
             Text(
-                text = if (isBar) "⭐ BAR" else "${item.voteCount} ${if (item.voteCount == 1) "voto" else "votos"}",
+                text = if (isBar) "⭐ DJ" else "${item.voteCount} ${if (item.voteCount == 1) "voto" else "votos"}",
                 color = theme.badgeText,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
@@ -1002,7 +1088,7 @@ private fun ProposalItemRow(proposal: TvProposal, theme: TvDesignTheme = getTvDe
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = proposal.title,
+                text = if (proposal.isKaraoke) "🎤 ${proposal.title}" else proposal.title,
                 color = Color.White,
                 fontSize = 11.5.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -1017,6 +1103,17 @@ private fun ProposalItemRow(proposal: TvProposal, theme: TvDesignTheme = getTvDe
                 fontSize = 10.5.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace
+            )
+        }
+        if (!proposal.guestName.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(1.5.dp))
+            Text(
+                text = "🎉 Pedido por ${proposal.guestName}",
+                color = Color(0xFFF472B6),
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 

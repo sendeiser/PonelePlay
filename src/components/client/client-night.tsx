@@ -30,6 +30,8 @@ import {
 import {
   castPartyDuelVote,
   castPartyTurboVote,
+  castPartyVote,
+  fetchServerPartyConfig,
   getStoredPartyConfig,
   type PartyDuelState,
 } from "@/lib/api/party-control";
@@ -88,6 +90,9 @@ export function ClientNight({ slug }: { slug: string }) {
   // Sync PartyConfig, guestName, and local vote quota
   useEffect(() => {
     setPartyConfig(getStoredPartyConfig(slug, state?.settings?.partyConfig));
+    void fetchServerPartyConfig(slug).then(({ partyConfig: serverCfg }) => {
+      setPartyConfig(serverCfg);
+    });
     try {
       const savedName = localStorage.getItem(`${GUEST_NAME_KEY_PREFIX}${slug}`);
       if (savedName) setGuestName(savedName);
@@ -318,7 +323,9 @@ export function ClientNight({ slug }: { slug: string }) {
 
     setPendingVotes((prev) => new Set(prev).add(queueItemId));
     try {
-      const res = await castVote(queueItemId);
+      const res = isParty
+        ? await castPartyVote(slug, queueItemId)
+        : await castVote(queueItemId);
       if (res.ok) {
         if (isParty && partyConfig.partyMode === "democratic" && partyConfig.votesPerGuest > 0) {
           const nextUsed = guestVotesUsed + 1;
@@ -332,7 +339,12 @@ export function ClientNight({ slug }: { slug: string }) {
         notify("¡Voto computado con éxito! La lista se actualizó.", "ok");
         await refresh();
       } else {
-        notify(voteErrorMessage(res.error), "error");
+        notify(
+          voteErrorMessage(
+            (res.error as Parameters<typeof voteErrorMessage>[0]) || "unknown",
+          ),
+          "error",
+        );
         if (!isParty && res.error === "no_credits") {
           setTab("canjear");
         }
@@ -383,7 +395,11 @@ export function ClientNight({ slug }: { slug: string }) {
     const chosenTrack = choice === "A" ? activeDuel.trackA : activeDuel.trackB;
     try {
       await castPartyDuelVote(slug, activeDuel.duelId, choice, chosenTrack.id);
-      await castVote(chosenTrack.id);
+      if (isParty) {
+        await castPartyVote(slug, chosenTrack.id);
+      } else {
+        await castVote(chosenTrack.id);
+      }
       notify(`⚡ ¡Votaste por «${chosenTrack.title}» en el Duelo!`, "ok");
       await refresh();
     } catch {
@@ -850,6 +866,7 @@ export function ClientNight({ slug }: { slug: string }) {
               transition={{ duration: 0.2 }}
             >
               <ProposalSearch
+                slug={slug}
                 queue={activeQueue}
                 candidates={candidateProposals}
                 proposalsEnabled={state.settings.proposalsEnabled}

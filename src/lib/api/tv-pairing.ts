@@ -19,6 +19,7 @@ export interface TvPairingConfirmResponse {
 export interface TvPairingStatusResponse {
   ok: boolean;
   paired: boolean;
+  slug?: string;
   token?: string;
   deviceId?: string;
   name?: string;
@@ -52,25 +53,47 @@ export interface PlayerDeviceItem {
 }
 
 export async function requestTvPairingCode(
-  slug: string,
+  slug: string = "",
   deviceName: string = "TV Salón",
 ): Promise<TvPairingCodeResponse> {
-  const supabase = createBrowserSupabase();
-  const { data, error } = await supabase.rpc("request_tv_pairing_code" as never, {
-    p_venue_slug: slug,
-    p_device_name: deviceName,
-  } as never);
+  if (slug) {
+    try {
+      const supabase = createBrowserSupabase();
+      const { data, error } = await supabase.rpc("request_tv_pairing_code" as never, {
+        p_venue_slug: slug,
+        p_device_name: deviceName,
+      } as never);
 
-  if (error) {
-    throw new Error(error.message);
+      if (!error && data) {
+        const res = data as TvPairingCodeResponse;
+        if (res.ok) return res;
+      }
+    } catch {
+      // Fallback to /api/tv/pair
+    }
   }
 
-  const res = data as TvPairingCodeResponse;
-  if (!res.ok) {
-    throw new Error(res.error || "Error al solicitar código de vinculación");
+  try {
+    const res = await fetch("/api/tv/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "request",
+        slug,
+        deviceName,
+      }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as TvPairingCodeResponse;
+      if (data.ok && data.code) {
+        return data;
+      }
+    }
+  } catch {
+    // Ignore
   }
 
-  return res;
+  throw new Error("Error al solicitar código de vinculación");
 }
 
 export async function confirmTvPairingCode(
@@ -79,19 +102,51 @@ export async function confirmTvPairingCode(
   deviceName?: string,
 ): Promise<TvPairingConfirmResponse> {
   const supabase = createBrowserSupabase();
-  const { data, error } = await supabase.rpc("confirm_tv_pairing_code" as never, {
-    p_venue_slug: slug,
-    p_code: code,
-    p_device_name: deviceName || null,
-  } as never);
+  let confirmed: TvPairingConfirmResponse | null = null;
 
-  if (error) {
-    throw new Error(error.message);
+  try {
+    const { data, error } = await supabase.rpc("confirm_tv_pairing_code" as never, {
+      p_venue_slug: slug,
+      p_code: code,
+      p_device_name: deviceName || null,
+    } as never);
+
+    if (!error && data) {
+      const res = data as TvPairingConfirmResponse;
+      if (res.ok) {
+        confirmed = res;
+      }
+    }
+  } catch {
+    // Fallback to /api/tv/pair for zero-state unassigned PINs
   }
 
-  const res = data as TvPairingConfirmResponse;
-  if (!res.ok) {
-    throw new Error(res.error || "Código inválido o vencido");
+  if (!confirmed) {
+    let apiErrorMsg: string | null = null;
+    try {
+      const apiRes = await fetch("/api/tv/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm",
+          slug,
+          code,
+          deviceName: deviceName || null,
+        }),
+      });
+      const apiData = (await apiRes.json()) as TvPairingConfirmResponse;
+      if (apiData.ok) {
+        confirmed = apiData;
+      } else if (apiData.error) {
+        apiErrorMsg = apiData.error;
+      }
+    } catch {
+      // Ignore fetch errors in non-browser tests
+    }
+
+    if (!confirmed) {
+      throw new Error(apiErrorMsg || "Código inválido o vencido");
+    }
   }
 
   // Broadcast to TV in realtime
@@ -109,9 +164,10 @@ export async function confirmTvPairingCode(
         event: "tv_paired",
         payload: {
           code,
-          token: res.token,
-          deviceId: res.deviceId,
-          name: res.name,
+          slug,
+          token: confirmed.token,
+          deviceId: confirmed.deviceId,
+          name: confirmed.name,
         },
       });
     }
@@ -119,24 +175,48 @@ export async function confirmTvPairingCode(
     // Non-blocking fallback
   }
 
-  return res;
+  return confirmed;
 }
 
 export async function checkTvPairingStatus(
   slug: string,
   code: string,
 ): Promise<TvPairingStatusResponse> {
-  const supabase = createBrowserSupabase();
-  const { data, error } = await supabase.rpc("check_tv_pairing_status" as never, {
-    p_venue_slug: slug,
-    p_code: code,
-  } as never);
+  if (slug) {
+    try {
+      const supabase = createBrowserSupabase();
+      const { data, error } = await supabase.rpc("check_tv_pairing_status" as never, {
+        p_venue_slug: slug,
+        p_code: code,
+      } as never);
 
-  if (error) {
-    throw new Error(error.message);
+      if (!error && data) {
+        const res = data as TvPairingStatusResponse;
+        if (res.paired) return res;
+      }
+    } catch {
+      // Fallback to /api/tv/pair
+    }
   }
 
-  return data as TvPairingStatusResponse;
+  try {
+    const apiRes = await fetch("/api/tv/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "check",
+        slug,
+        code,
+      }),
+    });
+    if (apiRes.ok) {
+      return (await apiRes.json()) as TvPairingStatusResponse;
+    }
+  } catch {
+    // Ignore
+  }
+
+  return { ok: true, paired: false };
 }
 
 export async function listVenuePlayerDevices(

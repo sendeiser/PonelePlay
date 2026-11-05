@@ -93,29 +93,29 @@ export default function HomePage() {
 
         {/* 3 Entry Point Bento Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full mt-8 text-left">
-          {/* Card 1: Cliente Móvil */}
+          {/* Card 1: Crear Sala / Modo Fiesta o Bar */}
           <Link
-            href="/p/billar-aurora"
+            href="/signup"
             prefetch={true}
             className="group block bg-[#181b25] border border-[#232b42] hover:border-indigo-500/50 rounded-2xl p-6 transition-all shadow-xl hover:shadow-[0_0_24px_-4px_rgba(99,102,241,0.25)]"
           >
             <div className="size-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-4 group-hover:scale-105 transition-transform">
-              <span className="material-symbols-outlined text-2xl">smartphone</span>
+              <span className="material-symbols-outlined text-2xl">celebration</span>
             </div>
             <h2 className="text-lg font-bold text-white mb-1.5 flex items-center justify-between">
-              <span>Cliente Móvil</span>
+              <span>Crear Bar o Fiesta</span>
               <span className="material-symbols-outlined text-sm text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all">
                 arrow_forward
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              Ver la cola en vivo, canjear vouchers de 8 caracteres y votar temas en rondas dinámicas.
+              Creá tu cabina para Bar Comercial (con vouchers) o Modo Fiesta / Cumpleaños (todo desbloqueado).
             </p>
           </Link>
 
-          {/* Card 2: Panel de Noche */}
+          {/* Card 2: Panel de Control */}
           <Link
-            href="/panel/billar-aurora"
+            href="/login"
             prefetch={true}
             className="group block bg-[#181b25] border border-[#232b42] hover:border-indigo-500/50 rounded-2xl p-6 transition-all shadow-xl hover:shadow-[0_0_24px_-4px_rgba(99,102,241,0.25)]"
           >
@@ -129,13 +129,13 @@ export default function HomePage() {
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              Reproducción de audio exclusiva, expedición de tickets en modal, moderación y control de rondas.
+              Iniciá sesión en tu cabina para controlar la música, vincular pantallas TV y moderar la cola en vivo.
             </p>
           </Link>
 
           {/* Card 3: Pantalla TV */}
           <Link
-            href="/player/billar-aurora"
+            href="/tv"
             prefetch={true}
             className="group block bg-[#181b25] border border-[#232b42] hover:border-indigo-500/50 rounded-2xl p-6 transition-all shadow-xl hover:shadow-[0_0_24px_-4px_rgba(99,102,241,0.25)]"
           >
@@ -149,7 +149,7 @@ export default function HomePage() {
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed font-mono">
-              Cartelera visual pasiva con vinilo rotatorio, sincronizada mediante código PIN y QR para clientes.
+              Vinculá cualquier Smart TV desde cero mediante código PIN de 6 dígitos con la cabina de tu cuenta.
             </p>
           </Link>
         </div>

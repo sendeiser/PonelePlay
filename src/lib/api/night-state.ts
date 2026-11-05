@@ -13,7 +13,63 @@ export async function fetchNightState(slug: string): Promise<NightState> {
     throw new Error(error.message);
   }
 
-  return nightStateSchema.parse(data);
+  const parsed = nightStateSchema.parse(data);
+
+  // Enrich with server PartyConfig & guest metadata if available
+  try {
+    if (typeof fetch === "function") {
+      const res = await fetch(`/api/party/config?slug=${encodeURIComponent(slug)}`, {
+        cache: "no-store",
+      });
+      if (res.ok) {
+        const partyRes = await res.json();
+        if (partyRes?.ok && partyRes?.partyConfig) {
+          const partyConfig = partyRes.partyConfig;
+          const itemMeta = (partyRes.itemMeta || {}) as Record<
+            string,
+            { guestName?: string | null; dedication?: string | null; isKaraoke?: boolean }
+          >;
+
+          const enrichItem = <
+            T extends {
+              id: string;
+              trackId?: string;
+              guestName?: string | null;
+              dedication?: string | null;
+              isKaraoke?: boolean;
+            },
+          >(
+            item: T,
+          ): T => {
+            const meta = itemMeta[item.id] || (item.trackId ? itemMeta[item.trackId] : undefined);
+            if (!meta) return item;
+            return {
+              ...item,
+              guestName: item.guestName ?? meta.guestName ?? null,
+              dedication: item.dedication ?? meta.dedication ?? null,
+              isKaraoke: item.isKaraoke ?? meta.isKaraoke ?? false,
+            };
+          };
+
+          return {
+            ...parsed,
+            partyConfig,
+            settings: {
+              ...parsed.settings,
+              partyConfig,
+            },
+            nowPlaying: parsed.nowPlaying ? enrichItem(parsed.nowPlaying) : null,
+            queue: parsed.queue.map(enrichItem),
+            candidates: (parsed.candidates ?? []).map(enrichItem),
+          };
+        }
+      }
+    }
+  } catch {
+    // Non-blocking fallback if /api/party/config is unavailable
+  }
+
+  return parsed;
 }
 
 export function createNightStateSource(slug: string): NightStateSource {

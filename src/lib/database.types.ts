@@ -86,9 +86,12 @@ export interface Database {
         venue_id: string;
         night_session_id: string;
         track_id: string;
-        status: "queued" | "playing" | "played" | "skipped" | "vetoed" | "failed";
+        status: "proposed" | "queued" | "playing" | "played" | "skipped" | "vetoed" | "failed";
         vote_count: number;
         proposed_by_participant_id: string | null;
+        guest_name?: string | null;
+        dedication?: string | null;
+        is_karaoke?: boolean;
         created_at: string;
         started_at: string | null;
         ended_at: string | null;
@@ -160,6 +163,17 @@ export interface Database {
         last_command: string | null;
         command_seq: number;
         updated_at: string;
+      }>;
+      tv_pairing_codes: TableDefinition<{
+        id: string;
+        venue_slug: string;
+        code: string;
+        device_name: string;
+        raw_token: string;
+        paired: boolean;
+        paired_device_id: string | null;
+        created_at: string;
+        expires_at: string;
       }>;
     };
     Views: {

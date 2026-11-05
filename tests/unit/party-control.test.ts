@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildPartyBroadcastPayload,
+  castPartyVote,
   normalizePartyConfigPatch,
+  saveStoredPartyConfig,
+  updatePartyConfig,
 } from "@/lib/api/party-control";
+import { DEFAULT_PARTY_CONFIG } from "@/lib/domain/party";
 
 describe("Party Control API & Broadcast Helpers", () => {
   it("normalizes party config patch clamping negative votesPerGuest to 0 and minVotesToQueue to >= 1", () => {
@@ -14,6 +18,28 @@ describe("Party Control API & Broadcast Helpers", () => {
     });
     expect(patch.votesPerGuest).toBe(0);
     expect(patch.minVotesToQueue).toBe(1);
+  });
+
+  it("locks venueType as party once in party mode and prevents switching to bar", async () => {
+    saveStoredPartyConfig("cumple-tincho", DEFAULT_PARTY_CONFIG);
+    const updated = await updatePartyConfig("cumple-tincho", {
+      venueType: "bar",
+      votesPerGuest: 0,
+    });
+    expect(updated.venueType).toBe("party");
+  });
+
+  it("casts party vote via /api/party/vote without requiring bar credits", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ok: true, itemId: "qi-1", voteCount: 4, creditsBalance: 99999 }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const res = await castPartyVote("cumple-tincho", "qi-1");
+    expect(res.ok).toBe(true);
+    expect(res.voteCount).toBe(4);
+    fetchSpy.mockRestore();
   });
 
   it("builds duel and roulette realtime payloads cleanly", () => {

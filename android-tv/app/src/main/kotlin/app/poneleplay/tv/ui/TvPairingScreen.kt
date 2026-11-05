@@ -42,9 +42,8 @@ import java.util.*
 fun TvPairingScreen(
     serverUrl: String,
     venueSlug: String,
-    onPaired: (token: String, deviceId: String) -> Unit,
+    onPaired: (token: String, deviceId: String, slug: String) -> Unit,
     onOpenSettings: () -> Unit,
-    onBypass: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var pairingCode by remember { mutableStateOf<String?>(null) }
@@ -54,16 +53,16 @@ fun TvPairingScreen(
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isSuccess by remember { mutableStateOf(false) }
-    var isPairedToken by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var isPairedData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
     val firstFocusRequester = remember { FocusRequester() }
     val successFocusRequester = remember { FocusRequester() }
 
     // When pairing is confirmed, automatically transition after 1.2s delay
-    LaunchedEffect(isPairedToken) {
-        val pair = isPairedToken ?: return@LaunchedEffect
+    LaunchedEffect(isPairedData) {
+        val data = isPairedData ?: return@LaunchedEffect
         delay(1200)
-        onPaired(pair.first, pair.second)
+        onPaired(data.first, data.second, data.third)
     }
 
     // Auto-focus success button if paired
@@ -177,7 +176,7 @@ fun TvPairingScreen(
     LaunchedEffect(pairingCode) {
         val currentCode = pairingCode ?: return@LaunchedEffect
 
-        while (isActive && isPairedToken == null) {
+        while (isActive && isPairedData == null) {
             delay(2500)
             withContext(Dispatchers.IO) {
                 try {
@@ -203,14 +202,15 @@ fun TvPairingScreen(
                         val responseText = conn.inputStream.bufferedReader().use { it.readText() }
                         val json = JSONObject(responseText)
                         val isPaired = json.optBoolean("paired", false)
+                        val pairedSlug = json.optString("slug", "").trim().ifBlank { venueSlug.trim() }
                         val rawToken = json.optString("token", "")
                         val deviceId = json.optString("deviceId", "")
-                        val finalToken = if (rawToken.isNotBlank()) rawToken else "tv-session-$venueSlug"
+                        val finalToken = if (rawToken.isNotBlank()) rawToken else "tv-session-$pairedSlug"
 
-                        if (isPaired) {
+                        if (isPaired && pairedSlug.isNotBlank()) {
                             withContext(Dispatchers.Main) {
                                 isSuccess = true
-                                isPairedToken = Pair(finalToken, deviceId)
+                                isPairedData = Triple(finalToken, deviceId, pairedSlug)
                             }
                         }
                     }
@@ -283,7 +283,7 @@ fun TvPairingScreen(
                     )
 
                     Text(
-                        text = "•  Local: $venueSlug",
+                        text = if (venueSlug.isNotBlank()) "•  Cabina: $venueSlug" else "•  En cero · Lista para vincular con tu cabina",
                         color = Color(0xFF22D3EE),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -352,8 +352,10 @@ fun TvPairingScreen(
                         TVButton(
                             text = "▶️ Entrar al Reproductor Ahora",
                             onClick = {
-                                val pair = isPairedToken
-                                onPaired(pair?.first ?: "tv-session-$venueSlug", pair?.second ?: "")
+                                val data = isPairedData
+                                if (data != null) {
+                                    onPaired(data.first, data.second, data.third)
+                                }
                             },
                             isPrimary = true,
                             focusRequester = successFocusRequester
@@ -418,10 +420,6 @@ fun TvPairingScreen(
                             TVButton(
                                 text = "⚙️ Abrir Ajustes",
                                 onClick = onOpenSettings
-                            )
-                            TVButton(
-                                text = "📺 Probar Player Directo",
-                                onClick = onBypass
                             )
                         }
                     }
@@ -556,13 +554,8 @@ fun TvPairingScreen(
                             )
 
                             TVButton(
-                                text = "⚙️ Cambiar Local / Red",
+                                text = "⚙️ Ajustes de Pantalla",
                                 onClick = onOpenSettings
-                            )
-
-                            TVButton(
-                                text = "📺 Modo Libre (Sin PIN)",
-                                onClick = onBypass
                             )
                         }
                     }

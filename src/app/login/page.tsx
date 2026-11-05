@@ -9,6 +9,7 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const nextParam = searchParams.get("next");
+  const pairCodeParam = searchParams.get("pair_code");
 
   const [authMode, setAuthMode] = useState<"owner" | "pin">("owner");
   const [pin, setPin] = useState("");
@@ -116,7 +117,8 @@ function LoginForm() {
       }
 
       const slug = res.slug || (await getOwnerVenueSlug());
-      router.push(`/panel/${slug || "billar-aurora"}`);
+      const pairQuery = pairCodeParam ? `?pair_code=${encodeURIComponent(pairCodeParam)}` : "";
+      router.push(`/panel/${slug || "billar-aurora"}${pairQuery}`);
       router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error inesperado al iniciar sesión.");

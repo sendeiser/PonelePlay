@@ -205,6 +205,21 @@ export async function POST(req: NextRequest) {
       }
 
       if (isParty) {
+        await admin.from("venue_playlists").insert({
+          venue_id: newVenue.id,
+          name: "__party_config__",
+          description: JSON.stringify({
+            venueType: "party",
+            partyMode: "hybrid_turbo",
+            votesPerGuest: 0,
+            minVotesToQueue: 1,
+            allowDedications: true,
+            allowGuestKaraoke: true,
+            turboCooldownSeconds: 180,
+          }),
+          is_active: false,
+        });
+
         await admin
           .from("venue_settings")
           .update({

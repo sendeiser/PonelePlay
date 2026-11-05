@@ -21,11 +21,8 @@ import app.poneleplay.tv.TVButton
 fun TvSettingsDialog(
     isOpen: Boolean,
     currentSlug: String,
-    currentServer: String,
     currentMode: TvScreenMode,
     isMuted: Boolean,
-    onSelectSlug: (String) -> Unit,
-    onSelectServer: (String) -> Unit,
     onToggleMode: () -> Unit,
     onToggleMute: () -> Unit,
     onUnpair: () -> Unit,
@@ -70,7 +67,7 @@ fun TvSettingsDialog(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        text = "App Nativa v2.0",
+                        text = "App Nativa v2.5",
                         color = Color(0xFF22D3EE),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -115,7 +112,7 @@ fun TvSettingsDialog(
                     ) {
                         Column {
                             Text(
-                                text = "LOCAL VINCULADO:",
+                                text = "CUENTA / CABINA VINCULADA:",
                                 color = Color(0xFF94A3B8),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
@@ -123,8 +120,8 @@ fun TvSettingsDialog(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = currentSlug.ifBlank { "Sin vincular" }.uppercase(),
-                                color = Color(0xFF38BDF8),
+                                text = currentSlug.ifBlank { "SIN VINCULAR (EN CERO)" }.uppercase(),
+                                color = if (currentSlug.isNotBlank()) Color(0xFF38BDF8) else Color(0xFFFBBF24),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontFamily = FontFamily.Monospace
@@ -132,39 +129,10 @@ fun TvSettingsDialog(
                         }
 
                         Text(
-                            text = "✅ Vinculado por PIN",
-                            color = Color(0xFF34D399),
+                            text = if (currentSlug.isNotBlank()) "✅ Vinculado por PIN" else "⏳ Esperando PIN",
+                            color = if (currentSlug.isNotBlank()) Color(0xFF34D399) else Color(0xFFFBBF24),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-
-                // Server URL Toggle
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "SERVIDOR:",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        TVButton(
-                            text = "Cloud (Netlify)",
-                            onClick = { onSelectServer("https://poneleplay.netlify.app") },
-                            modifier = Modifier.weight(1f),
-                            isPrimary = currentServer.contains("netlify")
-                        )
-                        TVButton(
-                            text = "LAN Local (192.168.18.2)",
-                            onClick = { onSelectServer("http://192.168.18.2:3000") },
-                            modifier = Modifier.weight(1f),
-                            isPrimary = currentServer.contains("192.168")
                         )
                     }
                 }
@@ -173,7 +141,7 @@ fun TvSettingsDialog(
 
                 // Unpair / PIN Linking Button
                 TVButton(
-                    text = "🔑 Desvincular Pantalla / Vincular por PIN",
+                    text = "🔑 Desvincular Pantalla / Vincular con otra Cabina",
                     onClick = onUnpair,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -205,4 +173,3 @@ fun TvSettingsDialog(
         }
     }
 }
-

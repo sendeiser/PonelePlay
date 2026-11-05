@@ -1,36 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Monitor, ArrowRight, Sparkles, Tv, ShieldCheck } from "lucide-react";
+import { Monitor, ArrowRight, Tv, ShieldCheck, RefreshCw, Loader2 } from "lucide-react";
+import { requestTvPairingCode, checkTvPairingStatus } from "@/lib/api/tv-pairing";
 
 export default function TvEntryPage() {
   const router = useRouter();
   const [slug, setSlug] = useState("");
-  const [lastSlug, setLastSlug] = useState<string | null>(null);
+  const [pinCode, setPinCode] = useState<string | null>(null);
+  const [loadingPin, setLoadingPin] = useState(true);
+  const [pinError, setPinError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const generateZeroPin = useCallback(async () => {
+    setLoadingPin(true);
+    setPinError(null);
     try {
-      const saved = localStorage.getItem("poneleplay.last_tv_venue");
-      if (saved) {
-        setLastSlug(saved);
-        setSlug(saved);
-      }
-    } catch {
-      // Ignore
+      const res = await requestTvPairingCode("", "Smart TV Web");
+      setPinCode(res.code);
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : "Error al generar código PIN");
+    } finally {
+      setLoadingPin(false);
     }
   }, []);
+
+  useEffect(() => {
+    void generateZeroPin();
+  }, [generateZeroPin]);
+
+  // Poll for PIN confirmation from any Cabina
+  useEffect(() => {
+    if (!pinCode) return;
+    let active = true;
+
+    const timer = setInterval(async () => {
+      if (!active) return;
+      try {
+        const res = await checkTvPairingStatus("", pinCode);
+        if (active && res.paired && res.slug) {
+          const tokenParam = res.token ? `?token=${encodeURIComponent(res.token)}` : "";
+          router.push(`/player/${res.slug}${tokenParam}`);
+        }
+      } catch {
+        // Ignore transient polling errors
+      }
+    }, 2500);
+
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [pinCode, router]);
 
   function handleConnect(targetSlug: string) {
     const cleanSlug = targetSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
     if (!cleanSlug) return;
-    try {
-      localStorage.setItem("poneleplay.last_tv_venue", cleanSlug);
-    } catch {
-      // Ignore
-    }
     router.push(`/player/${cleanSlug}`);
   }
+
+  const digits = pinCode ? pinCode.split("") : ["-", "-", "-", "-", "-", "-"];
 
   return (
     <div className="min-h-screen w-full bg-[#07090e] text-[#dfe2ef] flex flex-col justify-between p-6 sm:p-12 relative overflow-hidden select-none">
@@ -52,91 +81,105 @@ export default function TvEntryPage() {
               </span>
             </h1>
             <p className="text-xs sm:text-sm font-mono text-slate-400">
-              Reproductor interactivo para Smart TV y pantallas del bar
+              Pantalla en cero lista para vincularse con tu cuenta / cabina
             </p>
           </div>
         </div>
 
         <div className="hidden sm:flex items-center gap-2 font-mono text-xs text-slate-400 bg-[#101420] px-3.5 py-1.5 rounded-xl border border-[#1e2333]">
           <ShieldCheck className="size-4 text-emerald-400" />
-          <span>Multi-Pantalla Ready</span>
+          <span>Vinculación Automática por PIN</span>
         </div>
       </header>
 
       {/* Central Card */}
       <main className="z-10 w-full max-w-xl mx-auto my-auto py-8">
-        <div className="bg-[#0f1320] border border-[#232b42] rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-md">
-          <div className="text-center mb-8 space-y-2">
-            <div className="inline-flex size-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 items-center justify-center text-indigo-400 mb-2">
+        <div className="bg-[#0f1320] border border-[#232b42] rounded-3xl p-6 sm:p-10 shadow-2xl backdrop-blur-md space-y-7">
+          <div className="text-center space-y-2">
+            <div className="inline-flex size-14 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 items-center justify-center text-indigo-400 mb-1">
               <Monitor className="size-7 text-cyan-400" />
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Conectar esta Pantalla
+              Vincular con tu Cabina
             </h2>
-            <p className="text-sm font-mono text-slate-400 max-w-md mx-auto">
-              Ingresá el código o identificador de tu local para sincronizar la música y la cola de espera en vivo.
+            <p className="text-xs sm:text-sm font-mono text-slate-400 max-w-md mx-auto">
+              En tu Panel de Control abrí <strong>«Pantallas TV (PIN)»</strong> e ingresá este código de 6 dígitos para configurar esta pantalla automáticamente.
             </p>
           </div>
 
+          {/* 6-Digit PIN Display */}
+          <div className="bg-[#080b12] border border-[#232b42] rounded-2xl p-5 flex flex-col items-center gap-4">
+            <span className="text-[11px] font-mono font-bold text-cyan-400 uppercase tracking-widest">
+              Código PIN de esta TV
+            </span>
+
+            {loadingPin ? (
+              <div className="flex items-center gap-2 py-4 text-slate-400 font-mono text-xs">
+                <Loader2 className="size-5 animate-spin text-cyan-400" />
+                <span>Generando código PIN...</span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2 sm:gap-3">
+                {digits.map((d, idx) => (
+                  <div
+                    key={idx}
+                    className="w-11 h-14 sm:w-13 sm:h-16 rounded-xl bg-[#131b2e] border-2 border-cyan-500/60 flex items-center justify-center text-2xl sm:text-3xl font-mono font-black text-white shadow-lg"
+                  >
+                    {d}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {pinError && (
+              <p className="text-xs font-mono text-rose-400">{pinError}</p>
+            )}
+
+            <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
+                Esperando vinculación desde la cabina...
+              </span>
+              <button
+                type="button"
+                onClick={() => void generateZeroPin()}
+                className="text-indigo-400 hover:text-white inline-flex items-center gap-1 underline underline-offset-4"
+              >
+                <RefreshCw className="size-3" />
+                <span>Nuevo PIN</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Optional manual slug entry (starts completely empty) */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
               handleConnect(slug);
             }}
-            className="space-y-5"
+            className="pt-4 border-t border-[#1e2333] space-y-3"
           >
-            <div>
-              <label className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider mb-2">
-                Código del Bar / Local
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  autoFocus
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  placeholder="ej: billar-aurora"
-                  className="w-full bg-[#080b12] border-2 border-[#2b354f] focus:border-cyan-400 rounded-2xl px-5 py-4 text-lg sm:text-xl font-mono text-white placeholder:text-slate-600 outline-none transition-all tracking-wide"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={!slug.trim()}
-              className="w-full py-4 rounded-2xl bg-gradient-to-r from-cyan-500 via-indigo-600 to-indigo-700 hover:brightness-110 active:scale-[0.99] text-white font-mono font-bold text-base sm:text-lg shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-3 transition-all disabled:opacity-40"
-            >
-              <span>Iniciar Pantalla TV</span>
-              <ArrowRight className="size-5" />
-            </button>
-          </form>
-
-          {/* Quick Shortcuts */}
-          <div className="mt-8 pt-6 border-t border-[#1e2333] space-y-3">
-            <span className="text-xs font-mono text-slate-400 block text-center">
-              Acceso rápido con 1 click:
-            </span>
-            <div className="flex flex-wrap items-center justify-center gap-2">
+            <label className="block text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+              O ingresá el identificador de tu cuenta / cabina manualmente
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <input
+                type="text"
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
+                placeholder="Identificador de tu cabina"
+                className="flex-1 bg-[#080b12] border border-[#2b354f] focus:border-cyan-400 rounded-xl px-4 py-3 text-sm font-mono text-white placeholder:text-slate-600 outline-none transition-all"
+              />
               <button
-                type="button"
-                onClick={() => handleConnect("billar-aurora")}
-                className="px-4 py-2 rounded-xl bg-[#141824] hover:bg-[#1a2133] border border-[#232b42] text-xs font-mono text-cyan-300 hover:text-white flex items-center gap-2 transition-all"
+                type="submit"
+                disabled={!slug.trim()}
+                className="px-5 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:brightness-110 text-white font-mono font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-40 shrink-0"
               >
-                <Sparkles className="size-3.5 text-amber-400" />
-                <span>billar-aurora (Demo Oficial)</span>
+                <span>Conectar</span>
+                <ArrowRight className="size-4" />
               </button>
-              {lastSlug && lastSlug !== "billar-aurora" && (
-                <button
-                  type="button"
-                  onClick={() => handleConnect(lastSlug)}
-                  className="px-4 py-2 rounded-xl bg-[#141824] hover:bg-[#1a2133] border border-[#232b42] text-xs font-mono text-indigo-300 hover:text-white flex items-center gap-2 transition-all"
-                >
-                  <Monitor className="size-3.5" />
-                  <span>Último usado: {lastSlug}</span>
-                </button>
-              )}
             </div>
-          </div>
+          </form>
         </div>
       </main>
 
@@ -145,10 +188,7 @@ export default function TvEntryPage() {
         <div className="flex items-center gap-2">
           <span>PonelePlay Smart TV System</span>
           <span>•</span>
-          <span>Soporta vinculación remota mediante PIN de 6 dígitos</span>
-        </div>
-        <div className="text-slate-400">
-          Tip: En el panel de control podés vincular tantas TVs como desees.
+          <span>Sin configuración previa · Se configura automáticamente con la cabina vinculada</span>
         </div>
       </footer>
     </div>
