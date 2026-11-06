@@ -81,6 +81,14 @@ data class TvSkipVote(
     val threshold: Int
 )
 
+data class TvLiveDedication(
+    val guestName: String?,
+    val message: String,
+    val style: String = "neon",
+    val repeats: Int = 2,
+    val timestamp: Long = 0L
+)
+
 data class TvFeed(
     val ok: Boolean,
     val venue: TvVenue,
@@ -92,6 +100,7 @@ data class TvFeed(
     val activeDuel: TvDuel? = null,
     val activeRoulette: TvRoulette? = null,
     val activeSkipVote: TvSkipVote? = null,
+    val liveDedication: TvLiveDedication? = null,
     val clientUrl: String,
     val serverTime: String
 )
@@ -289,6 +298,20 @@ object TvFeedParser {
             )
         } else null
 
+        val dedObj = root.optJSONObject("liveDedication")
+        val liveDedication = if (dedObj != null && !dedObj.isNull("message")) {
+            val msg = dedObj.optString("message", "").trim()
+            if (msg.isNotEmpty()) {
+                TvLiveDedication(
+                    guestName = optNullableString(dedObj, "guestName"),
+                    message = msg,
+                    style = dedObj.optString("style", "neon"),
+                    repeats = dedObj.optInt("repeats", 2),
+                    timestamp = dedObj.optLong("timestamp", 0L)
+                )
+            } else null
+        } else null
+
         return TvFeed(
             ok = root.optBoolean("ok", true),
             venue = venue,
@@ -300,6 +323,7 @@ object TvFeedParser {
             activeDuel = activeDuel,
             activeRoulette = activeRoulette,
             activeSkipVote = activeSkipVote,
+            liveDedication = liveDedication,
             clientUrl = root.optString("clientUrl", "https://poneleplay.netlify.app"),
             serverTime = root.optString("serverTime", "")
         )

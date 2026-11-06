@@ -2,6 +2,7 @@ package app.poneleplay.tv.ui
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -270,13 +271,23 @@ fun TvScreen(
         }
 
         // 3. Horizontal Marquee across the middle of the screen (Left to Right) for Dedications
-        val dedicationText = feed.nowPlaying?.dedication
+        val liveDed = feed.liveDedication
+        val dedicationText = liveDed?.message ?: feed.nowPlaying?.dedication
+        val dedicationGuest = liveDed?.guestName ?: feed.nowPlaying?.guestName
+        val dedicationStyle = liveDed?.style ?: "neon"
+        val dedicationRepeats = liveDed?.repeats ?: 2
+        val dedicationKey = "${liveDed?.timestamp ?: feed.nowPlaying?.id ?: "ded"}-$dedicationText"
+
         if (!dedicationText.isNullOrBlank()) {
-            DedicationHorizontalMarquee(
-                dedication = dedicationText,
-                guestName = feed.nowPlaying?.guestName,
-                modifier = Modifier.align(Alignment.Center)
-            )
+            key(dedicationKey) {
+                DedicationHorizontalMarquee(
+                    dedication = dedicationText,
+                    guestName = dedicationGuest,
+                    style = dedicationStyle,
+                    repeats = dedicationRepeats,
+                    modifier = Modifier.align(Alignment.Center)
+                )
+            }
         }
 
         // 4. Vote-to-Skip Live Indicator Badge
@@ -582,7 +593,8 @@ private fun TvModeVideoOverlays(
                         fontWeight = FontWeight.Medium,
                         maxLines = 1
                     )
-                    if (!feed.nowPlaying?.dedication.isNullOrBlank()) {
+                    val bottomDedication = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
+                    if (!bottomDedication.isNullOrBlank()) {
                         Spacer(modifier = Modifier.height((4 * scaleFactor).dp))
                         Box(
                             modifier = Modifier
@@ -591,7 +603,7 @@ private fun TvModeVideoOverlays(
                                 .padding(horizontal = (10 * scaleFactor).dp, vertical = (4 * scaleFactor).dp)
                         ) {
                             Text(
-                                text = "💬 \"${feed.nowPlaying?.dedication}\"",
+                                text = "💬 \"$bottomDedication\"",
                                 color = Color(0xFFFDF2F8),
                                 fontSize = (11.5f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
@@ -836,7 +848,10 @@ private fun TvModePlaylistOverlays(
                                 overflow = TextOverflow.Ellipsis
                             )
 
-                            if (!feed.nowPlaying?.guestName.isNullOrBlank() || !feed.nowPlaying?.dedication.isNullOrBlank()) {
+                            val playlistDedication = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
+                            val playlistGuest = feed.liveDedication?.guestName ?: feed.nowPlaying?.guestName
+
+                            if (!playlistGuest.isNullOrBlank() || !playlistDedication.isNullOrBlank()) {
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Column(
                                     modifier = Modifier
@@ -845,19 +860,19 @@ private fun TvModePlaylistOverlays(
                                         .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(10.dp))
                                         .padding(horizontal = 10.dp, vertical = 8.dp)
                                 ) {
-                                    if (!feed.nowPlaying?.guestName.isNullOrBlank()) {
+                                    if (!playlistGuest.isNullOrBlank()) {
                                         Text(
-                                            text = "🎉 Pedido por ${feed.nowPlaying?.guestName}",
+                                            text = "🎉 Pedido por $playlistGuest",
                                             color = Color(0xFFF472B6),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontFamily = FontFamily.Monospace
                                         )
                                     }
-                                    if (!feed.nowPlaying?.dedication.isNullOrBlank()) {
+                                    if (!playlistDedication.isNullOrBlank()) {
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "💬 \"${feed.nowPlaying?.dedication}\"",
+                                            text = "💬 \"$playlistDedication\"",
                                             color = Color(0xFFFDF2F8),
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.SemiBold,
@@ -1196,6 +1211,16 @@ private fun ProposalItemRow(proposal: TvProposal, theme: TvDesignTheme = getTvDe
     }
 }
 
+private data class DedicationThemeConfig(
+    val bgBrush: Brush,
+    val borderColor: Color,
+    val leadEmoji: String,
+    val tailEmoji: String,
+    val badgeBg: Color,
+    val badgeBorder: Color,
+    val badgeTextColor: Color
+)
+
 /**
  * Horizontal Marquee across the vertical middle of the TV screen moving from Left to Right.
  */
@@ -1203,51 +1228,107 @@ private fun ProposalItemRow(proposal: TvProposal, theme: TvDesignTheme = getTvDe
 private fun DedicationHorizontalMarquee(
     dedication: String,
     guestName: String?,
+    style: String = "neon",
+    repeats: Int = 2,
     modifier: Modifier = Modifier
 ) {
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp.toFloat().coerceAtLeast(640f)
-    val transition = rememberInfiniteTransition(label = "dedication_marquee")
-    val progress by transition.animateFloat(
-        initialValue = -0.95f,
-        targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 15000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "dedication_offset_ltr"
-    )
+    var isFinished by remember { mutableStateOf(false) }
+
+    if (isFinished) return
+
+    val progress = remember { Animatable(-1.0f) }
+
+    LaunchedEffect(dedication, repeats) {
+        val animDuration = 14000
+        if (repeats == 0) {
+            while (true) {
+                progress.snapTo(-1.0f)
+                progress.animateTo(1.0f, animationSpec = tween(durationMillis = animDuration, easing = LinearEasing))
+            }
+        } else {
+            for (i in 1..repeats) {
+                progress.snapTo(-1.0f)
+                progress.animateTo(1.0f, animationSpec = tween(durationMillis = animDuration, easing = LinearEasing))
+            }
+            isFinished = true
+        }
+    }
+
+    val themeCfg = when (style.lowercase()) {
+        "gold" -> DedicationThemeConfig(
+            bgBrush = Brush.horizontalGradient(listOf(Color(0xF2D97706), Color(0xF2CA8A04), Color(0xF2B45309))),
+            borderColor = Color(0xFFFDE047),
+            leadEmoji = "👑",
+            tailEmoji = "✨",
+            badgeBg = Color(0x73000000),
+            badgeBorder = Color(0xFFFDE047),
+            badgeTextColor = Color(0xFFFEF08A)
+        )
+        "cyber" -> DedicationThemeConfig(
+            bgBrush = Brush.horizontalGradient(listOf(Color(0xF206B6D4), Color(0xF22563EB), Color(0xF24338CA))),
+            borderColor = Color(0xFF67E8F9),
+            leadEmoji = "⚡",
+            tailEmoji = "🛸",
+            badgeBg = Color(0x73000000),
+            badgeBorder = Color(0xFF67E8F9),
+            badgeTextColor = Color(0xFFA5F3FC)
+        )
+        "minimal" -> DedicationThemeConfig(
+            bgBrush = Brush.horizontalGradient(listOf(Color(0xF20A0D16), Color(0xF2161B26), Color(0xF20A0D16))),
+            borderColor = Color(0xFF64748B),
+            leadEmoji = "💬",
+            tailEmoji = "🤍",
+            badgeBg = Color(0x33FFFFFF),
+            badgeBorder = Color(0x4DFFFFFF),
+            badgeTextColor = Color(0xFFF1F5F9)
+        )
+        "love" -> DedicationThemeConfig(
+            bgBrush = Brush.horizontalGradient(listOf(Color(0xF2E11D48), Color(0xF2DC2626), Color(0xF2DB2777))),
+            borderColor = Color(0xFFFDA4AF),
+            leadEmoji = "💌",
+            tailEmoji = "💖",
+            badgeBg = Color(0x73000000),
+            badgeBorder = Color(0xFFFDA4AF),
+            badgeTextColor = Color(0xFFFFE4E6)
+        )
+        else -> DedicationThemeConfig( // "neon"
+            bgBrush = Brush.horizontalGradient(listOf(Color(0xF2C026D3), Color(0xF27C3AED), Color(0xF24F46E5))),
+            borderColor = Color(0xFFF472B6),
+            leadEmoji = "💌",
+            tailEmoji = "🎉",
+            badgeBg = Color(0x66000000),
+            badgeBorder = Color(0xFFFDE68A),
+            badgeTextColor = Color(0xFFFDE68A)
+        )
+    }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .offset(x = (progress * screenWidthDp).dp),
+            .offset(x = (progress.value * screenWidthDp).dp),
         contentAlignment = Alignment.Center
     ) {
         Row(
             modifier = Modifier
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(Color(0xF2A21CAF), Color(0xF26D28D9), Color(0xF24F46E5))
-                    ),
-                    RoundedCornerShape(18.dp)
-                )
-                .border(2.dp, Color(0xFFF472B6), RoundedCornerShape(18.dp))
+                .background(themeCfg.bgBrush, RoundedCornerShape(18.dp))
+                .border(2.dp, themeCfg.borderColor, RoundedCornerShape(18.dp))
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(text = "💌", fontSize = 20.sp)
+            Text(text = themeCfg.leadEmoji, fontSize = 22.sp)
             if (!guestName.isNullOrBlank()) {
                 Box(
                     modifier = Modifier
-                        .background(Color(0x66000000), RoundedCornerShape(8.dp))
-                        .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
+                        .background(themeCfg.badgeBg, RoundedCornerShape(8.dp))
+                        .border(1.dp, themeCfg.badgeBorder, RoundedCornerShape(8.dp))
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = guestName.uppercase(),
-                        color = Color(0xFFFDE68A),
+                        color = themeCfg.badgeTextColor,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Black,
                         fontFamily = FontFamily.Monospace
@@ -1261,7 +1342,7 @@ private fun DedicationHorizontalMarquee(
                 fontWeight = FontWeight.ExtraBold,
                 maxLines = 1
             )
-            Text(text = "🎉", fontSize = 20.sp)
+            Text(text = themeCfg.tailEmoji, fontSize = 22.sp)
         }
     }
 }

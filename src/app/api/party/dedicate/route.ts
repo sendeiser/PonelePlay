@@ -40,28 +40,59 @@ export async function POST(req: NextRequest) {
     // 1. Load current party config & item meta
     const { itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
 
-    // 2. Fetch current nowPlaying track if any
-    const { data: liveRow } = await admin
-      .from("venue_playlists")
-      .select("description")
+    // 2. Fetch current active track: check venue_playback_state first, then playing queue_item, then next queued item
+    const { data: playState } = await admin
+      .from("venue_playback_state")
+      .select("current_track, is_paused, volume")
       .eq("venue_id", venue.id)
-      .eq("name", "__live_night_now_playing__")
       .maybeSingle();
 
-    let nowPlayingId: string | null = null;
-    let nowPlayingTrackId: string | null = null;
-    let nowPlayingYtId: string | null = null;
+    const { data: playingQueueItem } = await admin
+      .from("queue_items")
+      .select("id, track_id")
+      .eq("venue_id", venue.id)
+      .eq("status", "playing")
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (liveRow?.description) {
-      try {
-        const parsed = JSON.parse(liveRow.description);
-        nowPlayingId = parsed.itemId || parsed.id || null;
-        nowPlayingTrackId = parsed.trackId || null;
-        nowPlayingYtId = parsed.youtubeVideoId || null;
-      } catch {
-        // Non-blocking
-      }
+    const { data: nextQueueItem } = !playingQueueItem
+      ? await admin
+          .from("queue_items")
+          .select("id, track_id")
+          .eq("venue_id", venue.id)
+          .eq("status", "queued")
+          .order("vote_count", { ascending: false })
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle()
+      : { data: null };
+
+    const activeTrackObj = (playState?.current_track as Record<string, unknown> | null) ?? null;
+    const activeItem = playingQueueItem || nextQueueItem;
+
+    let trackDetails: {
+      id?: string;
+      title?: string;
+      artist?: string;
+      youtube_video_id?: string | null;
+      thumbnail_url?: string | null;
+      duration_seconds?: number | null;
+    } | null = null;
+
+    if (activeItem?.track_id) {
+      const { data: tr } = await admin
+        .from("tracks")
+        .select("id, title, artist, youtube_video_id, thumbnail_url, duration_seconds")
+        .eq("id", activeItem.track_id)
+        .maybeSingle();
+      trackDetails = tr;
     }
+
+    const nowPlayingId = String(activeTrackObj?.itemId || activeTrackObj?.id || activeItem?.id || "");
+    const nowPlayingTrackId = String(activeTrackObj?.trackId || activeItem?.track_id || trackDetails?.id || "");
+    const nowPlayingYtId = String(activeTrackObj?.youtubeVideoId || trackDetails?.youtube_video_id || "");
+    const nowPlayingTitle = String(activeTrackObj?.title || trackDetails?.title || "");
 
     const timestamp = Date.now();
     const dedicationRecord = {
@@ -80,6 +111,7 @@ export async function POST(req: NextRequest) {
         ...(updatedItemMeta[nowPlayingId] || {}),
         guestName: cleanGuestName ?? updatedItemMeta[nowPlayingId]?.guestName ?? null,
         dedication: cleanDedication,
+        timestamp,
       };
     }
     if (nowPlayingTrackId) {
@@ -87,6 +119,7 @@ export async function POST(req: NextRequest) {
         ...(updatedItemMeta[nowPlayingTrackId] || {}),
         guestName: cleanGuestName ?? updatedItemMeta[nowPlayingTrackId]?.guestName ?? null,
         dedication: cleanDedication,
+        timestamp,
       };
     }
     if (nowPlayingYtId) {
@@ -94,10 +127,20 @@ export async function POST(req: NextRequest) {
         ...(updatedItemMeta[`yt:${nowPlayingYtId}`] || {}),
         guestName: cleanGuestName ?? updatedItemMeta[`yt:${nowPlayingYtId}`]?.guestName ?? null,
         dedication: cleanDedication,
+        timestamp,
+      };
+    }
+    if (nowPlayingTitle) {
+      const titleKey = `title:${nowPlayingTitle.toLowerCase()}`;
+      updatedItemMeta[titleKey] = {
+        ...(updatedItemMeta[titleKey] || {}),
+        guestName: cleanGuestName ?? updatedItemMeta[titleKey]?.guestName ?? null,
+        dedication: cleanDedication,
+        timestamp,
       };
     }
 
-    // Persist updated __party_item_meta__
+    // Persist updated __party_item_meta__ in venue_playlists
     await admin.from("venue_playlists").upsert(
       {
         venue_id: venue.id,
@@ -107,20 +150,45 @@ export async function POST(req: NextRequest) {
       { onConflict: "venue_id,name" },
     );
 
-    // If there is an active now playing row, also update its dedication
-    if (liveRow?.description) {
+    // 3. Update venue_playback_state.current_track so every TV poller immediately receives it
+    if (activeTrackObj) {
+      const nextCurrentTrack = {
+        ...activeTrackObj,
+        guestName: cleanGuestName ?? activeTrackObj.guestName ?? null,
+        dedication: cleanDedication,
+      };
+      await admin
+        .from("venue_playback_state")
+        .update({ current_track: nextCurrentTrack })
+        .eq("venue_id", venue.id);
+    } else if (activeItem && trackDetails) {
+      const nextCurrentTrack = {
+        itemId: activeItem.id,
+        trackId: activeItem.track_id,
+        title: trackDetails.title,
+        artist: trackDetails.artist,
+        youtubeVideoId: trackDetails.youtube_video_id,
+        thumbnailUrl: trackDetails.thumbnail_url,
+        durationSeconds: trackDetails.duration_seconds,
+        guestName: cleanGuestName,
+        dedication: cleanDedication,
+      };
+      await admin
+        .from("venue_playback_state")
+        .update({ current_track: nextCurrentTrack })
+        .eq("venue_id", venue.id);
+    }
+
+    // 4. Also update queue_items row if applicable
+    if (activeItem?.id) {
       try {
-        const parsed = JSON.parse(liveRow.description);
-        parsed.dedication = cleanDedication;
-        if (cleanGuestName) parsed.guestName = cleanGuestName;
-        await admin.from("venue_playlists").upsert(
-          {
-            venue_id: venue.id,
-            name: "__live_night_now_playing__",
-            description: JSON.stringify(parsed),
-          },
-          { onConflict: "venue_id,name" },
-        );
+        await admin
+          .from("queue_items")
+          .update({
+            guest_name: cleanGuestName,
+            dedication: cleanDedication,
+          } as never)
+          .eq("id", activeItem.id);
       } catch {
         // Non-blocking
       }

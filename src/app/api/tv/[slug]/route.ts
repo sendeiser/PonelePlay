@@ -125,6 +125,16 @@ export async function GET(
       // Fallback to default
     }
 
+    const nowMs = Date.now();
+    const currentDed = itemMeta["__current_dedication__"] as
+      | { guestName?: string | null; dedication?: string | null; timestamp?: number }
+      | undefined;
+    const isCurrentDedActive = Boolean(
+      currentDed?.dedication &&
+      typeof currentDed.timestamp === "number" &&
+      nowMs - currentDed.timestamp < 300000,
+    );
+
     const resolveMeta = (item: Record<string, unknown>) => {
       const id = String(item.itemId || item.id || "");
       const trackId = String(item.trackId || "");
@@ -139,17 +149,9 @@ export async function GET(
       let dedication = (item.dedication as string | null) ?? meta?.dedication ?? null;
       let guestName = (item.guestName as string | null) ?? meta?.guestName ?? null;
 
-      const currentDed = itemMeta["__current_dedication__"] as
-        | { guestName?: string | null; dedication?: string | null; timestamp?: number }
-        | undefined;
-      if (
-        !dedication &&
-        currentDed?.dedication &&
-        typeof currentDed.timestamp === "number" &&
-        Date.now() - currentDed.timestamp < 120000
-      ) {
+      if (isCurrentDedActive && currentDed?.dedication) {
         dedication = currentDed.dedication;
-        if (!guestName && currentDed.guestName) guestName = currentDed.guestName;
+        if (currentDed.guestName) guestName = currentDed.guestName;
       }
 
       return {
@@ -159,10 +161,24 @@ export async function GET(
       };
     };
 
-    const nowMeta = nowPlayingTrack ? resolveMeta(nowPlayingTrack) : null;
+    const effectiveNowPlaying =
+      nowPlayingTrack ||
+      (activeQueue.length > 0 ? (activeQueue[0] as unknown as Record<string, unknown>) : null) ||
+      (isCurrentDedActive
+        ? {
+            itemId: "now-playing-live-dedication",
+            trackId: "live-dedication-track",
+            title: venue.name,
+            artist: "Salón en Vivo",
+            youtubeVideoId: "oMpaVIio3UQ",
+            durationSeconds: 300,
+            voteCount: 0,
+            guestName: currentDed?.guestName ?? null,
+            dedication: currentDed?.dedication ?? null,
+          }
+        : null);
 
-    // Clean expired activeDuel / activeRoulette
-    const nowMs = Date.now();
+    const nowMeta = effectiveNowPlaying ? resolveMeta(effectiveNowPlaying) : null;
     let activeDuel = partyConfig.activeDuel ?? null;
     if (
       activeDuel &&
@@ -222,15 +238,24 @@ export async function GET(
           positionSeconds: Number((playState?.current_track as Record<string, unknown>)?.positionSeconds ?? 0),
           displayConfig,
         },
-        nowPlaying: nowPlayingTrack
+        liveDedication: isCurrentDedActive && currentDed?.dedication
           ? {
-              id: String(nowPlayingTrack.itemId || nowPlayingTrack.id || ""),
-              title: String(nowPlayingTrack.title || "Sin título"),
-              artist: String(nowPlayingTrack.artist || "Desconocido"),
-              youtubeVideoId: nowPlayingTrack.youtubeVideoId ? String(nowPlayingTrack.youtubeVideoId) : null,
-              thumbnailUrl: nowPlayingTrack.thumbnailUrl ? String(nowPlayingTrack.thumbnailUrl) : null,
-              durationSeconds: Number(nowPlayingTrack.durationSeconds ?? 210),
-              voteCount: sanitizeVoteCount(nowPlayingTrack.voteCount),
+              guestName: currentDed.guestName ?? null,
+              message: currentDed.dedication,
+              style: partyConfig.dedicationStyle || "neon",
+              repeats: partyConfig.dedicationRepeats ?? 2,
+              timestamp: currentDed.timestamp ?? nowMs,
+            }
+          : null,
+        nowPlaying: effectiveNowPlaying
+          ? {
+              id: String(effectiveNowPlaying.itemId || effectiveNowPlaying.id || ""),
+              title: String(effectiveNowPlaying.title || "Sin título"),
+              artist: String(effectiveNowPlaying.artist || "Desconocido"),
+              youtubeVideoId: effectiveNowPlaying.youtubeVideoId ? String(effectiveNowPlaying.youtubeVideoId) : null,
+              thumbnailUrl: effectiveNowPlaying.thumbnailUrl ? String(effectiveNowPlaying.thumbnailUrl) : null,
+              durationSeconds: Number(effectiveNowPlaying.durationSeconds ?? 210),
+              voteCount: sanitizeVoteCount(effectiveNowPlaying.voteCount),
               isKaraoke: nowMeta?.isKaraoke ?? false,
               guestName: nowMeta?.guestName ?? null,
               dedication: nowMeta?.dedication ?? null,
