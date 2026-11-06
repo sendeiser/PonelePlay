@@ -9,6 +9,8 @@ import {
   type PartyConfig,
   type PartyMode,
   type VenueType,
+  type DedicationStyle,
+  DEDICATION_STYLES,
 } from "@/lib/domain/party";
 import {
   fetchServerPartyConfig,
@@ -359,7 +361,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
               </div>
             </div>
 
-            <div className="bg-[#0d111a]/90 p-3.5 rounded-xl border border-[#232b42] flex flex-col justify-center gap-2">
+            <div className="bg-[#0d111a]/90 p-4 rounded-xl border border-[#232b42] flex flex-col gap-3">
               <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
                 <input
                   type="checkbox"
@@ -372,9 +374,98 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
                   }
                   className="accent-pink-500"
                 />
-                <span>💬 Permitir Dedicatorias en TV</span>
+                <span className="font-bold">💬 Permitir Dedicatorias en TV</span>
               </label>
-              <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer">
+
+              {partyConfig.allowDedications && (
+                <div className="pt-2 border-t border-[#1d2538] space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 font-semibold mb-1">
+                      Veces que pasa por pantalla:
+                    </label>
+                    <select
+                      value={partyConfig.dedicationRepeats ?? 2}
+                      onChange={(e) =>
+                        setPartyConfig((prev) => ({
+                          ...prev,
+                          dedicationRepeats: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full bg-[#141824] border border-[#232b42] rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-pink-500"
+                    >
+                      <option value={1}>1 vez (Pasa 1 vez y se oculta para no tapar el video)</option>
+                      <option value={2}>2 veces (Recomendado para fiestas)</option>
+                      <option value={3}>3 veces</option>
+                      <option value={5}>5 veces</option>
+                      <option value={0}>Continuo (Pasa sin parar mientras dure la canción)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 font-semibold mb-1.5">
+                      Diseño visual de la dedicatoria en pantalla:
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {DEDICATION_STYLES.map((st) => {
+                        const isSelected = (partyConfig.dedicationStyle ?? "neon") === st.id;
+                        return (
+                          <button
+                            key={st.id}
+                            type="button"
+                            onClick={() =>
+                              setPartyConfig((prev) => ({
+                                ...prev,
+                                dedicationStyle: st.id,
+                              }))
+                            }
+                            className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                              isSelected
+                                ? "bg-gradient-to-b from-indigo-950/80 to-[#151c33] border-pink-400 text-white shadow-[0_0_15px_rgba(236,72,153,0.3)] ring-1 ring-pink-400/60"
+                                : "bg-[#141824] border-[#232b42] text-slate-400 hover:text-white hover:border-slate-500"
+                            }`}
+                          >
+                            <span className="text-xl">{st.icon}</span>
+                            <span className="font-mono text-[10px] font-bold">{st.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Live Mini Preview */}
+                  {(() => {
+                    const st =
+                      DEDICATION_STYLES.find(
+                        (s) => s.id === (partyConfig.dedicationStyle ?? "neon"),
+                      ) || DEDICATION_STYLES[0];
+                    return (
+                      <div className="mt-2 p-2.5 rounded-xl bg-black/40 border border-[#232b42] flex flex-col gap-1">
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                          Vista previa en pantalla de TV:
+                        </span>
+                        <div className="overflow-hidden py-1">
+                          <div
+                            className={`inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl backdrop-blur-md whitespace-nowrap text-xs ${st.containerClass}`}
+                          >
+                            <span>{st.leadEmoji}</span>
+                            <span
+                              className={`font-mono text-[10px] uppercase tracking-wider font-black px-2 py-0.5 rounded ${st.badgeClass}`}
+                            >
+                              MARTIN
+                            </span>
+                            <span className={`font-bold tracking-tight text-xs ${st.messageClass}`}>
+                              &ldquo;¡Feliz cumpleee! ❤️🎉&rdquo;
+                            </span>
+                            <span>{st.tailEmoji}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer pt-2 border-t border-[#1d2538]">
                 <input
                   type="checkbox"
                   checked={partyConfig.allowGuestKaraoke}

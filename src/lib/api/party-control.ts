@@ -47,6 +47,10 @@ export function normalizePartyConfigPatch(
   const rawMinQueue = Number(patch.minVotesToQueue ?? base.minVotesToQueue);
   const rawCooldown = Number(patch.turboCooldownSeconds ?? base.turboCooldownSeconds);
   const rawSkipThreshold = Number(patch.skipVotesThreshold ?? base.skipVotesThreshold ?? 3);
+  const rawRepeats = Number(patch.dedicationRepeats ?? base.dedicationRepeats ?? 2);
+  const rawStyle = patch.dedicationStyle ?? base.dedicationStyle ?? "neon";
+  const validStyles = ["neon", "gold", "cyber", "minimal", "love"];
+  const dedicationStyle = validStyles.includes(rawStyle) ? (rawStyle as PartyConfig["dedicationStyle"]) : "neon";
 
   const normalized: PartyConfig = {
     venueType: venueType === "party" ? "party" : "bar",
@@ -57,6 +61,8 @@ export function normalizePartyConfigPatch(
     votesPerGuest: Number.isNaN(rawVotes) ? 0 : Math.max(0, Math.floor(rawVotes)),
     minVotesToQueue: Number.isNaN(rawMinQueue) ? 1 : Math.max(1, Math.floor(rawMinQueue)),
     allowDedications: patch.allowDedications ?? base.allowDedications,
+    dedicationRepeats: Number.isNaN(rawRepeats) ? 2 : Math.max(0, Math.floor(rawRepeats)),
+    dedicationStyle,
     allowGuestKaraoke: patch.allowGuestKaraoke ?? base.allowGuestKaraoke,
     turboCooldownSeconds: Number.isNaN(rawCooldown) ? 180 : Math.max(30, Math.floor(rawCooldown)),
     skipVoteEnabled: patch.skipVoteEnabled ?? base.skipVoteEnabled ?? true,

@@ -6,7 +6,7 @@ import {
   saveStoredPartyConfig,
   updatePartyConfig,
 } from "@/lib/api/party-control";
-import { DEFAULT_PARTY_CONFIG } from "@/lib/domain/party";
+import { DEFAULT_PARTY_CONFIG, DEDICATION_STYLES, type DedicationStyle } from "@/lib/domain/party";
 
 describe("Party Control API & Broadcast Helpers", () => {
   it("normalizes party config patch clamping negative votesPerGuest to 0 and minVotesToQueue to >= 1", () => {
@@ -18,6 +18,32 @@ describe("Party Control API & Broadcast Helpers", () => {
     });
     expect(patch.votesPerGuest).toBe(0);
     expect(patch.minVotesToQueue).toBe(1);
+  });
+
+  it("normalizes dedicationRepeats and dedicationStyle with valid fallbacks", () => {
+    const patch = normalizePartyConfigPatch({
+      dedicationRepeats: 3,
+      dedicationStyle: "gold",
+    });
+    expect(patch.dedicationRepeats).toBe(3);
+    expect(patch.dedicationStyle).toBe("gold");
+
+    const fallback = normalizePartyConfigPatch({
+      dedicationRepeats: -5,
+      dedicationStyle: "invalid_theme" as DedicationStyle,
+    });
+    expect(fallback.dedicationRepeats).toBe(0);
+    expect(fallback.dedicationStyle).toBe("neon");
+  });
+
+  it("exposes all 5 curated dedication styles with icons and badge styling", () => {
+    expect(DEDICATION_STYLES.map((s) => s.id)).toEqual([
+      "neon",
+      "gold",
+      "cyber",
+      "minimal",
+      "love",
+    ]);
   });
 
   it("locks venueType as party once in party mode and prevents switching to bar", async () => {

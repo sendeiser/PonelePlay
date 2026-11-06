@@ -4,6 +4,77 @@ export type VenueType = "bar" | "party";
 
 export type PartyMode = "democratic" | "hybrid_turbo" | "party_games";
 
+export type DedicationStyle = "neon" | "gold" | "cyber" | "minimal" | "love";
+
+export interface DedicationStyleDefinition {
+  id: DedicationStyle;
+  label: string;
+  icon: string;
+  leadEmoji: string;
+  tailEmoji: string;
+  containerClass: string;
+  badgeClass: string;
+  messageClass: string;
+}
+
+export const DEDICATION_STYLES: DedicationStyleDefinition[] = [
+  {
+    id: "neon",
+    label: "Neón Fiesta",
+    icon: "🔮",
+    leadEmoji: "💌",
+    tailEmoji: "🎉",
+    containerClass:
+      "bg-gradient-to-r from-fuchsia-600/95 via-purple-700/95 to-indigo-600/95 border-2 border-pink-300/70 shadow-[0_0_40px_rgba(217,70,239,0.65)]",
+    badgeClass: "text-amber-200 bg-black/35 border border-amber-300/30",
+    messageClass: "text-white",
+  },
+  {
+    id: "gold",
+    label: "Dorado VIP",
+    icon: "👑",
+    leadEmoji: "👑",
+    tailEmoji: "✨",
+    containerClass:
+      "bg-gradient-to-r from-amber-600/95 via-yellow-600/95 to-amber-700/95 border-2 border-yellow-300/80 shadow-[0_0_40px_rgba(245,158,11,0.65)]",
+    badgeClass: "text-amber-100 bg-black/45 border border-yellow-300/40",
+    messageClass: "text-white",
+  },
+  {
+    id: "cyber",
+    label: "Cyan Cyber",
+    icon: "⚡",
+    leadEmoji: "⚡",
+    tailEmoji: "🛸",
+    containerClass:
+      "bg-gradient-to-r from-cyan-600/95 via-blue-600/95 to-indigo-700/95 border-2 border-cyan-300/80 shadow-[0_0_40px_rgba(6,182,212,0.7)]",
+    badgeClass: "text-cyan-200 bg-black/45 border border-cyan-300/40",
+    messageClass: "text-white",
+  },
+  {
+    id: "minimal",
+    label: "Glass Dark",
+    icon: "💎",
+    leadEmoji: "💬",
+    tailEmoji: "🤍",
+    containerClass:
+      "bg-[#0a0d16]/90 border-2 border-slate-600/70 shadow-[0_8px_32px_rgba(0,0,0,0.85)]",
+    badgeClass: "text-slate-200 bg-white/10 border border-white/20",
+    messageClass: "text-slate-100",
+  },
+  {
+    id: "love",
+    label: "Romance",
+    icon: "💖",
+    leadEmoji: "💌",
+    tailEmoji: "💖",
+    containerClass:
+      "bg-gradient-to-r from-rose-600/95 via-red-600/95 to-pink-600/95 border-2 border-rose-300/80 shadow-[0_0_40px_rgba(244,63,94,0.7)]",
+    badgeClass: "text-rose-100 bg-black/40 border border-rose-300/40",
+    messageClass: "text-white",
+  },
+];
+
 export type PartySkipVoteState = {
   trackId: string;
   itemId?: string;
@@ -26,6 +97,10 @@ export type PartyConfig = {
   /** Minimum votes required for a song to enter the active queue (default 1 = direct to queue) */
   minVotesToQueue: number;
   allowDedications: boolean;
+  /** Number of times the dedication banner loops across screen (0 = continuous throughout track, default: 2) */
+  dedicationRepeats?: number;
+  /** Visual style theme for the dedication marquee on screen (default: "neon") */
+  dedicationStyle?: DedicationStyle;
   allowGuestKaraoke: boolean;
   turboCooldownSeconds: number;
   /** Allow guests to start a vote to skip the currently playing song */
@@ -43,6 +118,8 @@ export const DEFAULT_PARTY_CONFIG: PartyConfig = {
   votesPerGuest: 0,
   minVotesToQueue: 1,
   allowDedications: true,
+  dedicationRepeats: 2,
+  dedicationStyle: "neon",
   allowGuestKaraoke: true,
   turboCooldownSeconds: 180,
 };
@@ -53,6 +130,8 @@ export const DEFAULT_BAR_PARTY_CONFIG: PartyConfig = {
   votesPerGuest: 0,
   minVotesToQueue: MIN_VOTES_FOR_QUEUE,
   allowDedications: true,
+  dedicationRepeats: 2,
+  dedicationStyle: "neon",
   allowGuestKaraoke: false,
   turboCooldownSeconds: 180,
 };

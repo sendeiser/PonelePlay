@@ -96,6 +96,14 @@ export async function loadVenuePartyConfigFromDb(
             typeof s.allow_dedications === "boolean"
               ? s.allow_dedications
               : baseConfig.allowDedications,
+          dedicationRepeats:
+            typeof s.dedication_repeats === "number"
+              ? s.dedication_repeats
+              : baseConfig.dedicationRepeats,
+          dedicationStyle:
+            typeof s.dedication_style === "string"
+              ? (s.dedication_style as PartyConfig["dedicationStyle"])
+              : baseConfig.dedicationStyle,
           allowGuestKaraoke:
             typeof s.allow_guest_karaoke === "boolean"
               ? s.allow_guest_karaoke

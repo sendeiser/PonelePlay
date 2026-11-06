@@ -12,6 +12,11 @@ import {
   X,
   HelpCircle,
 } from "lucide-react";
+import {
+  DEDICATION_STYLES,
+  type DedicationStyle,
+  type PartyConfig,
+} from "@/lib/domain/party";
 
 interface TvSettingsModalProps {
   isOpen: boolean;
@@ -21,6 +26,8 @@ interface TvSettingsModalProps {
   isMuted: boolean;
   isFullscreen: boolean;
   versionName?: string;
+  partyConfig?: PartyConfig;
+  onUpdatePartyConfig?: (patch: Partial<PartyConfig>) => void;
   onToggleMode: () => void;
   onToggleFullscreen: () => void;
   onUnpair: () => void;
@@ -36,6 +43,8 @@ export function TvSettingsModal({
   isMuted,
   isFullscreen,
   versionName = "2.6.0",
+  partyConfig,
+  onUpdatePartyConfig,
   onToggleMode,
   onToggleFullscreen,
   onUnpair,
@@ -151,6 +160,83 @@ export function TvSettingsModal({
             </span>
           </div>
         </div>
+
+        {/* Dedication Customization Section */}
+        {partyConfig && (
+          <div className="bg-[#121626] border border-[#232f4c] rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">💌</span>
+                <span className="font-mono text-xs font-bold text-white uppercase tracking-wider">
+                  Dedicatorias en Pantalla
+                </span>
+              </div>
+              <span className="font-mono text-[11px] font-bold text-pink-300 bg-pink-500/10 px-2 py-0.5 rounded border border-pink-500/30">
+                {partyConfig.allowDedications ? "Activas" : "Desactivadas"}
+              </span>
+            </div>
+
+            {/* Repetitions Selector */}
+            <div>
+              <span className="block font-mono text-[10px] text-slate-400 font-bold uppercase mb-1.5">
+                Veces que pasa por pantalla
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { value: 1, label: "1 vez" },
+                  { value: 2, label: "2 veces" },
+                  { value: 3, label: "3 veces" },
+                  { value: 0, label: "Continuo" },
+                ].map((opt) => {
+                  const currentReps = partyConfig.dedicationRepeats ?? 2;
+                  const isSelected = currentReps === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onUpdatePartyConfig?.({ dedicationRepeats: opt.value })}
+                      className={`py-1.5 px-2 rounded-lg font-mono text-xs font-bold border transition-all ${
+                        isSelected
+                          ? "bg-pink-600/30 border-pink-400 text-pink-200 shadow-sm"
+                          : "bg-[#0b0e17] border-[#222b40] text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Style Selector */}
+            <div>
+              <span className="block font-mono text-[10px] text-slate-400 font-bold uppercase mb-1.5">
+                Diseño Visual
+              </span>
+              <div className="grid grid-cols-5 gap-1.5">
+                {DEDICATION_STYLES.map((st) => {
+                  const currentStyle = partyConfig.dedicationStyle ?? "neon";
+                  const isSelected = currentStyle === st.id;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => onUpdatePartyConfig?.({ dedicationStyle: st.id })}
+                      className={`p-1.5 rounded-lg border text-center transition-all flex flex-col items-center gap-0.5 ${
+                        isSelected
+                          ? "bg-indigo-600/30 border-indigo-400 text-white shadow-sm ring-1 ring-indigo-400/50"
+                          : "bg-[#0b0e17] border-[#222b40] text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      <span className="text-base">{st.icon}</span>
+                      <span className="font-mono text-[9px] font-bold truncate max-w-full">{st.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Linked Venue Info Box */}
         <div className="bg-[#141A2E] border border-[#263252] rounded-xl p-3.5 flex items-center justify-between">

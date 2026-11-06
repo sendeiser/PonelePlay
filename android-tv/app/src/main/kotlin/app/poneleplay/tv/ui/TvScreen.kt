@@ -1238,23 +1238,21 @@ private fun DedicationHorizontalMarquee(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(text = "💌", fontSize = 20.sp)
-            Box(
-                modifier = Modifier
-                    .background(Color(0x66000000), RoundedCornerShape(8.dp))
-                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 10.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = if (!guestName.isNullOrBlank()) {
-                        "DEDICATORIA DE ${guestName.uppercase()}"
-                    } else {
-                        "DEDICATORIA EN VIVO"
-                    },
-                    color = Color(0xFFFDE68A),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.Monospace
-                )
+            if (!guestName.isNullOrBlank()) {
+                Box(
+                    modifier = Modifier
+                        .background(Color(0x66000000), RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = guestName.uppercase(),
+                        color = Color(0xFFFDE68A),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
             Text(
                 text = "“$dedication”",

@@ -22,14 +22,17 @@ import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import {
   DEFAULT_BAR_PARTY_CONFIG,
+  DEDICATION_STYLES,
   resolveActiveSkipVoteForTrack,
   resolveEffectiveQueueThreshold,
+  type DedicationStyle,
   type PartyConfig,
   type PartySkipVoteState,
 } from "@/lib/domain/party";
 import {
   fetchServerPartyConfig,
   getStoredPartyConfig,
+  updatePartyConfig,
   type PartyDuelState,
   type PartyRouletteState,
 } from "@/lib/api/party-control";
@@ -83,6 +86,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     guestName: string | null;
     timestamp: number;
   } | null>(null);
+  const [dedicationFinished, setDedicationFinished] = useState(false);
 
   // Compute how many songs fit dynamically inside the screen's max height
   useEffect(() => {
@@ -819,6 +823,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       isKaraoke: base.isKaraoke ?? match?.isKaraoke ?? false,
     };
   }, [token, manualNowPlaying, liveNightNowPlaying, liveNightQueue, playerState, allTracks, liveDedicationOverride]);
+
+  // Reset dedication animation when track or dedication changes
+  useEffect(() => {
+    setDedicationFinished(false);
+  }, [
+    nowPlaying?.itemId,
+    nowPlaying?.trackId,
+    nowPlaying?.dedication,
+    liveDedicationOverride?.timestamp,
+  ]);
 
   // Rotated queue: tracks coming after nowPlaying so every Skip genuinely advances to the next track
   const queue: PlayerTrack[] = useMemo(() => {
@@ -2336,22 +2350,50 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       )}
 
       {/* HORIZONTAL DEDICATION MARQUEE ACROSS THE MIDDLE OF THE SCREEN (LEFT TO RIGHT) */}
-      {nowPlaying?.dedication && (
-        <div className="fixed inset-x-0 top-1/2 -translate-y-1/2 z-[85] pointer-events-none overflow-hidden py-3">
-          <div className="animate-marquee-ltr">
-            <div className="inline-flex items-center gap-4 px-7 py-3.5 rounded-2xl bg-gradient-to-r from-fuchsia-600/95 via-purple-700/95 to-indigo-600/95 border-2 border-pink-300/70 shadow-[0_0_40px_rgba(217,70,239,0.65)] backdrop-blur-md whitespace-nowrap">
-              <span className="text-2xl">💌</span>
-              <span className="font-mono text-sm uppercase tracking-widest font-black text-amber-200 bg-black/35 px-3 py-1 rounded-lg border border-amber-300/30">
-                {nowPlaying.guestName ? `DEDICATORIA DE ${nowPlaying.guestName.toUpperCase()}` : "DEDICATORIA EN VIVO"}
-              </span>
-              <span className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                &ldquo;{nowPlaying.dedication}&rdquo;
-              </span>
-              <span className="text-2xl">🎉</span>
+      {(() => {
+        if (!nowPlaying?.dedication || dedicationFinished) return null;
+        const activeDedicationStyle: DedicationStyle = partyConfig?.dedicationStyle || "neon";
+        const styleDef =
+          DEDICATION_STYLES.find((s) => s.id === activeDedicationStyle) || DEDICATION_STYLES[0];
+        const effectiveRepeats =
+          typeof partyConfig?.dedicationRepeats === "number" ? partyConfig.dedicationRepeats : 2;
+
+        return (
+          <div
+            key={`ded-${nowPlaying.itemId || nowPlaying.trackId || "cur"}-${nowPlaying.dedication}-${liveDedicationOverride?.timestamp || 0}`}
+            className="fixed inset-x-0 top-1/2 -translate-y-1/2 z-[85] pointer-events-none overflow-hidden py-3"
+          >
+            <div
+              className="animate-marquee-ltr"
+              style={{
+                animationIterationCount: effectiveRepeats === 0 ? "infinite" : effectiveRepeats,
+              }}
+              onAnimationEnd={() => {
+                if (effectiveRepeats > 0) {
+                  setDedicationFinished(true);
+                }
+              }}
+            >
+              <div
+                className={`inline-flex items-center gap-4 px-7 py-3.5 rounded-2xl backdrop-blur-md whitespace-nowrap ${styleDef.containerClass}`}
+              >
+                <span className="text-2xl">{styleDef.leadEmoji}</span>
+                {nowPlaying.guestName ? (
+                  <span
+                    className={`font-mono text-sm uppercase tracking-widest font-black px-3 py-1 rounded-lg ${styleDef.badgeClass}`}
+                  >
+                    {nowPlaying.guestName.toUpperCase()}
+                  </span>
+                ) : null}
+                <span className={`text-xl sm:text-2xl font-extrabold tracking-tight ${styleDef.messageClass}`}>
+                  &ldquo;{nowPlaying.dedication}&rdquo;
+                </span>
+                <span className="text-2xl">{styleDef.tailEmoji}</span>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* LIVE VOTE-TO-SKIP INDICATOR ON TV (only while the voted song is still playing) */}
       {(() => {
@@ -2515,6 +2557,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         isMuted={isMuted}
         isFullscreen={isFullscreen}
         versionName="2.6.0"
+        partyConfig={partyConfig}
+        onUpdatePartyConfig={async (patch) => {
+          try {
+            const updated = await updatePartyConfig(slug, patch);
+            setPartyConfig(updated);
+          } catch {
+            // fallback
+          }
+        }}
         onToggleMode={toggleScreenMode}
         onToggleFullscreen={toggleFullscreen}
         onUnpair={handleUnpair}
