@@ -23,9 +23,11 @@ fun TvSettingsDialog(
     currentSlug: String,
     currentMode: TvScreenMode,
     isMuted: Boolean,
+    currentVersionName: String = "2.6.0",
     onToggleMode: () -> Unit,
     onToggleMute: () -> Unit,
     onUnpair: () -> Unit,
+    onCheckUpdates: () -> Unit,
     onReload: () -> Unit,
     onDismiss: () -> Unit,
     onExitApp: () -> Unit
@@ -67,7 +69,7 @@ fun TvSettingsDialog(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        text = "App Nativa v2.5",
+                        text = "App Nativa v$currentVersionName",
                         color = Color(0xFF22D3EE),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -143,6 +145,13 @@ fun TvSettingsDialog(
                 TVButton(
                     text = "🔑 Desvincular Pantalla / Vincular con otra Cabina",
                     onClick = onUnpair,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Check for Updates Button
+                TVButton(
+                    text = "🚀 Buscar Actualizaciones del Sistema",
+                    onClick = onCheckUpdates,
                     modifier = Modifier.fillMaxWidth()
                 )
 

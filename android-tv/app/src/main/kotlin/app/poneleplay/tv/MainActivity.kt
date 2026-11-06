@@ -42,12 +42,19 @@ import app.poneleplay.tv.ui.TvPairingScreen
 import app.poneleplay.tv.ui.TvScreen
 import app.poneleplay.tv.ui.TvScreenMode
 import app.poneleplay.tv.ui.TvSettingsDialog
+import app.poneleplay.tv.ui.TvUpdateDialog
+import app.poneleplay.tv.ui.UpdateDialogState
 import app.poneleplay.tv.ui.VideoPlayerController
 import app.poneleplay.tv.ui.theme.PonelePlayTVTheme
+import app.poneleplay.tv.updater.AppUpdateInfo
+import app.poneleplay.tv.updater.TvAppUpdater
+import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -323,6 +330,80 @@ fun NativeTvApp(
     onExitApp: () -> Unit
 ) {
     val serverUrl = "https://poneleplay.netlify.app"
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    val currentVersionCode = remember {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                pInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                pInfo.versionCode
+            }
+        } catch (_: Exception) {
+            2
+        }
+    }
+
+    val currentVersionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.6.0"
+        } catch (_: Exception) {
+            "2.6.0"
+        }
+    }
+
+    var updateDialogState by remember { mutableStateOf<UpdateDialogState?>(null) }
+    var downloadedApkFile by remember { mutableStateOf<File?>(null) }
+
+    fun performCheckUpdates(manual: Boolean) {
+        coroutineScope.launch {
+            if (manual) {
+                updateDialogState = UpdateDialogState.Checking
+            }
+            val res = TvAppUpdater.checkForUpdate(serverUrl, currentVersionCode)
+            res.onSuccess { updateInfo ->
+                if (updateInfo != null) {
+                    updateDialogState = UpdateDialogState.Available(updateInfo)
+                } else if (manual) {
+                    updateDialogState = UpdateDialogState.UpToDate(currentVersionName)
+                }
+            }.onFailure { err ->
+                if (manual) {
+                    updateDialogState = UpdateDialogState.Error(err.message ?: "Error al comprobar actualizaciones")
+                }
+            }
+        }
+    }
+
+    fun startDownload(updateInfo: AppUpdateInfo) {
+        coroutineScope.launch {
+            updateDialogState = UpdateDialogState.Downloading(progress = 0f, downloadedBytes = 0, totalBytes = 0)
+            val res = TvAppUpdater.downloadApk(context, updateInfo.apkUrl) { progress, dl, total ->
+                updateDialogState = UpdateDialogState.Downloading(progress, dl, total)
+            }
+            res.onSuccess { apkFile ->
+                downloadedApkFile = apkFile
+                updateDialogState = UpdateDialogState.ReadyToInstall(updateInfo)
+                // Automatically launch system package installer
+                val installRes = TvAppUpdater.installApk(context, apkFile)
+                if (installRes.isFailure) {
+                    val errMsg = installRes.exceptionOrNull()?.message ?: "Error al abrir el instalador."
+                    updateDialogState = UpdateDialogState.Error(errMsg)
+                }
+            }.onFailure { err ->
+                updateDialogState = UpdateDialogState.Error(err.message ?: "Error al descargar el archivo de actualización.")
+            }
+        }
+    }
+
+    // Auto-check for updates 4 seconds after app launch in background
+    LaunchedEffect(serverUrl) {
+        delay(4000)
+        performCheckUpdates(manual = false)
+    }
 
     var venueSlug by remember {
         val rawSaved = prefs.getString("venue_slug", "") ?: ""
@@ -508,6 +589,7 @@ fun NativeTvApp(
             currentSlug = venueSlug,
             currentMode = screenMode,
             isMuted = isMuted,
+            currentVersionName = currentVersionName,
             onToggleMode = onToggleMode,
             onToggleMute = onToggleMute,
             onUnpair = {
@@ -522,6 +604,10 @@ fun NativeTvApp(
                 feed = null
                 onDismissSettings()
             },
+            onCheckUpdates = {
+                onDismissSettings()
+                performCheckUpdates(manual = true)
+            },
             onReload = {
                 feed = null
                 isLoading = true
@@ -529,6 +615,29 @@ fun NativeTvApp(
             },
             onDismiss = onDismissSettings,
             onExitApp = onExitApp
+        )
+
+        // In-App Updater Dialog
+        TvUpdateDialog(
+            isOpen = updateDialogState != null,
+            state = updateDialogState ?: UpdateDialogState.Checking,
+            currentVersionName = currentVersionName,
+            onStartDownload = { info -> startDownload(info) },
+            onInstall = {
+                downloadedApkFile?.let { apk ->
+                    val installRes = TvAppUpdater.installApk(context, apk)
+                    if (installRes.isFailure) {
+                        val errMsg = installRes.exceptionOrNull()?.message ?: "Error al abrir el instalador."
+                        updateDialogState = UpdateDialogState.Error(errMsg)
+                    }
+                }
+            },
+            onRetry = {
+                performCheckUpdates(manual = true)
+            },
+            onDismiss = {
+                updateDialogState = null
+            }
         )
     }
 }
