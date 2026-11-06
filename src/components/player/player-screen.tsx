@@ -390,12 +390,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               payload: { videoId, timestamp: Date.now() },
             });
           }
-          // 2. If Cabina is already ahead when TV finishes buffering its first frame, catch up immediately
+          // 2. Only if TV joined mid-song (Cabina is already > 1.8s ahead), catch up once on first frame
           const mt = masterTargetTimeRef.current;
           if (!mt.isPaused && mt.updatedAtMs > 0 && Date.now() - mt.updatedAtMs < 8000) {
             const liveMasterSec = mt.seconds + Math.max(0, (Date.now() - mt.updatedAtMs) / 1000);
             const tvCur = engine.getCurrentTime?.() ?? 0;
-            if (liveMasterSec > 0.35 && Math.abs(tvCur - liveMasterSec) > 0.35) {
+            if (liveMasterSec > 1.8 && Math.abs(tvCur - liveMasterSec) > 1.8) {
+              lastTvSeekAtRef.current = Date.now();
               engine.seekTo?.(liveMasterSec);
               setElapsed(Math.floor(liveMasterSec));
               elapsedRef.current = Math.floor(liveMasterSec);
@@ -409,9 +410,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   // Listen to the iframe's messages (time, duration, state, ended, errors)
   useEffect(() => engine.attach(), [engine]);
 
-  // YouTube embed handshake, repeated so every newly mounted iframe (new song) answers
+  // YouTube embed handshake, repeated gently until live bridge responds
   useEffect(() => {
-    const timer = setInterval(() => engine.handshake(), 1000);
+    const timer = setInterval(() => engine.handshake(), 2000);
     return () => clearInterval(timer);
   }, [engine]);
 
@@ -875,12 +876,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return [...allTracks.slice(idx + 1), ...allTracks.slice(0, idx)];
   }, [allTracks, nowPlaying]);
 
-  // Load new track into the single YouTube iframe whenever nowPlaying changes
+  const activeVideoId = resolveVideoId(nowPlaying);
+  const initialIframeSrcRef = useRef<string>("");
+  if (mounted && !initialIframeSrcRef.current) {
+    initialIframeSrcRef.current = `https://www.youtube.com/embed/${activeVideoId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`;
+  }
+
+  // Load new track into the single YouTube iframe ONLY when the resolved videoId changes
   useEffect(() => {
     if (token && nowPlaying && mounted) {
       void engine.load(nowPlaying);
     }
-  }, [token, nowPlaying, mounted, engine]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, activeVideoId, mounted, engine]);
 
   const venueName =
     nightState?.venue.name ||
@@ -896,6 +904,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   durationRef.current = duration;
   const isPlayingRef = useRef(isPlaying);
   isPlayingRef.current = isPlaying;
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
+  const volumeRef = useRef(volume);
+  volumeRef.current = volume;
   const nowPlayingRef = useRef(nowPlaying);
   nowPlayingRef.current = nowPlaying;
   const lastCommandSeqRef = useRef<number | null>(null);
@@ -1139,6 +1151,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               void handleSkipNextRef.current(true);
             } else if (cmd === "seek") {
               const sec = Math.max(0, Number(p.seconds ?? 0));
+              if (typeof p.seekSeq === "number" && p.seekSeq === lastSeekSeqRef.current) {
+                return;
+              }
+              if (Date.now() - lastTvSeekAtRef.current < 350 && Math.abs(elapsedRef.current - sec) <= 1) {
+                return;
+              }
               if (typeof p.seekSeq === "number") {
                 lastSeekSeqRef.current = p.seekSeq;
               }
@@ -1156,14 +1174,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 updatedAtMs: Date.now(),
                 isPaused: false,
               };
+              lastTvSeekAtRef.current = Date.now();
               setManualNowPlaying(track);
               setIsPlaying(true);
               setVideoMode(true);
               setElapsed(0);
               elapsedRef.current = 0;
               void engine.load(track);
-              engine.seekTo?.(0);
-              void engine.play();
               setHudMessage(`🎵 Reproduciendo: ${track.title}`);
               setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "reload") {
@@ -1316,26 +1333,42 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
             if (typeof st.is_paused === "boolean") {
               masterTargetTimeRef.current.isPaused = st.is_paused;
-              setIsPlaying(!st.is_paused);
-              if (st.is_paused) engine.pause?.();
-              else void engine.play?.();
+              const nextPlaying = !st.is_paused;
+              if (nextPlaying !== isPlayingRef.current) {
+                isPlayingRef.current = nextPlaying;
+                setIsPlaying(nextPlaying);
+                if (st.is_paused) engine.pause?.();
+                else void engine.play?.();
+              }
             }
-            if (typeof st.volume === "number") {
+            if (typeof st.volume === "number" && st.volume !== volumeRef.current) {
+              volumeRef.current = st.volume;
               setVolume(st.volume);
               engine.setVolume?.(st.volume);
             }
             const trkObj = (st.current_track as unknown as Record<string, unknown>) || {};
             if (typeof trkObj.tvMuted === "boolean") {
               const tvMuted = Boolean(trkObj.tvMuted);
-              setIsMuted(tvMuted);
-              if (tvMuted) engine.mute?.();
-              else engine.unMute?.();
+              if (tvMuted !== isMutedRef.current) {
+                isMutedRef.current = tvMuted;
+                setIsMuted(tvMuted);
+                if (tvMuted) engine.mute?.();
+                else engine.unMute?.();
+              }
             }
             if (typeof st.karaoke_mode === "boolean") {
               setKaraokeMode(st.karaoke_mode);
               if (st.karaoke_mode) setVideoMode(true);
             }
             if (isNewCommand && st.last_command === "seek" && typeof trkObj.positionSeconds === "number") {
+              const dbSeekSeq = typeof trkObj.seekSeq === "number" ? trkObj.seekSeq : 0;
+              if (dbSeekSeq > 0 && dbSeekSeq === lastSeekSeqRef.current) {
+                return;
+              }
+              if (Date.now() - lastTvSeekAtRef.current < 1200) {
+                return;
+              }
+              if (dbSeekSeq > 0) lastSeekSeqRef.current = dbSeekSeq;
               const sec = Math.max(0, Number(trkObj.positionSeconds));
               masterTargetTimeRef.current = {
                 seconds: sec,
@@ -1346,12 +1379,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               handleSeekRef.current(sec);
             } else if (isNewCommand && st.last_command === "skip") {
               if (st.current_track) {
+                lastTvSeekAtRef.current = Date.now();
                 setManualNowPlaying(st.current_track);
                 setElapsed(0);
                 elapsedRef.current = 0;
                 void engine.load(st.current_track);
-                engine.seekTo?.(0);
-                void engine.play();
               } else {
                 void handleSkipNextRef.current(true);
               }
@@ -1361,12 +1393,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 updatedAtMs: Date.now(),
                 isPaused: false,
               };
+              lastTvSeekAtRef.current = Date.now();
               setManualNowPlaying(st.current_track);
               setElapsed(0);
               elapsedRef.current = 0;
               void engine.load(st.current_track);
-              engine.seekTo?.(0);
-              void engine.play();
             }
           },
         )
@@ -1439,15 +1470,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               }
             }
             if (typeof tvMuted === "boolean") {
-              setIsMuted(tvMuted);
-              if (tvMuted) engine.mute?.();
-              else engine.unMute?.();
+              if (tvMuted !== isMutedRef.current) {
+                isMutedRef.current = tvMuted;
+                setIsMuted(tvMuted);
+                if (tvMuted) engine.mute?.();
+                else engine.unMute?.();
+              }
             } else if (!isFromAdminAudio) {
-              if (typeof vol === "number") {
+              if (typeof vol === "number" && vol !== volumeRef.current) {
+                volumeRef.current = vol;
                 setVolume(vol);
                 engine.setVolume?.(vol);
               }
-              if (typeof muted === "boolean") {
+              if (typeof muted === "boolean" && muted !== isMutedRef.current) {
+                isMutedRef.current = muted;
                 setIsMuted(muted);
                 if (muted) engine.mute?.();
                 else engine.unMute?.();
@@ -1458,7 +1494,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             const isNewSeekSeq =
               typeof seekSeq === "number" && seekSeq !== lastSeekSeqRef.current;
             if (forceSeek || isNewSeekSeq) {
+              if (typeof seekSeq === "number" && seekSeq === lastSeekSeqRef.current) {
+                return;
+              }
               if (typeof seekSeq === "number") lastSeekSeqRef.current = seekSeq;
+              if (Date.now() - lastTvSeekAtRef.current < 350 && Math.abs(elapsedRef.current - targetTime) <= 1) {
+                return;
+              }
               lastTvSeekAtRef.current = Date.now();
               handleSeekRef.current(targetTime);
               return;
@@ -1470,24 +1512,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               const isDiff =
                 !cur ||
                 (trk.youtubeVideoId && cur.youtubeVideoId !== trk.youtubeVideoId) ||
-                cur.title.toLowerCase() !== trk.title.toLowerCase();
+                (!trk.youtubeVideoId && cur.title.toLowerCase() !== trk.title.toLowerCase());
               if (isDiff) {
                 setManualNowPlaying(trk);
-                void engine.load(trk).then(() => {
-                  if (targetTime > 0.35) {
-                    engine.seekTo?.(targetTime);
-                  }
-                });
-              } else if (typeof currentTime === "number" && !isNaN(currentTime) && !p) {
-                // High-precision sync: check live TV time against Cabina target time
+                lastTvSeekAtRef.current = Date.now();
+                void engine.load(trk);
+              } else if (
+                typeof currentTime === "number" &&
+                !isNaN(currentTime) &&
+                !p &&
+                engine.hasLiveTime?.()
+              ) {
+                // Smooth drift guard: only seek if real reported time drifts by >= 3.5s
+                // and at least 6s have elapsed since the last seek/load so video never stutters!
                 const tvSec = engine.getCurrentTime?.() ?? elapsedRef.current;
                 const drift = Math.abs(tvSec - targetTime);
-
-                // During the first 4 seconds of a song, lock aggressively (>0.45s) so start is 100% synced;
-                // afterwards only seek if drift >= 1.5s to prevent mid-song buffering hiccups
-                const threshold = targetTime < 4.5 ? 0.45 : 1.5;
-                const cooldown = targetTime < 4.5 ? 1400 : 3500;
-                if (drift >= threshold && Date.now() - lastTvSeekAtRef.current > cooldown) {
+                if (drift >= 3.5 && Date.now() - lastTvSeekAtRef.current > 6000) {
                   lastTvSeekAtRef.current = Date.now();
                   engine.seekTo?.(targetTime);
                 }
@@ -1590,7 +1630,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         <PlayerRuntime
           token={token}
           slug={slug}
-          engine={engine}
           onStateChange={(st) => setPlayerState(st)}
         />
       ) : null}
@@ -1745,7 +1784,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <iframe
               id="poneleplay-tv-iframe"
               ref={iframeRef}
-              src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1${isMuted ? "&mute=1" : ""}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+              src={initialIframeSrcRef.current}
               title={nowPlaying?.title || "TV Player"}
               className="w-full h-full border-0 pointer-events-none select-none object-cover"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

@@ -43,6 +43,7 @@ export function createIframeEngine(
 
   let currentVideoId = "";
   let currentTime = 0;
+  let lastTimeUpdateAt = 0;
   let duration = 0;
   let seekLockUntil = 0;
   let lastPlayerState: number | null = null;
@@ -69,18 +70,9 @@ export function createIframeEngine(
     const iframe = getIframe();
     const win = iframe?.contentWindow;
     if (!win) return;
-    const iframeId = iframe?.id || "poneleplay-tv-iframe";
     try {
-      // 1. Direct standard command
-      win.postMessage(JSON.stringify({ event: "command", func, args }), "*");
-      // 2. Widget protocol with captured widget ID
       win.postMessage(
         JSON.stringify({ event: "command", func, args, id: capturedWidgetId, channel: "widget" }),
-        "*",
-      );
-      // 3. Widget protocol with DOM ID
-      win.postMessage(
-        JSON.stringify({ event: "command", func, args, id: iframeId, channel: "widget" }),
         "*",
       );
     } catch {}
@@ -90,16 +82,9 @@ export function createIframeEngine(
     const iframe = getIframe();
     const win = iframe?.contentWindow;
     if (!win) return;
-    const iframeId = iframe?.id || "poneleplay-tv-iframe";
     try {
-      win.postMessage(JSON.stringify({ event: "listening" }), "*");
-      win.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "*");
       win.postMessage(
         JSON.stringify({ event: "listening", id: capturedWidgetId, channel: "widget" }),
-        "*",
-      );
-      win.postMessage(
-        JSON.stringify({ event: "listening", id: iframeId, channel: "widget" }),
         "*",
       );
     } catch {}
@@ -107,48 +92,70 @@ export function createIframeEngine(
 
   function reapplyAudioAndPlayState() {
     if (desiredVolume !== null) {
-      try {
-        if (ytReady && ytPlayer) ytPlayer.setVolume(desiredVolume);
-      } catch {}
-      post("setVolume", [desiredVolume]);
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.setVolume(desiredVolume);
+        } catch {}
+      } else {
+        post("setVolume", [desiredVolume]);
+      }
     }
     if (desiredMuted === true) {
-      try {
-        if (ytReady && ytPlayer) ytPlayer.mute();
-      } catch {}
-      post("mute");
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.mute();
+        } catch {}
+      } else {
+        post("mute");
+      }
     } else if (desiredMuted === false) {
-      try {
-        if (ytReady && ytPlayer) ytPlayer.unMute();
-      } catch {}
-      post("unMute");
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.unMute();
+        } catch {}
+      } else {
+        post("unMute");
+      }
     }
     if (desiredPlaying) {
-      try {
-        if (ytReady && ytPlayer) ytPlayer.playVideo();
-      } catch {}
-      post("playVideo");
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.playVideo();
+        } catch {}
+      } else {
+        post("playVideo");
+      }
     } else {
-      try {
-        if (ytReady && ytPlayer) ytPlayer.pauseVideo();
-      } catch {}
-      post("pauseVideo");
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.pauseVideo();
+        } catch {}
+      } else {
+        post("pauseVideo");
+      }
     }
   }
 
   function handlePlayerState(state: number) {
     if (state === YT_PLAYING) {
       desiredPlaying = true;
+      if (lastTimeUpdateAt === 0) {
+        lastTimeUpdateAt = Date.now();
+      }
       onPlayStateChange?.(true);
       if (pendingSeekSeconds !== null) {
         const s = pendingSeekSeconds;
         pendingSeekSeconds = null;
+        currentTime = s;
+        lastTimeUpdateAt = Date.now();
+        seekLockUntil = Date.now() + 1500;
         if (ytReady && ytPlayer) {
           try {
             ytPlayer.seekTo(s, true);
           } catch {}
+        } else {
+          post("seekTo", [s, true]);
         }
-        post("seekTo", [s, true]);
       }
       if (!hasPlayedCurrentVideo && currentVideoId) {
         hasPlayedCurrentVideo = true;
@@ -249,6 +256,7 @@ export function createIframeEngine(
       };
       if (typeof info.currentTime === "number" && Date.now() >= seekLockUntil) {
         currentTime = info.currentTime;
+        lastTimeUpdateAt = Date.now();
       }
       if (typeof info.duration === "number" && info.duration > 0) {
         duration = info.duration;
@@ -283,8 +291,10 @@ export function createIframeEngine(
 
     handshake() {
       sendListeningHandshake();
-      post("addEventListener", ["onStateChange"]);
-      post("addEventListener", ["onError"]);
+      if (!hasLiveBridge) {
+        post("addEventListener", ["onStateChange"]);
+        post("addEventListener", ["onError"]);
+      }
       if (!ytReady) {
         bindYtPlayerToIframe();
       }
@@ -298,6 +308,7 @@ export function createIframeEngine(
 
       currentVideoId = nextVideoId;
       currentTime = 0;
+      lastTimeUpdateAt = 0;
       duration = track.durationSeconds ?? 0;
       lastPlayerState = null;
       hasPlayedCurrentVideo = false;
@@ -316,13 +327,16 @@ export function createIframeEngine(
 
       const iframe = getIframe();
       if (iframe) {
-        // Send postMessage load command
-        post("loadVideoById", [nextVideoId, 0]);
-        post("playVideo");
+        if (hasLiveBridge && iframe.src && iframe.src.includes("youtube.com/embed")) {
+          post("loadVideoById", [{ videoId: nextVideoId, startSeconds: 0 }]);
+          post("playVideo");
+          reapplyAudioAndPlayState();
+          return;
+        }
 
-        // Also update iframe.src directly to guarantee video switch
         const targetSrc = buildEmbedUrl(nextVideoId, 0);
         if (!iframe.src || !iframe.src.includes(nextVideoId)) {
+          boundIframe = null;
           iframe.src = targetSrc;
         }
       }
@@ -333,6 +347,7 @@ export function createIframeEngine(
       if (ytReady && ytPlayer) {
         try {
           ytPlayer.playVideo();
+          return;
         } catch {}
       }
       post("playVideo");
@@ -343,6 +358,7 @@ export function createIframeEngine(
       if (ytReady && ytPlayer) {
         try {
           ytPlayer.pauseVideo();
+          return;
         } catch {}
       }
       post("pauseVideo");
@@ -353,58 +369,62 @@ export function createIframeEngine(
       if (ytReady && ytPlayer) {
         try {
           ytPlayer.stopVideo();
+          return;
         } catch {}
       }
       post("stopVideo");
     },
 
     setVolume(volume: number): void {
-      desiredVolume = Math.max(0, Math.min(100, volume));
-      if (desiredVolume > 0 && desiredMuted) {
+      const clamped = Math.max(0, Math.min(100, volume));
+      desiredVolume = clamped;
+      if (clamped > 0 && desiredMuted) {
         desiredMuted = false;
         if (ytReady && ytPlayer) {
           try {
             ytPlayer.unMute();
           } catch {}
+        } else {
+          post("unMute");
         }
-        post("unMute");
       }
       if (ytReady && ytPlayer) {
         try {
-          ytPlayer.setVolume(desiredVolume);
+          ytPlayer.setVolume(clamped);
+          return;
         } catch {}
       }
-      post("setVolume", [desiredVolume]);
+      post("setVolume", [clamped]);
     },
 
     seekTo(seconds: number): void {
       const target = Math.max(0, Math.round(seconds * 10) / 10);
       currentTime = target;
+      lastTimeUpdateAt = Date.now();
       seekLockUntil = Date.now() + 1800;
 
-      if (lastPlayerState !== YT_PLAYING && lastPlayerState !== YT_PAUSED) {
+      // If the player hasn't started playing yet, queue the seek for when YT_PLAYING fires
+      // NEVER rewrite iframe.src inside seekTo (that destroys & reloads the iframe in a loop!)
+      if (lastPlayerState !== YT_PLAYING && lastPlayerState !== YT_PAUSED && !ytReady) {
         pendingSeekSeconds = target;
+        post("seekTo", [target, true]);
+        return;
       }
 
+      pendingSeekSeconds = null;
       if (ytReady && ytPlayer) {
         try {
           ytPlayer.seekTo(target, true);
-          if (desiredPlaying) ytPlayer.playVideo();
+          if (desiredPlaying && lastPlayerState !== YT_PLAYING) {
+            ytPlayer.playVideo();
+          }
+          return;
         } catch {}
       }
 
       post("seekTo", [target, true]);
-      if (desiredPlaying) {
+      if (desiredPlaying && lastPlayerState !== YT_PLAYING) {
         post("playVideo");
-      }
-
-      // Fallback: If not bridged, reload iframe directly at seek position
-      if (!hasLiveBridge && !ytReady) {
-        const iframe = getIframe();
-        if (iframe && currentVideoId) {
-          boundIframe = null;
-          iframe.src = buildEmbedUrl(currentVideoId, Math.floor(target));
-        }
       }
     },
 
@@ -413,6 +433,7 @@ export function createIframeEngine(
       if (ytReady && ytPlayer) {
         try {
           ytPlayer.mute();
+          return;
         } catch {}
       }
       post("mute");
@@ -424,6 +445,7 @@ export function createIframeEngine(
         try {
           ytPlayer.unMute();
           if (desiredVolume !== null) ytPlayer.setVolume(desiredVolume);
+          return;
         } catch {}
       }
       post("unMute");
@@ -440,7 +462,7 @@ export function createIframeEngine(
     },
 
     hasLiveTime(): boolean {
-      return hasLiveBridge || ytReady;
+      return (hasLiveBridge || ytReady) && lastTimeUpdateAt > 0 && lastPlayerState === YT_PLAYING;
     },
 
     getCurrentTime(): number {
@@ -452,9 +474,14 @@ export function createIframeEngine(
           const t = ytPlayer.getCurrentTime();
           if (typeof t === "number" && !isNaN(t) && t >= 0) {
             currentTime = t;
+            lastTimeUpdateAt = Date.now();
             return t;
           }
         } catch {}
+      }
+      if (lastPlayerState === YT_PLAYING && lastTimeUpdateAt > 0) {
+        const deltaSec = Math.max(0, Math.min(2.5, (Date.now() - lastTimeUpdateAt) / 1000));
+        return currentTime + deltaSec;
       }
       return currentTime;
     },
