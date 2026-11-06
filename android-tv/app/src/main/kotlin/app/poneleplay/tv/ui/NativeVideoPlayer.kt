@@ -60,10 +60,16 @@ class VideoPlayerController {
     internal var webView: WebView? = null
     internal var currentVideoId: String? = null
 
-    fun loadVideo(videoId: String) {
+    fun loadVideo(videoId: String, startSeconds: Float = 0f) {
         if (videoId == currentVideoId) return
         currentVideoId = videoId
-        webView?.evaluateJavascript("loadVideo('$videoId');", null)
+        val safeSec = startSeconds.coerceAtLeast(0f)
+        webView?.evaluateJavascript("loadVideo('$videoId', $safeSec);", null)
+    }
+
+    fun syncServerPosition(seconds: Float) {
+        if (seconds < 0f) return
+        webView?.evaluateJavascript("syncServerPosition($seconds);", null)
     }
 
     fun play() {
@@ -113,15 +119,23 @@ fun NativeVideoPlayer(
     isPaused: Boolean = false,
     volume: Int = 85,
     isMuted: Boolean = false,
+    serverPositionSeconds: Float = 0f,
     controller: VideoPlayerController,
     modifier: Modifier = Modifier,
     onEnded: () -> Unit = {},
     onDisplayConfig: (String) -> Unit = {}
 ) {
-    // React to video changes
+    // React to video changes, starting at the server's live position if joining mid-song
     LaunchedEffect(videoId) {
         if (videoId.isNotBlank()) {
-            controller.loadVideo(videoId)
+            controller.loadVideo(videoId, serverPositionSeconds.coerceAtLeast(0f))
+        }
+    }
+
+    // Continuous drift alignment with server clock on each poll update
+    LaunchedEffect(serverPositionSeconds, isPaused, videoId) {
+        if (!isPaused && serverPositionSeconds >= 0f) {
+            controller.syncServerPosition(serverPositionSeconds)
         }
     }
 
@@ -188,7 +202,15 @@ fun NativeVideoPlayer(
                 controller.webView = this
                 controller.currentVideoId = videoId
 
-                val html = buildPlayerHtml(videoId, venueSlug, deviceId, isPaused, volume, isMuted)
+                val html = buildPlayerHtml(
+                    videoId = videoId,
+                    venueSlug = venueSlug,
+                    deviceId = deviceId,
+                    isPaused = isPaused,
+                    volume = volume,
+                    isMuted = isMuted,
+                    initialPositionSeconds = serverPositionSeconds
+                )
                 val originUrl = "https://poneleplay.netlify.app"
                 loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
             }
@@ -205,10 +227,12 @@ private fun buildPlayerHtml(
     deviceId: String,
     isPaused: Boolean,
     volume: Int,
-    isMuted: Boolean
+    isMuted: Boolean,
+    initialPositionSeconds: Float = 0f
 ): String {
     val autoPlayParam = if (isPaused) 0 else 1
-    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayParam&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
+    val startParam = initialPositionSeconds.toInt().coerceAtLeast(0)
+    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayParam&start=$startParam&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
 
     return """
         <!DOCTYPE html>
@@ -338,6 +362,31 @@ private fun buildPlayerHtml(
               currentMuted = false;
               sendCommand('unMute', []);
               sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
+            }
+
+            function syncServerPosition(serverSec) {
+              try {
+                if (desiredPaused || isEndedSent || !currentVideoId) return;
+                var now = Date.now();
+                if (now < lastSyncSeekAt || (now - lastLoadAt < 5000)) return;
+                var tvSec = -1;
+                if (player && typeof player.getCurrentTime === 'function') {
+                  try {
+                    var pt = player.getCurrentTime();
+                    if (typeof pt === 'number' && pt >= 0) tvSec = pt;
+                  } catch(_) {}
+                }
+                if (tvSec < 0 && typeof currentTvTime === 'number' && currentTvTime >= 0) {
+                  tvSec = currentTvTime;
+                }
+                if (tvSec >= 3.0 && currentTvState === 1 && typeof serverSec === 'number' && serverSec >= 0) {
+                  var drift = Math.abs(tvSec - serverSec);
+                  if (drift >= 2.8 && (now - lastSyncSeekAt > 7000)) {
+                    lastSyncSeekAt = now;
+                    seekTo(serverSec);
+                  }
+                }
+              } catch(_) {}
             }
 
             // Load video cleanly: start at volume 0 and smoothly fade in over 1.5s!
@@ -598,31 +647,51 @@ private fun buildPlayerHtml(
                       } else if (cmd === 'resume') {
                         playVideo();
                       } else if (cmd === 'toggle_pause') {
-                        togglePlayPause();
+                        if (typeof p.isPaused === 'boolean') {
+                          if (p.isPaused) pauseVideo(); else playVideo();
+                        } else {
+                          togglePlayPause();
+                        }
                       } else if (cmd === 'seek') {
-                        var sec = Number(p.seconds != null ? p.seconds : (eventPayload.seconds != null ? eventPayload.seconds : 0));
+                        var sec = Number(p.seconds != null ? p.seconds : (p.positionSeconds != null ? p.positionSeconds : (eventPayload.seconds != null ? eventPayload.seconds : 0)));
                         seekTo(sec);
                       } else if (cmd === 'set_volume') {
                         var vol = Number(p.volume != null ? p.volume : (eventPayload.volume != null ? eventPayload.volume : 85));
                         setVolume(vol);
-                        unMute();
-                      } else if (cmd === 'mute') {
-                        mute();
-                      } else if (cmd === 'unmute') {
-                        unMute();
-                      } else if (cmd === 'toggle_mute') {
-                        if (currentMuted) unMute(); else mute();
-                      } else if (cmd === 'skip') {
-                        if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
-                          window.AndroidBridge.onStateChange(0);
+                        if (p.tvMuted === false && p.audioRouting !== 'CABINA_ONLY') {
+                          unMute();
                         }
-                      } else if (cmd === 'play_now') {
+                      } else if (cmd === 'set_tv_mute') {
+                        var tvM = Boolean(p.tvMuted != null ? p.tvMuted : eventPayload.tvMuted);
+                        if (tvM) mute(); else unMute();
+                      } else if (cmd === 'set_audio_routing') {
+                        var routing = String(p.audioRouting || eventPayload.audioRouting || 'BOTH').toUpperCase();
+                        if (routing === 'CABINA_ONLY' || p.tvMuted === true) {
+                          mute();
+                        } else {
+                          unMute();
+                        }
+                      } else if (cmd === 'mute' || cmd === 'unmute' || cmd === 'toggle_mute') {
+                        // Never mute TV when Cabina-only mute changes unless tvMuted / CABINA_ONLY is explicitly set
+                        if (typeof p.tvMuted === 'boolean') {
+                          if (p.tvMuted) mute(); else unMute();
+                        } else if (p.audioRouting === 'CABINA_ONLY') {
+                          mute();
+                        } else if (p.audioRouting === 'TV_ONLY' || p.audioRouting === 'BOTH') {
+                          unMute();
+                        }
+                      } else if (cmd === 'skip' || cmd === 'play_now' || cmd === 'track_ended') {
                         var trk = p.track || eventPayload.track;
+                        var startPos = Number(p.positionSeconds != null ? p.positionSeconds : 0);
                         if (trk && trk.youtubeVideoId) {
                           desiredPaused = false;
                           localTrackLock = { id: trk.youtubeVideoId, until: Date.now() + 10000 };
-                          currentTvTime = 0;
-                          loadVideo(trk.youtubeVideoId, 0);
+                          currentTvTime = startPos > 0 ? startPos : 0;
+                          loadVideo(trk.youtubeVideoId, startPos > 0 ? startPos : 0);
+                        } else if (cmd === 'skip') {
+                          if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
+                            window.AndroidBridge.onStateChange(0);
+                          }
                         }
                       }
                     } else if (eventName === "tv_playback_progress" && eventPayload) {
@@ -652,9 +721,8 @@ private fun buildPlayerHtml(
                       }
 
                       // Drift Correction: Only perform seek if TV is actively PLAYING (never when buffering/loading!)
-                      // and drift is noticeably large (> 2.5s, e.g. operator scrubbed the bar in Cabina)
+                      // and drift is noticeably large (>= 2.8s, e.g. operator scrubbed the bar in Cabina)
                       if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused && now > lastSyncSeekAt) {
-                        // TV time from player or infoDelivery postMessage
                         var tvSec = -1;
                         if (player && typeof player.getCurrentTime === 'function') {
                           try {
@@ -666,8 +734,8 @@ private fun buildPlayerHtml(
                           tvSec = currentTvTime;
                         }
 
-                        // Must be PLAYING (currentTvState === 1) and past first 5s of playback
-                        if (tvSec >= 5.0 && currentTvState === 1) {
+                        // Must be PLAYING (currentTvState === 1) and past first 3.5s of playback
+                        if (tvSec >= 3.5 && currentTvState === 1) {
                           var latency = 0;
                           if (typeof sentAt === 'number' && sentAt > 0) {
                             latency = Math.max(0, Math.min(1.0, (now - sentAt) / 1000));
@@ -675,15 +743,20 @@ private fun buildPlayerHtml(
                           var targetSec = curr + latency;
                           var drift = Math.abs(tvSec - targetSec);
 
-                          // Only align on substantial drift (> 2.5s) with minimum 8s cooldown
-                          if (drift > 2.5 && (now - lastSyncSeekAt > 8000)) {
+                          // Only align on substantial drift (>= 2.8s) with minimum 7s cooldown
+                          if (drift >= 2.8 && (now - lastSyncSeekAt > 7000)) {
                             lastSyncSeekAt = now;
                             seekTo(targetSec);
                           }
                         }
                       }
 
-                      // Volume & Mute if not overridden by local mute
+                      // Volume & TV Mute routing
+                      if (typeof eventPayload.tvMuted === 'boolean') {
+                        if (eventPayload.tvMuted) mute(); else unMute();
+                      } else if (typeof eventPayload.audioRouting === 'string') {
+                        if (eventPayload.audioRouting === 'CABINA_ONLY') mute(); else unMute();
+                      }
                       if (!eventPayload.isFromAdminAudio && !currentMuted) {
                         if (typeof eventPayload.volume === 'number') setVolume(eventPayload.volume);
                       }

@@ -344,16 +344,36 @@ export function PanelPlaybackFooter({
 
   // 1. Initial State Sync
   const loadState = useCallback(async () => {
+    let loadedFromTvApi = false;
     try {
-      // First check /api/tv/${slug} for authoritative server state (nowPlaying, positionSeconds, tvMuted, partyConfig)
+      // First check /api/tv/${slug} for authoritative server state (nowPlaying, live positionSeconds, audioRouting, tvMuted, partyConfig)
       try {
         const tvRes = await fetch(`/api/tv/${encodeURIComponent(slug)}`, { cache: "no-store" });
         if (tvRes.ok) {
           const tvData = await tvRes.json();
           if (tvData?.ok) {
-            if (typeof tvData.playback?.tvMuted === "boolean") {
-              setTvMuted(tvData.playback.tvMuted);
+            loadedFromTvApi = true;
+            const pb = tvData.playback || {};
+            if (typeof pb.commandSeq === "number" && pb.commandSeq > 0) {
+              lastCommandSeqRef.current = pb.commandSeq;
             }
+            if (typeof pb.isPaused === "boolean") setIsPaused(pb.isPaused);
+            if (typeof pb.volume === "number") setVolume(pb.volume);
+            if (typeof pb.karaokeMode === "boolean") setKaraokeMode(pb.karaokeMode);
+            const cMuted = Boolean(pb.cabinaMuted ?? false);
+            const tMuted = Boolean(pb.tvMuted ?? false);
+            setIsMuted(cMuted);
+            setTvMuted(tMuted);
+            const routing =
+              pb.audioRouting === "CABINA_ONLY" || pb.audioRouting === "TV_ONLY" || pb.audioRouting === "BOTH"
+                ? pb.audioRouting
+                : cMuted && !tMuted
+                  ? "TV_ONLY"
+                  : !cMuted && tMuted
+                    ? "CABINA_ONLY"
+                    : "BOTH";
+            setAudioRouting(routing);
+
             if (tvData.nowPlaying && tvData.nowPlaying.title) {
               const np = tvData.nowPlaying;
               const restoredTrack: PlayerTrack = {
@@ -364,6 +384,7 @@ export function PanelPlaybackFooter({
                 source: "youtube",
                 durationSeconds: Number(np.durationSeconds ?? 210),
                 youtubeVideoId: np.youtubeVideoId || undefined,
+                storagePath: np.storagePath || undefined,
                 thumbnailUrl: np.thumbnailUrl ?? null,
                 voteCount: Number(np.voteCount ?? 0),
                 guestName: np.guestName ?? null,
@@ -372,7 +393,7 @@ export function PanelPlaybackFooter({
               };
               lastLiveKeyRef.current = trackAudioKey(restoredTrack);
               applyExternalTrack(restoredTrack);
-              const pos = Number(tvData.playback?.positionSeconds ?? 0);
+              const pos = Number(pb.positionSeconds ?? np.positionSeconds ?? 0);
               if (pos > 0) {
                 setElapsed(Math.floor(pos));
                 setTimeout(() => audioEngineRef.current?.seekTo(Math.floor(pos)), 350);
@@ -386,18 +407,36 @@ export function PanelPlaybackFooter({
 
       const st = await fetchPlaybackState(slug);
       if (st.currentTrack) {
+        const ctRaw = st.currentTrack as unknown as Record<string, unknown>;
         lastLiveKeyRef.current = trackAudioKey(st.currentTrack);
         applyExternalTrack(st.currentTrack);
-        const pos = Number((st.currentTrack as unknown as Record<string, unknown>).positionSeconds ?? 0);
-        if (pos > 0) {
-          setElapsed(Math.floor(pos));
-          setTimeout(() => audioEngineRef.current?.seekTo(Math.floor(pos)), 350);
+        if (!loadedFromTvApi) {
+          const basePos = Number(ctRaw.positionSeconds ?? 0);
+          const startedAtMs = Number(ctRaw.startedAtMs ?? 0);
+          const livePos =
+            !st.isPaused && startedAtMs > 0
+              ? Math.floor(basePos + Math.max(0, (Date.now() - startedAtMs) / 1000))
+              : Math.floor(basePos);
+          if (livePos > 0) {
+            setElapsed(livePos);
+            setTimeout(() => audioEngineRef.current?.seekTo(livePos), 350);
+          }
+          if (typeof ctRaw.tvMuted === "boolean") setTvMuted(ctRaw.tvMuted);
+          if (
+            ctRaw.audioRouting === "BOTH" ||
+            ctRaw.audioRouting === "CABINA_ONLY" ||
+            ctRaw.audioRouting === "TV_ONLY"
+          ) {
+            setAudioRouting(ctRaw.audioRouting);
+          }
         }
       }
-      setIsPaused(st.isPaused);
-      setVolume(st.volume ?? 85);
-      setIsMuted(st.isMuted ?? false);
-      setKaraokeMode(st.karaokeMode ?? false);
+      if (!loadedFromTvApi) {
+        setIsPaused(st.isPaused);
+        setVolume(st.volume ?? 85);
+        setIsMuted(st.isMuted ?? false);
+        setKaraokeMode(st.karaokeMode ?? false);
+      }
     } catch {
       // Non-blocking fallback
     } finally {
@@ -432,10 +471,15 @@ export function PanelPlaybackFooter({
         .on(
           "broadcast",
           { event: "playback_command" },
-          (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
+          (msg: { payload?: { command?: string; commandSeq?: number; payload?: Record<string, unknown> } }) => {
             if (!active) return;
             const cmd = msg.payload?.command;
             const p = msg.payload?.payload || {};
+            const seq = Number(msg.payload?.commandSeq ?? 0);
+            if (seq > 0) {
+              if (seq < lastCommandSeqRef.current) return;
+              lastCommandSeqRef.current = seq;
+            }
 
             if (cmd === "pause") setIsPaused(true);
             else if (cmd === "resume") setIsPaused(false);
@@ -446,12 +490,24 @@ export function PanelPlaybackFooter({
             } else if (cmd === "mute") setIsMuted(true);
             else if (cmd === "unmute") setIsMuted(false);
             else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
-            else if (cmd === "set_tv_mute") setTvMuted(Boolean(p.tvMuted));
-            else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
+            else if (cmd === "set_tv_mute") {
+              const tMuted = Boolean(p.tvMuted ?? p.muted);
+              setTvMuted(tMuted);
+              if (p.audioRouting === "BOTH" || p.audioRouting === "CABINA_ONLY" || p.audioRouting === "TV_ONLY") {
+                setAudioRouting(p.audioRouting);
+              }
+            } else if (cmd === "set_audio_routing") {
+              const r = String(p.routing || p.audioRouting || "BOTH") as "BOTH" | "CABINA_ONLY" | "TV_ONLY";
+              if (r === "BOTH" || r === "CABINA_ONLY" || r === "TV_ONLY") {
+                setAudioRouting(r);
+                setIsMuted(r === "TV_ONLY");
+                setTvMuted(r === "CABINA_ONLY");
+              }
+            } else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
             else if (cmd === "seek" && typeof p.seconds === "number") {
               setElapsed(Math.floor(p.seconds));
             } else if (cmd === "play_now" && p.track) {
-              // Explicit play command from another operator: authoritative
+              // Explicit play command from another operator or server skip: authoritative
               const incoming = p.track as PlayerTrack;
               const cur = currentTrackRef.current;
               if (cur && trackAudioKey(cur) === trackAudioKey(incoming)) {
@@ -539,7 +595,18 @@ export function PanelPlaybackFooter({
             if (typeof st.volume === "number") setVolume(st.volume);
             if (typeof st.is_muted === "boolean") setIsMuted(st.is_muted);
             if (typeof st.karaoke_mode === "boolean") setKaraokeMode(st.karaoke_mode);
-            if (st.current_track) applyExternalTrack(st.current_track);
+            if (st.current_track) {
+              const ctRaw = st.current_track as unknown as Record<string, unknown>;
+              if (typeof ctRaw.tvMuted === "boolean") setTvMuted(ctRaw.tvMuted);
+              if (
+                ctRaw.audioRouting === "BOTH" ||
+                ctRaw.audioRouting === "CABINA_ONLY" ||
+                ctRaw.audioRouting === "TV_ONLY"
+              ) {
+                setAudioRouting(ctRaw.audioRouting);
+              }
+              applyExternalTrack(st.current_track);
+            }
           },
         )
         .subscribe();
@@ -556,7 +623,7 @@ export function PanelPlaybackFooter({
         });
       }
     };
-  }, [slug]);
+  }, [slug, applyExternalTrack]);
 
   // Elapsed runner
   useEffect(() => {
@@ -591,16 +658,17 @@ export function PanelPlaybackFooter({
     const next = !isPaused;
     setIsPaused(next);
     showToast(next ? "⏸️ TV Pausada" : "▶️ TV en Reproducción");
-    broadcastControl(next ? "pause" : "resume");
+    broadcastControl(next ? "pause" : "resume", { currentTime: elapsed, seconds: elapsed });
     try {
-      if (next) {
-        await pausePlayback(slug);
-      } else {
-        await resumePlayback(slug);
-      }
+      await sendPlaybackCommand(slug, next ? "pause" : "resume", { currentTime: elapsed });
     } catch {
-      // Revert on failure
-      setIsPaused(!next);
+      // Fallback to direct pause/resume RPC
+      try {
+        if (next) await pausePlayback(slug);
+        else await resumePlayback(slug);
+      } catch {
+        setIsPaused(!next);
+      }
     }
   };
 
@@ -769,9 +837,12 @@ export function PanelPlaybackFooter({
   const handleToggleTvMute = async () => {
     const next = !tvMuted;
     setTvMuted(next);
+    const nextRouting = isMuted && !next ? "TV_ONLY" : !isMuted && next ? "CABINA_ONLY" : "BOTH";
+    setAudioRouting(nextRouting);
     showToast(next ? "🔇 Audio de la TV Silenciado" : "🔊 Audio de la TV Activado");
-    broadcastControl("set_tv_mute", { tvMuted: next });
+    broadcastControl("set_tv_mute", { tvMuted: next, cabinaMuted: isMuted, audioRouting: nextRouting });
     try {
+      await sendPlaybackCommand(slug, "set_tv_mute", { tvMuted: next });
       await updateTvDeviceDisplay(slug, "all", { tvMuted: next });
     } catch {
       // Non-blocking
@@ -780,33 +851,29 @@ export function PanelPlaybackFooter({
 
   /**
    * 3-way audio routing selector:
-   * BOTH         → Audio en Cabina Y en TV (mute=false, tvMuted=false)
-   * CABINA_ONLY  → Audio SOLO en Cabina (mute=false, tvMuted=true)
-   * TV_ONLY      → Audio SOLO en TV (mute=true, tvMuted=false)
+   * BOTH         → Audio en Cabina Y en TV (cabinaMuted=false, tvMuted=false)
+   * CABINA_ONLY  → Audio SOLO en Cabina (cabinaMuted=false, tvMuted=true)
+   * TV_ONLY      → Audio SOLO en TV (cabinaMuted=true, tvMuted=false)
    */
   const handleSetAudioRouting = async (routing: "BOTH" | "CABINA_ONLY" | "TV_ONLY") => {
     setAudioRouting(routing);
     const nextCabinaMuted = routing === "TV_ONLY";
     const nextTvMuted = routing === "CABINA_ONLY";
 
-    // Update cabina mute
-    if (nextCabinaMuted !== isMuted) {
-      setIsMuted(nextCabinaMuted);
-      broadcastControl(nextCabinaMuted ? "mute" : "unmute");
-      try {
-        if (nextCabinaMuted) await mutePlayback(slug);
-        else await unmutePlayback(slug);
-      } catch { /* non-blocking */ }
-    }
+    setIsMuted(nextCabinaMuted);
+    setTvMuted(nextTvMuted);
 
-    // Update TV mute
-    if (nextTvMuted !== tvMuted) {
-      setTvMuted(nextTvMuted);
-      broadcastControl("set_tv_mute", { tvMuted: nextTvMuted });
-      try {
-        await updateTvDeviceDisplay(slug, "all", { tvMuted: nextTvMuted });
-      } catch { /* non-blocking */ }
-    }
+    broadcastControl("set_audio_routing", {
+      routing,
+      audioRouting: routing,
+      cabinaMuted: nextCabinaMuted,
+      tvMuted: nextTvMuted,
+    });
+    broadcastControl("set_tv_mute", {
+      tvMuted: nextTvMuted,
+      cabinaMuted: nextCabinaMuted,
+      audioRouting: routing,
+    });
 
     const labels = {
       BOTH: "🔊 Audio en Cabina + TV",
@@ -814,6 +881,16 @@ export function PanelPlaybackFooter({
       TV_ONLY: "📺 Audio Solo en TV",
     };
     showToast(labels[routing]);
+
+    try {
+      await sendPlaybackCommand(slug, "set_audio_routing", {
+        routing,
+        cabinaMuted: nextCabinaMuted,
+        tvMuted: nextTvMuted,
+      });
+    } catch {
+      // Non-blocking fallback
+    }
   };
 
   const handleToggleKaraoke = async () => {
@@ -1319,7 +1396,7 @@ export function PanelPlaybackFooter({
           }
 
           const now = Date.now();
-          if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 1800) {
+          if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 2000) {
             lastProgressBroadcastRef.current = now;
             void channelRef.current.send({
               type: "broadcast",
@@ -1331,7 +1408,10 @@ export function PanelPlaybackFooter({
                 trackId: currentTrack.trackId,
                 track: currentTrack,
                 volume,
-                isMuted,
+                isMuted: tvMuted,
+                cabinaMuted: isMuted,
+                tvMuted,
+                audioRouting,
                 isFromAdminAudio: true,
                 sentAt: now,
               },

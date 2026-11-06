@@ -57,6 +57,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
 
@@ -349,9 +350,9 @@ fun NativeTvApp(
 
     val currentVersionName = remember {
         try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.6.0"
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.7.0"
         } catch (_: Exception) {
-            "2.6.0"
+            "2.7.0"
         }
     }
 
@@ -524,7 +525,53 @@ fun NativeTvApp(
                     localIsMuted = isMuted,
                     videoController = videoController,
                     onVideoEnded = {
-                        // Handled automatically via polling
+                        val endedKey = currentFeed.nowPlaying?.youtubeVideoId
+                            ?: currentFeed.nowPlaying?.id
+                            ?: ""
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                val cmdEndpoint = "${serverUrl.trimEnd('/')}/api/playback/command"
+                                val conn = (URL(cmdEndpoint).openConnection() as HttpURLConnection).apply {
+                                    connectTimeout = 4000
+                                    readTimeout = 4000
+                                    requestMethod = "POST"
+                                    doOutput = true
+                                    setRequestProperty("Content-Type", "application/json")
+                                    setRequestProperty("Accept", "application/json")
+                                }
+                                val bodyJson = JSONObject().apply {
+                                    put("slug", venueSlug.trim())
+                                    put("command", "track_ended")
+                                    put("payload", JSONObject().apply {
+                                        put("endedTrackKey", endedKey)
+                                    })
+                                }.toString()
+                                conn.outputStream.use { os ->
+                                    os.write(bodyJson.toByteArray(Charsets.UTF_8))
+                                }
+                                val code = conn.responseCode
+                                conn.disconnect()
+                                if (code in 200..299) {
+                                    val devId = prefs.getString("tv_device_id", "") ?: ""
+                                    val query = if (devId.isNotBlank()) "?device_id=${java.net.URLEncoder.encode(devId, "UTF-8")}" else ""
+                                    val tvEndpoint = "${serverUrl.trimEnd('/')}/api/tv/${venueSlug.trim()}$query"
+                                    val tvConn = (URL(tvEndpoint).openConnection() as HttpURLConnection).apply {
+                                        connectTimeout = 4000
+                                        readTimeout = 4000
+                                        requestMethod = "GET"
+                                        setRequestProperty("Accept", "application/json")
+                                    }
+                                    if (tvConn.responseCode in 200..299) {
+                                        val responseText = tvConn.inputStream.bufferedReader().use { it.readText() }
+                                        val parsed = TvFeedParser.parse(responseText)
+                                        withContext(Dispatchers.Main) {
+                                            feed = parsed
+                                        }
+                                    }
+                                    tvConn.disconnect()
+                                }
+                            } catch (_: Exception) {}
+                        }
                     },
                     onDisplayConfig = onDisplayConfig,
                     modifier = Modifier.fillMaxSize()

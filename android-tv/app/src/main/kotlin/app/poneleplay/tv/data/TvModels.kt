@@ -14,10 +14,12 @@ data class TvPlayback(
     val volume: Int,
     val isMuted: Boolean,
     val tvMuted: Boolean = false,
+    val audioRouting: String = "BOTH",
     val karaokeMode: Boolean,
     val lastCommand: String?,
     val commandSeq: Long,
     val positionSeconds: Float = 0f,
+    val startedAtMs: Long = 0L,
     val displayConfigJson: String? = null
 )
 
@@ -146,20 +148,33 @@ object TvFeedParser {
 
         val playObj = root.optJSONObject("playback") ?: JSONObject()
         val cfgObj = playObj.optJSONObject("displayConfig")
+        val rawRouting = playObj.optString(
+            "audioRouting",
+            cfgObj?.optString("audioRouting", "BOTH") ?: "BOTH"
+        ).uppercase()
+        val resolvedAudioRouting = if (rawRouting == "CABINA_ONLY" || rawRouting == "TV_ONLY" || rawRouting == "BOTH") {
+            rawRouting
+        } else {
+            "BOTH"
+        }
         val tvMutedFlag = if (playObj.has("tvMuted")) {
             playObj.optBoolean("tvMuted", false)
+        } else if (cfgObj != null && cfgObj.has("tvMuted")) {
+            cfgObj.optBoolean("tvMuted", false)
         } else {
-            cfgObj?.optBoolean("tvMuted", false) ?: false
+            resolvedAudioRouting == "CABINA_ONLY"
         }
         val playback = TvPlayback(
             isPaused = playObj.optBoolean("isPaused", false),
             volume = playObj.optInt("volume", 85),
             isMuted = playObj.optBoolean("isMuted", false),
             tvMuted = tvMutedFlag,
+            audioRouting = resolvedAudioRouting,
             karaokeMode = playObj.optBoolean("karaokeMode", false),
             lastCommand = if (playObj.isNull("lastCommand")) null else playObj.optString("lastCommand"),
             commandSeq = playObj.optLong("commandSeq", 0L),
             positionSeconds = playObj.optDouble("positionSeconds", 0.0).toFloat(),
+            startedAtMs = playObj.optLong("startedAtMs", 0L),
             displayConfigJson = cfgObj?.toString()
         )
 

@@ -6,6 +6,7 @@ import {
   resolveEffectiveQueueThreshold,
 } from "@/lib/domain/party";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { computeLivePositionSeconds, type AudioRoutingMode } from "@/app/api/playback/command/route";
 
 interface QueueItemFeed {
   id: string;
@@ -94,13 +95,24 @@ export async function GET(
     const clientUrl = `${proto}://${host}/p/${slug}`;
 
     const deviceId = req.nextUrl.searchParams.get("device_id") || req.headers.get("x-device-id");
-    let displayConfig = {
+    let displayConfig: {
+      mode: string;
+      showQueue: boolean;
+      showProposals: boolean;
+      theme: string;
+      scale: string;
+      tvMuted: boolean;
+      cabinaMuted?: boolean;
+      audioRouting?: AudioRoutingMode;
+    } = {
       mode: "VIDEO",
       showQueue: true,
       showProposals: true,
       theme: "neon",
       scale: "normal",
       tvMuted: false,
+      cabinaMuted: false,
+      audioRouting: "BOTH",
     };
 
     try {
@@ -161,9 +173,57 @@ export async function GET(
       };
     };
 
+    // If there is no active nowPlayingTrack and activeQueue is empty, resolve first venue fallback track
+    let fallbackTrackCandidate: Record<string, unknown> | null = null;
+    if (!nowPlayingTrack && activeQueue.length === 0) {
+      try {
+        const { data: fbRows } = await admin
+          .from("fallback_tracks")
+          .select("position, track_id")
+          .eq("venue_id", venue.id)
+          .order("position", { ascending: true })
+          .limit(1);
+
+        if (Array.isArray(fbRows) && fbRows.length > 0 && fbRows[0]?.track_id) {
+          const { data: fbTrack } = await admin
+            .from("tracks")
+            .select("*")
+            .eq("id", fbRows[0].track_id)
+            .maybeSingle();
+
+          if (fbTrack && (fbTrack.youtube_video_id || fbTrack.storage_path)) {
+            fallbackTrackCandidate = {
+              itemId: `fb-${fbTrack.id}`,
+              trackId: fbTrack.id,
+              title: String(fbTrack.title || "Playlist del Salón"),
+              artist: String(fbTrack.artist || "Selección Musical"),
+              source: String(fbTrack.source || "youtube"),
+              durationSeconds: Number(fbTrack.duration_seconds ?? 210),
+              youtubeVideoId: fbTrack.youtube_video_id ? String(fbTrack.youtube_video_id) : null,
+              storagePath: fbTrack.storage_path ? String(fbTrack.storage_path) : null,
+              thumbnailUrl: fbTrack.thumbnail_url ? String(fbTrack.thumbnail_url) : null,
+              voteCount: 0,
+              positionSeconds: 0,
+              startedAtMs: nowMs,
+            };
+            // Persist in background so all devices share the same startedAtMs
+            if (playState && !playState.current_track) {
+              void admin
+                .from("venue_playback_state")
+                .update({ current_track: fallbackTrackCandidate })
+                .eq("venue_id", venue.id);
+            }
+          }
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    }
+
     const effectiveNowPlaying =
       nowPlayingTrack ||
       (activeQueue.length > 0 ? (activeQueue[0] as unknown as Record<string, unknown>) : null) ||
+      fallbackTrackCandidate ||
       (isCurrentDedActive
         ? {
             itemId: "now-playing-live-dedication",
@@ -175,6 +235,8 @@ export async function GET(
             voteCount: 0,
             guestName: currentDed?.guestName ?? null,
             dedication: currentDed?.dedication ?? null,
+            positionSeconds: 0,
+            startedAtMs: nowMs,
           }
         : null);
 
@@ -208,6 +270,25 @@ export async function GET(
       nowMs,
     );
 
+    const isPaused = Boolean(playState?.is_paused);
+    const cabinaMuted = Boolean(
+      nowPlayingTrack?.cabinaMuted ?? displayConfig.cabinaMuted ?? playState?.is_muted ?? false,
+    );
+    const tvMuted = Boolean(nowPlayingTrack?.tvMuted ?? displayConfig.tvMuted ?? false);
+    const audioRouting: AudioRoutingMode =
+      (nowPlayingTrack?.audioRouting as AudioRoutingMode) ||
+      displayConfig.audioRouting ||
+      (cabinaMuted && !tvMuted ? "TV_ONLY" : !cabinaMuted && tvMuted ? "CABINA_ONLY" : "BOTH");
+    const livePositionSeconds = computeLivePositionSeconds(effectiveNowPlaying, isPaused, nowMs);
+    const startedAtMs = Number(effectiveNowPlaying?.startedAtMs ?? nowMs);
+
+    displayConfig = {
+      ...displayConfig,
+      tvMuted,
+      cabinaMuted,
+      audioRouting,
+    };
+
     return NextResponse.json(
       {
         ok: true,
@@ -228,14 +309,18 @@ export async function GET(
         activeSkipVote,
         isOpen: rawState.night ? (rawState.night as Record<string, unknown>).status === "open" : false,
         playback: {
-          isPaused: Boolean(playState?.is_paused),
+          isPaused,
           volume: Number(playState?.volume ?? 85),
-          isMuted: Boolean(displayConfig.tvMuted ?? playState?.is_muted),
-          tvMuted: Boolean(displayConfig.tvMuted),
+          // For TV consumers, isMuted reflects ONLY tvMuted (never cabinaMuted!)
+          isMuted: tvMuted,
+          cabinaMuted,
+          tvMuted,
+          audioRouting,
           karaokeMode: Boolean(playState?.karaoke_mode),
           lastCommand: playState?.last_command ?? null,
-          commandSeq: playState?.command_seq ?? 0,
-          positionSeconds: Number((playState?.current_track as Record<string, unknown>)?.positionSeconds ?? 0),
+          commandSeq: Number(playState?.command_seq ?? 0),
+          positionSeconds: livePositionSeconds,
+          startedAtMs,
           displayConfig,
         },
         liveDedication: isCurrentDedActive && currentDed?.dedication
@@ -250,15 +335,19 @@ export async function GET(
         nowPlaying: effectiveNowPlaying
           ? {
               id: String(effectiveNowPlaying.itemId || effectiveNowPlaying.id || ""),
+              trackId: String(effectiveNowPlaying.trackId || effectiveNowPlaying.id || ""),
               title: String(effectiveNowPlaying.title || "Sin título"),
               artist: String(effectiveNowPlaying.artist || "Desconocido"),
               youtubeVideoId: effectiveNowPlaying.youtubeVideoId ? String(effectiveNowPlaying.youtubeVideoId) : null,
+              storagePath: effectiveNowPlaying.storagePath ? String(effectiveNowPlaying.storagePath) : null,
               thumbnailUrl: effectiveNowPlaying.thumbnailUrl ? String(effectiveNowPlaying.thumbnailUrl) : null,
               durationSeconds: Number(effectiveNowPlaying.durationSeconds ?? 210),
               voteCount: sanitizeVoteCount(effectiveNowPlaying.voteCount),
               isKaraoke: nowMeta?.isKaraoke ?? false,
               guestName: nowMeta?.guestName ?? null,
               dedication: nowMeta?.dedication ?? null,
+              positionSeconds: livePositionSeconds,
+              startedAtMs,
             }
           : null,
         queue: activeQueue.map((item, idx) => {

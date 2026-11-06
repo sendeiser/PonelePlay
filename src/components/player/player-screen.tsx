@@ -901,6 +901,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   const handleSkipNext = useCallback(
     async (fromRemote = false) => {
+      if (!fromRemote) {
+        try {
+          const cur = nowPlayingRef.current;
+          const endedKey = String(cur?.youtubeVideoId || cur?.trackId || cur?.itemId || "");
+          const { reportTrackEndedPlayback } = await import("@/lib/api/master-control");
+          const res = await reportTrackEndedPlayback(slug, endedKey);
+          if (res?.currentTrack) {
+            setManualNowPlaying(res.currentTrack);
+            setElapsed(0);
+            elapsedRef.current = 0;
+            setVideoDuration(res.currentTrack.durationSeconds ?? null);
+            setIsPlaying(!res.isPaused);
+            void engine.load(res.currentTrack);
+            setHudMessage(`⏭️ Siguiente: ${res.currentTrack.title}`);
+            setTimeout(() => setHudMessage(null), 3000);
+            return;
+          }
+        } catch {
+          // Fallback to local queue advance below if offline
+        }
+      }
+
       const candidates = queue.length > 0 ? queue : allTracks;
       if (candidates.length > 0) {
         const nextTrack = candidates[0];
@@ -936,7 +958,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     [slug, queue, allTracks, engine],
   );
 
-  // Auto-advance exactly once when the video ends
+  // Auto-advance exactly once when the video ends (server idempotency prevents double-skip)
   const handleSkipNextRef = useRef(handleSkipNext);
   useEffect(() => {
     handleSkipNextRef.current = handleSkipNext;
@@ -945,7 +967,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   useEffect(
     () =>
       engine.onEnded(() => {
-        if (Date.now() - lastAdminProgressAtRef.current > 12000) {
+        if (Date.now() - lastAdminProgressAtRef.current > 6000) {
           void handleSkipNextRef.current(false);
         }
       }),
@@ -953,45 +975,185 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   );
 
 
-  // Master Remote Control synchronization (Single persistent Realtime channel + progress broadcast)
+  // Master Remote Control synchronization (Authoritative /api/tv poll + persistent Realtime channel)
   useEffect(() => {
     let active = true;
     let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
 
-    // 1. Initial State from DB
-    void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
-      fetchPlaybackState(slug)
-        .then((st) => {
-          if (!active) return;
-          if (typeof st.commandSeq === "number") {
-            lastCommandSeqRef.current = st.commandSeq;
-          }
-          if (typeof st.volume === "number") {
-            setVolume(st.volume);
-            engine.setVolume?.(st.volume);
-          }
-          if (typeof st.isMuted === "boolean") {
-            setIsMuted(st.isMuted);
-            if (st.isMuted) engine.mute?.();
-            else engine.unMute?.();
-          }
-          if (typeof st.isPaused === "boolean") {
-            setIsPlaying(!st.isPaused);
-            if (st.isPaused) engine.pause?.();
+    const applyServerDisplayConfig = (cfg: Record<string, unknown>, showToastMsg = false) => {
+      if (cfg.mode === "VIDEO") {
+        setScreenMode("VIDEO");
+        setIsVideoFullscreen(false);
+        setVideoMode(true);
+      } else if (cfg.mode === "PLAYLIST") {
+        setScreenMode("PLAYLIST");
+        setIsVideoFullscreen(false);
+        setVideoMode(false);
+      } else if (cfg.mode === "CLEAN") {
+        setScreenMode("CLEAN");
+        setIsVideoFullscreen(true);
+        setVideoMode(true);
+      }
+      if (typeof cfg.tvMuted === "boolean") {
+        setIsMuted(cfg.tvMuted);
+        if (cfg.tvMuted) engine.mute?.();
+        else engine.unMute?.();
+      }
+      if (
+        cfg.audioRouting === "BOTH" ||
+        cfg.audioRouting === "CABINA_ONLY" ||
+        cfg.audioRouting === "TV_ONLY"
+      ) {
+        setAudioRouting(cfg.audioRouting);
+      }
+      if (showToastMsg) {
+        setHudMessage("📺 Pantalla Actualizada desde Cabina");
+        setTimeout(() => setHudMessage(null), 3000);
+      }
+    };
+
+    // 1. Authoritative Server State Poll (/api/tv/[slug]) every 2 seconds
+    const syncFromAuthoritativeServer = async (isInitial = false) => {
+      try {
+        const res = await fetch(`/api/tv/${encodeURIComponent(slug)}`, { cache: "no-store" });
+        if (!res.ok || !active) return;
+        const data = await res.json();
+        if (!data?.ok || !active) return;
+
+        const pb = data.playback || {};
+        const seq = Number(pb.commandSeq ?? 0);
+        const isNewSeq = lastCommandSeqRef.current === null || seq > lastCommandSeqRef.current;
+        if (seq > 0 && (lastCommandSeqRef.current === null || seq > lastCommandSeqRef.current)) {
+          lastCommandSeqRef.current = seq;
+        }
+
+        if (typeof pb.volume === "number") {
+          setVolume(pb.volume);
+          engine.setVolume?.(pb.volume);
+        }
+        if (typeof pb.tvMuted === "boolean") {
+          setIsMuted(pb.tvMuted);
+          if (pb.tvMuted) engine.mute?.();
+          else engine.unMute?.();
+        }
+        if (
+          pb.audioRouting === "BOTH" ||
+          pb.audioRouting === "CABINA_ONLY" ||
+          pb.audioRouting === "TV_ONLY"
+        ) {
+          setAudioRouting(pb.audioRouting);
+        }
+        if (typeof pb.isPaused === "boolean") {
+          const shouldPlay = !pb.isPaused;
+          if (isPlayingRef.current !== shouldPlay || isInitial || isNewSeq) {
+            setIsPlaying(shouldPlay);
+            if (pb.isPaused) engine.pause?.();
             else void engine.play?.();
           }
-          if (typeof st.karaokeMode === "boolean") {
-            setKaraokeMode(st.karaokeMode);
-            if (st.karaokeMode) setVideoMode(true);
-          }
-          if (st.currentTrack) {
-            setManualNowPlaying(st.currentTrack);
-          }
-        })
-        .catch(() => {});
-    });
+        }
+        if (typeof pb.karaokeMode === "boolean") {
+          setKaraokeMode(pb.karaokeMode);
+        }
+        if (pb.displayConfig && (isInitial || isNewSeq)) {
+          applyServerDisplayConfig(pb.displayConfig as Record<string, unknown>, false);
+        }
 
-    // 2. Single persistent Realtime listener & progress broadcaster
+        if (data.liveDedication && data.liveDedication.message) {
+          setLiveDedicationOverride((prev) => {
+            if (prev && prev.dedication === data.liveDedication.message && prev.timestamp === data.liveDedication.timestamp) {
+              return prev;
+            }
+            return {
+              dedication: String(data.liveDedication.message),
+              guestName: data.liveDedication.guestName ?? null,
+              timestamp: Number(data.liveDedication.timestamp ?? Date.now()),
+            };
+          });
+        }
+
+        if (data.nowPlaying && data.nowPlaying.title) {
+          const np = data.nowPlaying;
+          const serverTrack: PlayerTrack = {
+            itemId: String(np.id || "now"),
+            trackId: String(np.trackId || np.id || "now"),
+            title: String(np.title),
+            artist: String(np.artist || "Artista"),
+            source: "youtube",
+            durationSeconds: Number(np.durationSeconds ?? 210),
+            youtubeVideoId: np.youtubeVideoId || undefined,
+            storagePath: np.storagePath || undefined,
+            thumbnailUrl: np.thumbnailUrl ?? null,
+            voteCount: Number(np.voteCount ?? 0),
+            guestName: np.guestName ?? null,
+            dedication: np.dedication ?? null,
+            isKaraoke: Boolean(np.isKaraoke),
+          };
+          const cur = nowPlayingRef.current;
+          const isDiff =
+            !cur ||
+            (serverTrack.youtubeVideoId && cur.youtubeVideoId !== serverTrack.youtubeVideoId) ||
+            cur.title.toLowerCase() !== serverTrack.title.toLowerCase();
+
+          const serverPos = Number(pb.positionSeconds ?? np.positionSeconds ?? 0);
+          if (isDiff) {
+            setManualNowPlaying(serverTrack);
+            setElapsed(Math.floor(serverPos));
+            elapsedRef.current = Math.floor(serverPos);
+            void engine.load(serverTrack).then(() => {
+              if (serverPos > 1.5) {
+                lastTvSeekAtRef.current = Date.now();
+                engine.seekTo?.(serverPos);
+              }
+            });
+          } else if (!pb.isPaused && serverPos > 2.5) {
+            const tvSec = engine.getCurrentTime?.() ?? elapsedRef.current;
+            const drift = Math.abs(tvSec - serverPos);
+            if (
+              (isNewSeq && pb.lastCommand === "seek") ||
+              (drift >= 2.8 && Date.now() - lastTvSeekAtRef.current > 7000)
+            ) {
+              lastTvSeekAtRef.current = Date.now();
+              setElapsed(Math.floor(serverPos));
+              elapsedRef.current = Math.floor(serverPos);
+              engine.seekTo?.(serverPos);
+            }
+          }
+        }
+      } catch {
+        // Fallback to fetchPlaybackState on first load if /api/tv fails in test env
+        if (isInitial) {
+          void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
+            fetchPlaybackState(slug)
+              .then((st) => {
+                if (!active) return;
+                if (typeof st.commandSeq === "number") lastCommandSeqRef.current = st.commandSeq;
+                if (typeof st.volume === "number") {
+                  setVolume(st.volume);
+                  engine.setVolume?.(st.volume);
+                }
+                if (typeof st.tvMuted === "boolean") {
+                  setIsMuted(st.tvMuted);
+                  if (st.tvMuted) engine.mute?.();
+                  else engine.unMute?.();
+                }
+                if (typeof st.isPaused === "boolean") {
+                  setIsPlaying(!st.isPaused);
+                  if (st.isPaused) engine.pause?.();
+                  else void engine.play?.();
+                }
+                if (typeof st.karaokeMode === "boolean") setKaraokeMode(st.karaokeMode);
+                if (st.currentTrack) setManualNowPlaying(st.currentTrack);
+              })
+              .catch(() => {});
+          });
+        }
+      }
+    };
+
+    void syncFromAuthoritativeServer(true);
+    const pollInterval = setInterval(() => void syncFromAuthoritativeServer(false), 2000);
+
+    // 2. Single persistent Realtime listener for sub-30ms instant reaction
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
       if (!active) return;
       const supabase = createBrowserSupabase();
@@ -1008,17 +1170,37 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         .on(
           "broadcast",
           { event: "playback_command" },
-          (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
+          (msg: { payload?: { command?: string; commandSeq?: number; payload?: Record<string, unknown> } }) => {
             if (!active) return;
             const cmd = msg.payload?.command;
             const p = msg.payload?.payload || {};
+            const seq = Number(msg.payload?.commandSeq ?? 0);
+            if (seq > 0) {
+              if (lastCommandSeqRef.current !== null && seq < lastCommandSeqRef.current) return;
+              lastCommandSeqRef.current = seq;
+            }
 
             if (cmd === "pause") {
               engine.pause?.();
               setIsPlaying(false);
+              if (typeof p.seconds === "number" || typeof p.currentTime === "number") {
+                const pos = Math.floor(Number(p.seconds ?? p.currentTime ?? 0));
+                if (pos > 0) {
+                  setElapsed(pos);
+                  elapsedRef.current = pos;
+                }
+              }
               setHudMessage("⏸️ Música Pausada desde Cabina");
               setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "resume") {
+              if (typeof p.seconds === "number" || typeof p.currentTime === "number") {
+                const pos = Math.floor(Number(p.seconds ?? p.currentTime ?? 0));
+                const tvSec = engine.getCurrentTime?.() ?? elapsedRef.current;
+                if (pos > 0 && Math.abs(tvSec - pos) > 2.0) {
+                  lastTvSeekAtRef.current = Date.now();
+                  engine.seekTo?.(pos);
+                }
+              }
               void engine.play?.();
               setIsPlaying(true);
               setHudMessage("▶️ Música Reanudada desde Cabina");
@@ -1036,29 +1218,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               const vol = Number(p.volume ?? 85);
               setVolume(vol);
               engine.setVolume?.(vol);
-              setIsMuted(false);
-              engine.unMute?.();
               setHudMessage(`🔊 Volumen: ${vol}%`);
               setTimeout(() => setHudMessage(null), 3500);
-            } else if (cmd === "mute") {
-              setIsMuted(true);
-              engine.mute?.();
-              setHudMessage("🔇 Salón Silenciado (Corte de Emergencia)");
-              setTimeout(() => setHudMessage(null), 3500);
-            } else if (cmd === "unmute") {
-              setIsMuted(false);
-              engine.unMute?.();
-              setHudMessage("🔊 Audio Restablecido");
-              setTimeout(() => setHudMessage(null), 3500);
-            } else if (cmd === "toggle_mute") {
-              setIsMuted((prev) => {
-                const next = !prev;
-                if (next) engine.mute?.();
-                else engine.unMute?.();
-                setHudMessage(next ? "🔇 Audio Silenciado" : "🔊 Audio Activo");
-                setTimeout(() => setHudMessage(null), 3500);
-                return next;
-              });
             } else if (cmd === "set_tv_mute") {
               const tvMuted = Boolean(p.tvMuted ?? p.muted);
               setIsMuted(tvMuted);
@@ -1067,8 +1228,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 engine.unMute?.();
                 engine.setVolume?.(volume);
               }
-              // Derive audioRouting from cabina isMuted + tvMuted if available
-              if (typeof p.cabinaMuted === "boolean") {
+              if (p.audioRouting === "BOTH" || p.audioRouting === "CABINA_ONLY" || p.audioRouting === "TV_ONLY") {
+                setAudioRouting(p.audioRouting);
+              } else if (typeof p.cabinaMuted === "boolean") {
                 const cm = Boolean(p.cabinaMuted);
                 setAudioRouting(cm && !tvMuted ? "TV_ONLY" : !cm && tvMuted ? "CABINA_ONLY" : "BOTH");
               } else {
@@ -1076,18 +1238,48 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               }
               setHudMessage(tvMuted ? "🔇 Audio TV Silenciado desde Cabina" : "🔊 Audio TV Activado desde Cabina");
               setTimeout(() => setHudMessage(null), 3500);
+            } else if (cmd === "set_audio_routing") {
+              const routing = String(p.routing || p.audioRouting || "BOTH") as "BOTH" | "CABINA_ONLY" | "TV_ONLY";
+              const tvMuted = routing === "CABINA_ONLY";
+              setAudioRouting(routing);
+              setIsMuted(tvMuted);
+              if (tvMuted) engine.mute?.();
+              else {
+                engine.unMute?.();
+                engine.setVolume?.(volume);
+              }
+              const labels = {
+                BOTH: "🔊 Audio en Cabina + TV",
+                CABINA_ONLY: "🎧 Audio Solo en Cabina (TV Silenciada)",
+                TV_ONLY: "📺 Audio Solo en TV",
+              };
+              setHudMessage(labels[routing] || "🔊 Audio Actualizado");
+              setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "skip") {
-              void handleSkipNextRef.current(true);
+              if (p.track) {
+                const track = p.track as PlayerTrack;
+                setManualNowPlaying(track);
+                setIsPlaying(true);
+                setElapsed(0);
+                elapsedRef.current = 0;
+                lastTvSeekAtRef.current = Date.now();
+                void engine.load(track);
+                engine.seekTo?.(0);
+                void engine.play();
+              } else {
+                void handleSkipNextRef.current(true);
+              }
             } else if (cmd === "seek") {
-              const sec = Number(p.seconds ?? 0);
+              const sec = Number(p.seconds ?? p.positionSeconds ?? 0);
+              lastTvSeekAtRef.current = Date.now();
               handleSeekRef.current(sec);
             } else if (cmd === "play_now" && p.track) {
               const track = p.track as PlayerTrack;
               setManualNowPlaying(track);
               setIsPlaying(true);
-              setVideoMode(true);
               setElapsed(0);
               elapsedRef.current = 0;
+              lastTvSeekAtRef.current = Date.now();
               void engine.load(track);
               engine.seekTo?.(0);
               void engine.play();
@@ -1151,26 +1343,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "set_tv_display") {
               const cfg = (p.config || p.displayConfig || {}) as Record<string, unknown>;
-              if (cfg.mode === "VIDEO") {
-                setScreenMode("VIDEO");
-                setIsVideoFullscreen(false);
-                setVideoMode(true);
-              } else if (cfg.mode === "PLAYLIST") {
-                setScreenMode("PLAYLIST");
-                setIsVideoFullscreen(false);
-                setVideoMode(false);
-              } else if (cfg.mode === "CLEAN") {
-                setScreenMode("CLEAN");
-                setIsVideoFullscreen(true);
-                setVideoMode(true);
-              }
-              if (typeof cfg.tvMuted === "boolean") {
-                setIsMuted(cfg.tvMuted);
-                if (cfg.tvMuted) engine.mute?.();
-                else engine.unMute?.();
-              }
-              setHudMessage("📺 Pantalla Actualizada desde Cabina");
-              setTimeout(() => setHudMessage(null), 3000);
+              applyServerDisplayConfig(cfg, true);
             }
           },
         )
@@ -1179,27 +1352,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           { event: "tv_display_config" },
           (msg: { payload?: { config?: Record<string, unknown> } }) => {
             if (!active || !msg.payload?.config) return;
-            const cfg = msg.payload.config;
-            if (cfg.mode === "VIDEO") {
-              setScreenMode("VIDEO");
-              setIsVideoFullscreen(false);
-              setVideoMode(true);
-            } else if (cfg.mode === "PLAYLIST") {
-              setScreenMode("PLAYLIST");
-              setIsVideoFullscreen(false);
-              setVideoMode(false);
-            } else if (cfg.mode === "CLEAN") {
-              setScreenMode("CLEAN");
-              setIsVideoFullscreen(true);
-              setVideoMode(true);
-            }
-            if (typeof cfg.tvMuted === "boolean") {
-              setIsMuted(cfg.tvMuted);
-              if (cfg.tvMuted) engine.mute?.();
-              else engine.unMute?.();
-            }
-            setHudMessage("📺 Pantalla Actualizada desde Cabina");
-            setTimeout(() => setHudMessage(null), 3000);
+            applyServerDisplayConfig(msg.payload.config, true);
           },
         )
         .on(
@@ -1238,6 +1391,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               st.command_seq !== lastCommandSeqRef.current;
 
             if (typeof st.command_seq === "number") {
+              if (lastCommandSeqRef.current !== null && st.command_seq < lastCommandSeqRef.current) return;
               lastCommandSeqRef.current = st.command_seq;
             }
 
@@ -1250,55 +1404,54 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               setVolume(st.volume);
               engine.setVolume?.(st.volume);
             }
-            if (typeof st.is_muted === "boolean") {
-              setIsMuted(st.is_muted);
-              if (st.is_muted) engine.mute?.();
-              else engine.unMute?.();
-            }
             if (typeof st.karaoke_mode === "boolean") {
               setKaraokeMode(st.karaoke_mode);
               if (st.karaoke_mode) setVideoMode(true);
             }
+            if (st.current_track) {
+              const ctRaw = st.current_track as unknown as Record<string, unknown>;
+              if (typeof ctRaw.tvMuted === "boolean") {
+                setIsMuted(ctRaw.tvMuted);
+                if (ctRaw.tvMuted) engine.mute?.();
+                else engine.unMute?.();
+              }
+              if (
+                ctRaw.audioRouting === "BOTH" ||
+                ctRaw.audioRouting === "CABINA_ONLY" ||
+                ctRaw.audioRouting === "TV_ONLY"
+              ) {
+                setAudioRouting(ctRaw.audioRouting);
+              }
+            }
             if (isNewCommand && st.last_command === "skip") {
-              void handleSkipNextRef.current(true);
+              if (st.current_track) {
+                setManualNowPlaying(st.current_track);
+                setElapsed(0);
+                elapsedRef.current = 0;
+                lastTvSeekAtRef.current = Date.now();
+                void engine.load(st.current_track);
+                engine.seekTo?.(0);
+                void engine.play();
+              } else {
+                void handleSkipNextRef.current(true);
+              }
             } else if (isNewCommand && st.last_command === "play_now" && st.current_track) {
-              setManualNowPlaying(st.current_track);
-              setElapsed(0);
-              elapsedRef.current = 0;
-              void engine.load(st.current_track);
-              engine.seekTo?.(0);
-              void engine.play();
+              const cur = nowPlayingRef.current;
+              const isDiff =
+                !cur ||
+                (st.current_track.youtubeVideoId &&
+                  cur.youtubeVideoId !== st.current_track.youtubeVideoId) ||
+                cur.title.toLowerCase() !== st.current_track.title.toLowerCase();
+              if (isDiff) {
+                setManualNowPlaying(st.current_track);
+                setElapsed(0);
+                elapsedRef.current = 0;
+                lastTvSeekAtRef.current = Date.now();
+                void engine.load(st.current_track);
+                engine.seekTo?.(0);
+                void engine.play();
+              }
             }
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "tv_display_config" },
-          (msg: { payload?: { config?: Record<string, unknown> } }) => {
-            if (!active || !msg.payload?.config) return;
-            const cfg = msg.payload.config;
-            if (cfg.mode === "VIDEO") {
-              setVideoMode(true);
-            } else if (cfg.mode === "PLAYLIST") {
-              setVideoMode(false);
-            }
-            setHudMessage("📺 Pantalla Actualizada desde Cabina");
-            setTimeout(() => setHudMessage(null), 3000);
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "live_dedication" },
-          (msg: { payload?: { guestName?: string | null; dedication?: string; timestamp?: number } }) => {
-            if (!active || !msg.payload?.dedication) return;
-            const { guestName, dedication } = msg.payload;
-            setLiveDedicationOverride({
-              dedication,
-              guestName: guestName ?? null,
-              timestamp: Date.now(),
-            });
-            setHudMessage(`💌 "${dedication}"${guestName ? ` — ${guestName}` : ""}`);
-            setTimeout(() => setHudMessage(null), 8000);
           },
         )
         .on(
@@ -1311,6 +1464,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               isPaused?: boolean;
               trackId?: string;
               track?: PlayerTrack;
+              tvMuted?: boolean;
+              audioRouting?: "BOTH" | "CABINA_ONLY" | "TV_ONLY";
               isFromAdminAudio?: boolean;
               sentAt?: number;
             };
@@ -1322,15 +1477,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               isPaused: p,
               track,
               volume: vol,
-              isMuted: muted,
-              isFromAdminAudio,
+              tvMuted,
+              audioRouting: routing,
               sentAt,
             } = msg.payload as Record<string, unknown>;
 
             // Compensate for network transit latency if sentAt is present
             const latency =
               typeof sentAt === "number"
-                ? Math.max(0, Math.min(2, (Date.now() - sentAt) / 1000))
+                ? Math.max(0, Math.min(1.5, (Date.now() - sentAt) / 1000))
                 : 0;
             const targetTime =
               (typeof currentTime === "number" && !isNaN(currentTime) ? currentTime : 0) + latency;
@@ -1357,18 +1512,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 }
               }
             }
-            // Only force volume & mute from progress ticks if NOT from admin audio engine,
-            // allowing the TV to stay muted in the venue if the sound is coming from Cabina
-            if (!isFromAdminAudio) {
-              if (typeof vol === "number") {
-                setVolume(vol);
-                engine.setVolume?.(vol);
-              }
-              if (typeof muted === "boolean") {
-                setIsMuted(muted);
-                if (muted) engine.mute?.();
-                else engine.unMute?.();
-              }
+            if (typeof vol === "number") {
+              setVolume(vol);
+              engine.setVolume?.(vol);
+            }
+            if (typeof tvMuted === "boolean") {
+              setIsMuted(tvMuted);
+              if (tvMuted) engine.mute?.();
+              else engine.unMute?.();
+            }
+            if (routing === "BOTH" || routing === "CABINA_ONLY" || routing === "TV_ONLY") {
+              setAudioRouting(routing);
             }
             if (track) {
               const trk = track as PlayerTrack;
@@ -1379,53 +1533,23 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 cur.title.toLowerCase() !== trk.title.toLowerCase();
               if (isDiff) {
                 setManualNowPlaying(trk);
+                lastTvSeekAtRef.current = Date.now();
                 void engine.load(trk).then(() => {
-                  if (targetTime > 0.5) {
+                  if (targetTime > 1.5) {
                     engine.seekTo?.(targetTime);
                   }
                 });
-              } else if (typeof currentTime === "number" && !isNaN(currentTime) && !p) {
-                // High-precision sync: check live TV time against Cabina target time
+              } else if (typeof currentTime === "number" && !isNaN(currentTime) && !p && targetTime >= 4.0) {
+                // Smooth drift correction: only seek when drift >= 2.8s with 7s cooldown (zero micro-buffering)
                 const tvSec = engine.getCurrentTime?.() ?? elapsedRef.current;
                 const drift = Math.abs(tvSec - targetTime);
 
-                // Correct drift if >= 0.8s, with 3s cooldown to prevent YouTube buffering loops
-                if (drift >= 0.8 && Date.now() - lastTvSeekAtRef.current > 3000) {
+                if (drift >= 2.8 && Date.now() - lastTvSeekAtRef.current > 7000) {
                   lastTvSeekAtRef.current = Date.now();
                   engine.seekTo?.(targetTime);
                 }
               }
             }
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "tv_display_config" },
-          (msg: { payload?: { config?: Record<string, unknown> } }) => {
-            if (!active || !msg.payload?.config) return;
-            const cfg = msg.payload.config;
-            if (cfg.mode === "VIDEO") {
-              setVideoMode(true);
-            } else if (cfg.mode === "PLAYLIST") {
-              setVideoMode(false);
-            }
-            setHudMessage("📺 Pantalla Actualizada desde Cabina");
-            setTimeout(() => setHudMessage(null), 3000);
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "live_dedication" },
-          (msg: { payload?: { guestName?: string | null; dedication?: string; timestamp?: number } }) => {
-            if (!active || !msg.payload?.dedication) return;
-            const { guestName, dedication } = msg.payload;
-            setLiveDedicationOverride({
-              dedication,
-              guestName: guestName ?? null,
-              timestamp: Date.now(),
-            });
-            setHudMessage(`💌 "${dedication}"${guestName ? ` — ${guestName}` : ""}`);
-            setTimeout(() => setHudMessage(null), 8000);
           },
         )
         .on(
@@ -1474,6 +1598,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
     return () => {
       active = false;
+      clearInterval(pollInterval);
       if (channel) {
         void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
           const supabase = createBrowserSupabase();

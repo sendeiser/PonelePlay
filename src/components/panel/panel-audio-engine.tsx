@@ -463,10 +463,9 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           }
         }
 
-        if (currentTime > 0) {
+        if (currentTime >= 0) {
           lastReportedTimeRef.current = currentTime;
         } else {
-          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.5) * 10) / 10;
           currentTime = lastReportedTimeRef.current;
         }
 

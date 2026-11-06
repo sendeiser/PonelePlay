@@ -6,13 +6,13 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      versionCode: 2,
-      versionName: "2.6.0",
+      versionCode: 3,
+      versionName: "2.7.0",
       apkUrl: "https://poneleplay.netlify.app/tv.apk",
       releaseNotes:
-        "Actualizador automático integrado, solución en votación para cambiar canción y mejoras en reproducción continua.",
+        "Sincronización 100% Cabina + TV, dedicatorias personalizables sin cartel fijo y enrutamiento de audio independiente.",
       mandatory: false,
-      publishedAt: "2026-11-05T21:30:00.000Z",
+      publishedAt: "2026-11-06T19:45:00.000Z",
     },
     {
       headers: {

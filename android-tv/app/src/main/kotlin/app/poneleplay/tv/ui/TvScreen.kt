@@ -166,8 +166,9 @@ fun TvScreen(
         }
     }
 
-    // Effective mute and volume state: TV local mute or Cabina tvMuted takes precedence
-    val effectiveMuted = localIsMuted || feed.playback.isMuted || feed.playback.tvMuted
+    // Effective mute and volume state: TV local mute or Cabina tvMuted / CABINA_ONLY routing takes precedence.
+    // Muting Cabina ("TV_ONLY") never mutes the TV.
+    val effectiveMuted = localIsMuted || feed.playback.tvMuted || feed.playback.audioRouting == "CABINA_ONLY"
     val effectiveVolume = if (effectiveMuted) 0 else feed.playback.volume
 
     // Reactive Control: React to master control commands from DJ booth (Cabina)
@@ -178,25 +179,35 @@ fun TvScreen(
             when (feed.playback.lastCommand) {
                 "pause" -> videoController.pause()
                 "resume" -> videoController.play()
-                "toggle_pause" -> videoController.togglePlayPause()
+                "toggle_pause" -> if (feed.playback.isPaused) videoController.pause() else videoController.play()
                 "seek" -> {
-                    // Only seek if positionSeconds is explicitly positive (prevents unwanted reset to 0)
-                    if (feed.playback.positionSeconds > 0f) {
+                    if (feed.playback.positionSeconds >= 0f) {
                         videoController.seekTo(feed.playback.positionSeconds)
                     }
                 }
                 "set_volume" -> {
-                    if (!localIsMuted) {
+                    if (!effectiveMuted) {
                         videoController.setVolume(feed.playback.volume)
                         videoController.unMute()
                     }
                 }
-                "mute" -> videoController.mute()
-                "unmute" -> {
-                    if (!localIsMuted) videoController.unMute()
+                "set_tv_mute", "set_audio_routing", "mute", "unmute", "toggle_mute" -> {
+                    if (effectiveMuted) {
+                        videoController.mute()
+                    } else {
+                        videoController.unMute()
+                        videoController.setVolume(feed.playback.volume)
+                    }
                 }
-                "skip" -> onVideoEnded()
-                "play_now" -> videoController.play()
+                "play_now", "skip", "track_ended" -> {
+                    val vid = feed.nowPlaying?.youtubeVideoId
+                    if (!vid.isNullOrBlank()) {
+                        videoController.loadVideo(vid, feed.playback.positionSeconds.coerceAtLeast(0f))
+                    }
+                    if (!feed.playback.isPaused) {
+                        videoController.play()
+                    }
+                }
             }
         }
     }
@@ -225,6 +236,7 @@ fun TvScreen(
             isPaused = feed.playback.isPaused,
             volume = effectiveVolume,
             isMuted = effectiveMuted,
+            serverPositionSeconds = feed.playback.positionSeconds,
             controller = videoController,
             onEnded = onVideoEnded,
             onDisplayConfig = onDisplayConfig,
