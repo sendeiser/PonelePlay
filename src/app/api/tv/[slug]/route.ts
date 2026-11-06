@@ -135,9 +135,26 @@ export async function GET(
         (trackId ? itemMeta[trackId] : undefined) ||
         (ytId ? itemMeta[`yt:${ytId}`] : undefined) ||
         (titleKey ? itemMeta[titleKey] : undefined);
+
+      let dedication = (item.dedication as string | null) ?? meta?.dedication ?? null;
+      let guestName = (item.guestName as string | null) ?? meta?.guestName ?? null;
+
+      const currentDed = itemMeta["__current_dedication__"] as
+        | { guestName?: string | null; dedication?: string | null; timestamp?: number }
+        | undefined;
+      if (
+        !dedication &&
+        currentDed?.dedication &&
+        typeof currentDed.timestamp === "number" &&
+        Date.now() - currentDed.timestamp < 120000
+      ) {
+        dedication = currentDed.dedication;
+        if (!guestName && currentDed.guestName) guestName = currentDed.guestName;
+      }
+
       return {
-        guestName: (item.guestName as string | null) ?? meta?.guestName ?? null,
-        dedication: (item.dedication as string | null) ?? meta?.dedication ?? null,
+        guestName,
+        dedication,
         isKaraoke: Boolean(item.isKaraoke ?? meta?.isKaraoke ?? false),
       };
     };

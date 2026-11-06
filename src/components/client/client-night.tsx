@@ -8,6 +8,8 @@ import {
   Download,
   Flame,
   Info,
+  MessageSquareHeart,
+  Sparkles,
   Swords,
 } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/brand";
@@ -46,6 +48,7 @@ import { CandidateRow } from "./parts/candidate-row";
 import { ProposalSearch } from "./parts/proposal-search";
 import { RedeemTab } from "./parts/redeem-tab";
 import { ActivityTab } from "./parts/activity-tab";
+import { SendDedicationModal } from "./parts/send-dedication-modal";
 import { cn } from "@/lib/cn";
 
 type TabId = "vivo" | "proponer" | "canjear" | "actividad";
@@ -63,8 +66,7 @@ const partyNavigationTabs = [
   { id: "actividad" as const, label: "Mi Fiesta", icon: "celebration" },
 ];
 
-const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";
-const GUEST_NAME_KEY_PREFIX = "poneleplay.guestName.";
+const LAST_PROPOSAL_KEY = "poneleplay_last_proposal_timestamp";const GUEST_NAME_KEY_PREFIX = "poneleplay.guestName.";
 const GUEST_VOTES_USED_KEY_PREFIX = "poneleplay.partyVotesUsed.";
 const GUEST_LAST_TURBO_KEY_PREFIX = "poneleplay.lastTurboVote.";
 
@@ -90,6 +92,8 @@ export function ClientNight({ slug }: { slug: string }) {
   const [activeSkipVote, setActiveSkipVote] = useState<PartySkipVoteState | null>(null);
   const [votedSkipTrackId, setVotedSkipTrackId] = useState<string | null>(null);
   const [skipPending, setSkipPending] = useState(false);
+
+  const [showDedicationModal, setShowDedicationModal] = useState(false);
 
   const isParty = partyConfig.venueType === "party";
 
@@ -812,6 +816,35 @@ export function ClientNight({ slug }: { slug: string }) {
                 </button>
               </section>
 
+              {/* DEDICATION CTA BANNER (Visible for all, not just party mode) */}
+              {partyConfig.allowDedications && (
+                <section className="relative bg-[#131826] rounded-xl p-1.5 border border-[#1E2538] shadow-md hover:border-pink-500/40 transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => setShowDedicationModal(true)}
+                    className="w-full flex items-center justify-between gap-3 bg-gradient-to-r from-[#1a1030]/80 via-[#181F33] to-[#1a1030]/80 hover:from-pink-950/40 hover:via-[#1C253D] hover:to-fuchsia-950/40 px-4 py-3 rounded-lg border border-pink-500/20 active:scale-[0.98] transition-all text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600 to-fuchsia-700 text-white flex items-center justify-center font-bold shadow-md shadow-pink-600/30 shrink-0">
+                        <MessageSquareHeart className="size-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-white font-bold leading-tight flex items-center gap-1.5">
+                          Enviar Dedicatoria a la Pantalla
+                          <Sparkles className="size-3.5 text-pink-400" />
+                        </p>
+                        <p className="text-xs text-pink-200/70 mt-0.5">
+                          Tu mensaje aparecerá cruzando la TV del salón en vivo
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center size-7 rounded-full bg-[#131826] text-pink-400 border border-pink-500/30 shrink-0">
+                      <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                    </div>
+                  </button>
+                </section>
+              )}
+
               {/* ================= SECTION 1: COLA DE REPRODUCCIÓN (SALÓN) ================= */}
               <section className="space-y-2.5">
                 <div className="flex items-center justify-between px-0.5">
@@ -1063,6 +1096,20 @@ export function ClientNight({ slug }: { slug: string }) {
           </div>
         </nav>
       </div>
+
+      {/* Dedication Modal — available as standalone feature */}
+      <SendDedicationModal
+        isOpen={showDedicationModal}
+        slug={slug}
+        defaultGuestName={guestName}
+        nowPlayingTitle={state?.nowPlaying?.title ?? null}
+        onClose={() => setShowDedicationModal(false)}
+        onSuccess={(ded) => {
+          notify(`💬 Dedicatoria enviada: "${ded.slice(0, 40)}${ded.length > 40 ? "…" : ""}"`, "ok");
+        }}
+        onNotify={(msg, type) => {
+          notify(msg, type === "success" ? "ok" : type === "error" ? "error" : "info");
+        }}      />
     </div>
   );
 }

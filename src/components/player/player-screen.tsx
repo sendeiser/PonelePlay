@@ -78,6 +78,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   // Video Mode: default to true so video is always visible
   const [videoMode, setVideoMode] = useState<boolean>(true);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [liveDedicationOverride, setLiveDedicationOverride] = useState<{
+    dedication: string;
+    guestName: string | null;
+    timestamp: number;
+  } | null>(null);
 
   // Compute how many songs fit dynamically inside the screen's max height
   useEffect(() => {
@@ -290,6 +295,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
+  // audioRouting: derived from Cabina commands — BOTH | CABINA_ONLY | TV_ONLY
+  const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("BOTH");
   const [isPlaying, setIsPlaying] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
@@ -676,21 +683,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (key === "v" || key === "p") {
         toggleScreenMode();
       }
+      // M key — mute is now cabina-only. Keep for local testing but show a toast hint.
       if (key === "m") {
-        setIsMuted((prev) => {
-          const next = !prev;
-          if (next) engine.mute?.();
-          else {
-            engine.unMute?.();
-            engine.setVolume?.(85);
-          }
-          setLiveToast({
-            icon: next ? "volume_off" : "volume_up",
-            message: next ? "Audio TV Silenciado" : "Audio TV Activado (85%)",
-          });
-          setTimeout(() => setLiveToast(null), 3000);
-          return next;
-        });
+        setLiveToast({ icon: "volume_off", message: "El audio se controla desde la Cabina" });
+        setTimeout(() => setLiveToast(null), 3000);
       }
       if (key === "h" || key === "?") {
         setShowHotkeysHelp((prev) => !prev);
@@ -811,13 +807,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           q.title.toLowerCase() === base.title.toLowerCase(),
       );
 
+    const liveDed =
+      liveDedicationOverride && Date.now() - liveDedicationOverride.timestamp < 120000
+        ? liveDedicationOverride
+        : null;
+
     return {
       ...base,
-      guestName: base.guestName || match?.guestName || null,
-      dedication: base.dedication || match?.dedication || null,
+      guestName: liveDed?.guestName ?? (base.guestName || match?.guestName || null),
+      dedication: liveDed?.dedication ?? (base.dedication || match?.dedication || null),
       isKaraoke: base.isKaraoke ?? match?.isKaraoke ?? false,
     };
-  }, [token, manualNowPlaying, liveNightNowPlaying, liveNightQueue, playerState, allTracks]);
+  }, [token, manualNowPlaying, liveNightNowPlaying, liveNightQueue, playerState, allTracks, liveDedicationOverride]);
 
   // Rotated queue: tracks coming after nowPlaying so every Skip genuinely advances to the next track
   const queue: PlayerTrack[] = useMemo(() => {
@@ -843,6 +844,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     nightState?.venue.name ||
     playerState?.venue.name ||
     "Billar Aurora";
+  const isParty = partyConfig?.venueType === "party";
+  const candidateProposals = nightState?.candidates || [];
   const duration = videoDuration ?? nowPlaying?.durationSeconds ?? 210;
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
 
@@ -1043,14 +1046,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 return next;
               });
             } else if (cmd === "set_tv_mute") {
-              const muted = Boolean(p.tvMuted ?? p.muted);
-              setIsMuted(muted);
-              if (muted) engine.mute?.();
+              const tvMuted = Boolean(p.tvMuted ?? p.muted);
+              setIsMuted(tvMuted);
+              if (tvMuted) engine.mute?.();
               else {
                 engine.unMute?.();
                 engine.setVolume?.(volume);
               }
-              setHudMessage(muted ? "🔇 Audio TV Silenciado desde Cabina" : "🔊 Audio TV Activado desde Cabina");
+              // Derive audioRouting from cabina isMuted + tvMuted if available
+              if (typeof p.cabinaMuted === "boolean") {
+                const cm = Boolean(p.cabinaMuted);
+                setAudioRouting(cm && !tvMuted ? "TV_ONLY" : !cm && tvMuted ? "CABINA_ONLY" : "BOTH");
+              } else {
+                setAudioRouting(tvMuted ? "CABINA_ONLY" : "BOTH");
+              }
+              setHudMessage(tvMuted ? "🔇 Audio TV Silenciado desde Cabina" : "🔊 Audio TV Activado desde Cabina");
               setTimeout(() => setHudMessage(null), 3500);
             } else if (cmd === "skip") {
               void handleSkipNextRef.current(true);
@@ -1179,6 +1189,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           },
         )
         .on(
+          "broadcast",
+          { event: "live_dedication" },
+          (msg: { payload?: { guestName?: string | null; dedication?: string; timestamp?: number } }) => {
+            if (!active || !msg.payload?.dedication) return;
+            const { guestName, dedication } = msg.payload;
+            setLiveDedicationOverride({
+              dedication,
+              guestName: guestName ?? null,
+              timestamp: Date.now(),
+            });
+            setHudMessage(`💌 "${dedication}"${guestName ? ` — ${guestName}` : ""}`);
+            setTimeout(() => setHudMessage(null), 8000);
+          },
+        )
+        .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "venue_playback_state" },
           (payload: {
@@ -1245,6 +1270,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             }
             setHudMessage("📺 Pantalla Actualizada desde Cabina");
             setTimeout(() => setHudMessage(null), 3000);
+          },
+        )
+        .on(
+          "broadcast",
+          { event: "live_dedication" },
+          (msg: { payload?: { guestName?: string | null; dedication?: string; timestamp?: number } }) => {
+            if (!active || !msg.payload?.dedication) return;
+            const { guestName, dedication } = msg.payload;
+            setLiveDedicationOverride({
+              dedication,
+              guestName: guestName ?? null,
+              timestamp: Date.now(),
+            });
+            setHudMessage(`💌 "${dedication}"${guestName ? ` — ${guestName}` : ""}`);
+            setTimeout(() => setHudMessage(null), 8000);
           },
         )
         .on(
@@ -1361,6 +1401,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         )
         .on(
           "broadcast",
+          { event: "live_dedication" },
+          (msg: { payload?: { guestName?: string | null; dedication?: string; timestamp?: number } }) => {
+            if (!active || !msg.payload?.dedication) return;
+            const { guestName, dedication } = msg.payload;
+            setLiveDedicationOverride({
+              dedication,
+              guestName: guestName ?? null,
+              timestamp: Date.now(),
+            });
+            setHudMessage(`💌 "${dedication}"${guestName ? ` — ${guestName}` : ""}`);
+            setTimeout(() => setHudMessage(null), 8000);
+          },
+        )
+        .on(
+          "broadcast",
           { event: "party_event" },
           (msg: { payload?: Record<string, unknown> }) => {
             if (!active || !msg.payload) return;
@@ -1435,8 +1490,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   return (
     <div
       className={
-        isVideoFullscreen
-          ? "fixed inset-0 z-[99999] w-screen h-screen bg-black overflow-hidden select-none"
+        screenMode !== "PLAYLIST"
+          ? "fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none"
           : "tech-bg relative flex h-screen max-h-screen w-screen flex-col justify-between overflow-hidden p-2.5 sm:p-3 md:p-3.5 lg:p-4 text-[#dfe2ef] select-none"
       }
     >
@@ -1457,8 +1512,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         />
       ) : null}
 
-      {/* ================= TOP BAR (COMPACT & SLEEK BROADCAST HEADER) ================= */}
-      {!isVideoFullscreen && (
+      {/* ================= TOP BAR (COMPACT & SLEEK BROADCAST HEADER — PLAYLIST MODE ONLY) ================= */}
+      {screenMode === "PLAYLIST" && (
         <header className="w-full px-3.5 py-1.5 flex justify-between items-center z-40 bg-[#121622] border border-[#232b42] rounded-lg shadow-md shrink-0 mb-2">
           {/* Brand & Venue Info */}
           <div className="flex items-center gap-2.5">
@@ -1523,67 +1578,35 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <button
               type="button"
               onClick={toggleScreenMode}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-md active:scale-95 ${
-                screenMode === "VIDEO"
-                  ? "bg-indigo-600/25 text-indigo-300 border-indigo-500/40 hover:bg-indigo-600/35 hover:text-white"
-                  : screenMode === "PLAYLIST"
-                    ? "bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/35 hover:text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]"
-                    : "bg-purple-600/25 text-purple-300 border-purple-500/40 hover:bg-purple-600/35 hover:text-white"
-              }`}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-md active:scale-95 bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/35 hover:text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]"
               title="Alternar Modo de Pantalla (V o control remoto)"
             >
-              <span className="material-symbols-outlined text-[15px] text-cyan-400">
-                {screenMode === "VIDEO" ? "smart_display" : screenMode === "PLAYLIST" ? "queue_music" : "fullscreen"}
-              </span>
-              <span>
-                {screenMode === "VIDEO"
-                  ? "Modo: Video + Cola"
-                  : screenMode === "PLAYLIST"
-                    ? "Modo: Solo Playlist"
-                    : "Modo: Video Limpio"}
-              </span>
+              <span className="material-symbols-outlined text-[15px] text-cyan-400">queue_music</span>
+              <span>Modo: Solo Playlist</span>
               <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">(V)</span>
             </button>
 
-            {/* TV Sound Mute / Unmute Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsMuted((prev) => {
-                  const next = !prev;
-                  if (next) engine.mute?.();
-                  else {
-                    engine.unMute?.();
-                    engine.setVolume?.(85);
-                  }
-                  setLiveToast({
-                    icon: next ? "volume_off" : "volume_up",
-                    message: next ? "Audio TV Silenciado" : "Audio TV Activado (85%)",
-                  });
-                  setTimeout(() => setLiveToast(null), 3000);
-                  return next;
-                });
-              }}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-sm active:scale-95 ${
+            {/* TV Audio Routing — Read-only badge (audio only via Cabina) */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
                 isMuted
-                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300 hover:bg-rose-500/30"
-                  : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
+                  ? "bg-rose-500/15 border-rose-500/30 text-rose-300"
+                  : "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
               }`}
-              title="Silenciar / Activar sonido de la TV (M)"
+              title="Audio controlado desde la Cabina"
             >
               {isMuted ? (
                 <>
-                  <VolumeX className="size-3.5 text-rose-400" />
-                  <span className="hidden sm:inline">Silenciada</span>
+                  <VolumeX className="size-3.5 text-rose-400 shrink-0" />
+                  <span className="hidden sm:inline">TV Silenciada</span>
                 </>
               ) : (
                 <>
-                  <Volume2 className="size-3.5 text-emerald-400" />
+                  <Volume2 className="size-3.5 text-emerald-400 shrink-0" />
                   <span className="hidden sm:inline">Audio TV</span>
                 </>
               )}
-              <span className="text-[9px] text-slate-400 font-normal">(M)</span>
-            </button>
+            </div>
 
             {/* Settings Modal Button (Matching Android TV OSD) */}
             <button
@@ -1625,517 +1648,266 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </header>
       )}
 
-      {/* ================= MAIN VIEWPORT (SPLIT SCREEN 62/38 OR FULLSCREEN 100%) ================= */}
-      <main
+      {/* ================= PERSISTENT FULLSCREEN VIDEO PLAYER (EXACT TV NATIVE PARITY) ================= */}
+      <div
+        ref={videoContainerRef}
         className={
-          isVideoFullscreen
-            ? "w-full h-full p-0 m-0 block overflow-hidden bg-black"
-            : "w-full flex-1 grid grid-cols-12 gap-3 min-h-0 overflow-hidden mb-2"
+          screenMode === "PLAYLIST"
+            ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
+            : "fixed inset-0 w-screen h-screen bg-black overflow-hidden z-0 select-none"
         }
       >
-        {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~58% OR FULLSCREEN 100%) ---------------- */}
-        <section
-          className={
-            !videoMode
-              ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
-              : isVideoFullscreen || screenMode === "CLEAN"
-                ? "fixed inset-0 z-[99999] w-screen h-screen bg-black block overflow-hidden"
-                : "col-span-7 flex flex-col justify-between rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg relative overflow-hidden min-h-0"
-          }
-        >
-          {/* KARAOKE LIVE BANNER OVERLAY */}
-          {!isVideoFullscreen && videoMode && (karaokeMode || nowPlaying?.isKaraoke) && (
-            <div className="w-full bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 text-white font-mono text-xs font-black tracking-widest px-3 py-1.5 rounded-lg mb-2 shadow-lg shadow-pink-600/30 flex items-center justify-between shrink-0 animate-pulse">
-              <div className="flex items-center gap-2">
-                <Mic className="size-3.5 text-yellow-300 animate-bounce" />
-                <span>
-                  MODO KARAOKE EN VIVO ·{" "}
-                  {nowPlaying?.guestName
-                    ? `¡CANTA ${nowPlaying.guestName.toUpperCase()}!`
-                    : "¡CANTÁ CON LA PANTALLA!"}
-                </span>
-              </div>
-              <span className="text-[9px] uppercase font-bold bg-black/40 px-2 py-0.5 rounded border border-white/20">
-                Letras en Pantalla
-              </span>
-            </div>
+        <div className="w-full h-full relative">
+          {mounted && (
+            <iframe
+              id="poneleplay-tv-iframe"
+              ref={iframeRef}
+              src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1${isMuted ? "&mute=1" : ""}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
+              title={nowPlaying?.title || "TV Player"}
+              className="w-full h-full border-0 pointer-events-none select-none object-cover"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              onLoad={() => {
+                engine.handshake();
+                if (isMuted) {
+                  engine.mute?.();
+                } else {
+                  engine.unMute?.();
+                  engine.setVolume?.(volume);
+                }
+              }}
+            />
           )}
 
-          {/* PARTY DEDICATION & GUEST BANNER OVERLAY */}
-          {!isVideoFullscreen && videoMode && (nowPlaying?.dedication || nowPlaying?.guestName) && (
-            <div className="w-full bg-gradient-to-r from-fuchsia-600/90 via-purple-700/90 to-amber-600/90 text-white font-mono text-xs px-3 py-1.5 rounded-lg mb-2 shadow-lg flex items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <span>🎉</span>
-                {nowPlaying.guestName && (
-                  <span className="font-black text-amber-200 shrink-0">
-                    Pedido por {nowPlaying.guestName}:
-                  </span>
-                )}
-                {nowPlaying.dedication && (
-                  <span className="font-bold text-white truncate">
-                    &ldquo;{nowPlaying.dedication}&rdquo;
-                  </span>
-                )}
-              </div>
-              <span className="text-[9px] uppercase font-bold bg-black/30 px-2 py-0.5 rounded shrink-0">
-                Modo Fiesta
-              </span>
-            </div>
-          )}
-
-          {/* Header tag within card */}
-          {!isVideoFullscreen && videoMode && (
-            <div className="flex items-center justify-between z-10 mb-1.5 shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="bg-indigo-500/20 text-[#c0c1ff] border border-indigo-500/40 px-2 py-0.5 rounded-md font-mono text-[10px] tracking-wider flex items-center gap-1 shadow-sm">
-                  <span className="size-1.5 rounded-full bg-indigo-400 animate-ping inline-block" />
-                  SONANDO AHORA
-                </div>
-                <span className="font-mono text-[10px] text-slate-400 tracking-wider">
-                  CANAL AUDIO #01 · PRINCIPAL
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleVideoMode}
-                  className="flex items-center gap-1 bg-[#0a0e17]/90 hover:bg-[#0a0e17] px-2 py-0.5 rounded-md border border-[#232b42] text-[11px] font-mono text-slate-300 hover:text-white transition-colors"
-                >
-                  <span className="material-symbols-outlined text-cyan-400 text-[14px]">
-                    {videoMode ? "smart_display" : "album"}
-                  </span>
-                  <span>{videoMode ? "Ver Vinilo" : "Ver Video HD"}</span>
-                </button>
-
-                <div className="flex items-center gap-1 bg-[#0a0e17]/90 px-2 py-0.5 rounded-md border border-[#232b42]">
-                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span className="font-mono text-[10px] text-slate-300">YouTube Stream HD</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ================= STABLE YOUTUBE CONTAINER ================= */}
+          {/* Transparent protection overlay */}
           <div
-            ref={videoContainerRef}
-            className={
-              !videoMode
-                ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
-                : isVideoFullscreen || screenMode === "CLEAN"
-                  ? "w-full h-full bg-black flex items-center justify-center overflow-hidden relative"
-                  : "relative w-full aspect-video max-h-[50vh] rounded-xl overflow-hidden border border-[#232b42] shadow-xl bg-black my-auto z-10 group"
-            }
-          >
-            <div className="w-full h-full relative">
-              {mounted && (
-                <iframe
-                  id="poneleplay-tv-iframe"
-                  ref={iframeRef}
-                  src={`https://www.youtube.com/embed/${resolveVideoId(nowPlaying)}?autoplay=1${isMuted ? "&mute=1" : ""}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`}
-                  title={nowPlaying?.title || "TV Player"}
-                  className="w-full h-full border-0 pointer-events-none select-none object-cover"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  onLoad={() => {
-                    engine.handshake();
-                    if (isMuted) {
-                      engine.mute?.();
-                    } else {
-                      engine.unMute?.();
-                      engine.setVolume?.(volume);
-                    }
-                  }}
-                />
-              )}
+            className="absolute inset-0 z-10 cursor-default"
+            onDoubleClick={toggleFullscreen}
+            title="PonelePlay TV Salón"
+          />
+        </div>
+      </div>
 
-              {/* TRANSPARENT PROTECTION OVERLAY */}
-              <div
-                className="absolute inset-0 z-10 cursor-default"
-                onDoubleClick={toggleVideoFullscreen}
-                title="PonelePlay TV Salón"
-              />
+      {/* ================= TV MODE VIDEO OVERLAYS (EXACT ANDROID TV PARITY) ================= */}
+      {screenMode !== "PLAYLIST" && (
+        <div className="fixed inset-0 z-20 pointer-events-none overflow-hidden select-none">
+          {/* Top-Right Floating Controls (Hover / Focus) */}
+          <div className="absolute top-4 right-6 z-40 pointer-events-auto flex items-center gap-2 opacity-25 hover:opacity-100 focus-within:opacity-100 transition-opacity bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-2xl">
+            {/* Mode Switcher */}
+            <button
+              type="button"
+              onClick={toggleScreenMode}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/30 font-mono text-[11px] font-bold transition-all"
+              title="Cambiar Modo de Pantalla (Tecla V)"
+            >
+              <span className="material-symbols-outlined text-[14px] text-cyan-400">
+                {screenMode === "VIDEO" ? "smart_display" : "fullscreen"}
+              </span>
+              <span>{screenMode === "VIDEO" ? "Modo: Video Completo" : "Modo: Video Limpio"}</span>
+              <span className="text-[10px] text-slate-400 font-normal">(V)</span>
+            </button>
 
-              {/* Discreet hover-only exit fullscreen button on TV */}
-              {isVideoFullscreen && (
-                <button
-                  type="button"
-                  onClick={toggleVideoFullscreen}
-                  className="absolute top-4 right-4 z-30 opacity-0 hover:opacity-100 transition-opacity bg-black/90 hover:bg-black text-white font-mono text-xs px-3.5 py-1.5 rounded-lg border border-white/20 flex items-center gap-1.5 shadow-2xl cursor-pointer"
-                  title="Salir de pantalla completa (F o Escape)"
-                >
-                  <Minimize2 className="size-3.5 text-cyan-400" />
-                  <span>Salir de Pantalla Completa</span>
-                </button>
+            {/* TV Audio Indicator (Read-only) */}
+            <div
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
+                isMuted
+                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300"
+                  : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+              }`}
+              title="El audio se controla exclusivamente desde la Cabina"
+            >
+              {isMuted ? (
+                <>
+                  <VolumeX className="size-3.5 text-rose-400" />
+                  <span>TV Silenciada</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="size-3.5 text-emerald-400" />
+                  <span>Audio TV</span>
+                </>
               )}
-
-              {videoMode && !isVideoFullscreen && (
-                <div className="absolute top-2.5 left-2.5 bg-[#0a0e17]/90 px-2.5 py-0.5 rounded-md border border-[#283250] flex items-center gap-1.5 font-mono text-[10px] text-cyan-300 pointer-events-none shadow-md z-20">
-                  <span className="size-1.5 rounded-full bg-cyan-400 animate-live-dot inline-block" />
-                  <span>EN VIVO · VIDEO SALÓN HD</span>
-                </div>
-              )}
-
-              {/* Dedicated video fullscreen button top-right on video */}
-              {videoMode && !isVideoFullscreen && (
-                <button
-                  type="button"
-                  onClick={toggleVideoFullscreen}
-                  className="absolute top-2.5 right-2.5 z-20 size-7 rounded-lg bg-[#0a0e17]/90 hover:bg-[#181b25] border border-[#283250] flex items-center justify-center text-slate-300 hover:text-white transition-all shadow-md active:scale-90"
-                  title="Pantalla completa del video (F)"
-                >
-                  <Maximize2 className="size-3.5 text-cyan-400" />
-                </button>
-              )}
+              <span className="text-[9px] text-slate-400 font-normal hidden sm:inline">(Cabina)</span>
             </div>
+
+            {/* Settings Modal Button */}
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal(true)}
+              className="flex items-center gap-1.5 bg-[#121622] hover:bg-[#1c2234] px-2.5 py-1 rounded-lg border border-[#2b354e] font-mono text-[11px] text-slate-200 hover:text-white transition-all"
+              title="Ajustes de Pantalla TV (Esc / O)"
+            >
+              <Settings className="size-3.5 text-cyan-400" />
+              <span>Ajustes</span>
+            </button>
+
+            {/* Fullscreen Button */}
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="size-7 rounded-lg bg-[#121622] hover:bg-[#1c2234] border border-[#2b354e] flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+              title="Pantalla completa (F)"
+            >
+              {isFullscreen ? <Minimize2 className="size-3.5 text-cyan-400" /> : <Maximize2 className="size-3.5 text-cyan-400" />}
+            </button>
           </div>
 
-          {/* ================= VINYL MODE VIEW (WHEN VIDEO IS OFF AND NOT FULLSCREEN) ================= */}
-          {!isVideoFullscreen && !videoMode && (
-            <div className="flex items-center gap-6 my-auto z-10 py-3">
-              {/* Vinyl Record + Album Cover */}
-              <div className="relative size-48 shrink-0 flex items-center justify-center">
-                {/* Vinyl Record Grooves */}
-                <div className="absolute -right-6 size-44 rounded-full bg-[#080B12] border-4 border-[#1E2433] shadow-[0_0_24px_rgba(0,0,0,0.85)] animate-spin-vinyl flex items-center justify-center z-0">
-                  <div className="size-32 rounded-full border border-neutral-700/40 flex items-center justify-center">
-                    <div className="size-20 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] border-2 border-[#0a0e17] flex flex-col items-center justify-center p-1 text-center shadow-lg">
-                      <span className="text-white font-mono text-[8px] uppercase tracking-wider font-extrabold">PONELE</span>
-                      <span className="text-white/80 font-mono text-[6px] leading-tight">PLAY</span>
-                      <div className="size-2.5 rounded-full bg-[#0a0e17] border border-white/40 mt-0.5" />
-                    </div>
-                  </div>
-                </div>
+          {/* Left Floating Queue (100% Transparent, no box/border, text only with drop shadow) */}
+          {screenMode === "VIDEO" && queue.length > 0 && (
+            <div className="absolute top-7 left-8 w-[310px] flex flex-col z-20 pointer-events-none">
+              <div className="flex items-center justify-between w-full mb-2">
+                <span className="font-mono text-xs font-black text-cyan-400 tracking-wider [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                  📋 COLA EN VIVO
+                </span>
+                <span className="font-mono text-[11px] text-cyan-200 font-bold [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                  {queue.length} temas
+                </span>
+              </div>
 
-                {/* Album Cover Front */}
-                <div className="relative size-44 rounded-xl overflow-hidden border border-[#283250] shadow-xl z-10 bg-[#0a0e17] flex items-center justify-center">
-                  {nowPlaying?.thumbnailUrl ? (
-                    <Image
-                      src={nowPlaying.thumbnailUrl}
-                      alt={nowPlaying.title}
-                      width={176}
-                      height={176}
-                      className="w-full h-full object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-indigo-950 via-slate-900 to-[#0a0e17] flex flex-col items-center justify-center text-indigo-300 p-4">
-                      <Music2 className="size-12 text-indigo-400 mb-2" />
-                      <span className="font-mono text-[10px] uppercase tracking-widest text-slate-400">PonelePlay Master</span>
+              {queue.slice(0, 7).map((item, idx) => {
+                const isBar = (item.voteCount >= 9999 || item.voteCount <= 0) && !item.guestName;
+                return (
+                  <div key={item.itemId || item.trackId || idx} className="flex items-center w-full mb-1.5 min-w-0">
+                    <span className="font-mono text-xs font-bold text-cyan-400 w-7 shrink-0 [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                      #{idx + 1}
+                    </span>
+                    <div className="flex-1 min-w-0 pr-2">
+                      <p className="text-xs font-bold text-white truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                        {item.isKaraoke ? "🎤 " : ""}{decodeHtml(item.title)}
+                      </p>
+                      {item.guestName ? (
+                        <p className="text-[10.5px] font-medium text-pink-400 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                          {item.artist} • 🎉 {item.guestName}
+                        </p>
+                      ) : (
+                        <p className="text-[10.5px] font-medium text-slate-300 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                          {item.artist}
+                        </p>
+                      )}
                     </div>
+                    <span
+                      className={`font-mono text-[10.5px] font-bold shrink-0 [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)] ${
+                        isBar ? "text-amber-400" : "text-emerald-300"
+                      }`}
+                    >
+                      {isBar ? (isParty ? "⭐ DJ" : "⭐ BAR") : `${item.voteCount}v`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Right Floating Proposals (100% Transparent, no box/border, text only with drop shadow) */}
+          {screenMode === "VIDEO" && candidateProposals.length > 0 && (
+            <div className="absolute top-7 right-8 w-[310px] flex flex-col z-20 pointer-events-none">
+              <div className="flex items-center justify-between w-full mb-2">
+                <span className="font-mono text-xs font-black text-amber-400 tracking-wider [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                  🔥 EN VOTACIÓN
+                </span>
+                <span className="text-[11px] text-cyan-300 font-bold [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                  Pedí con QR
+                </span>
+              </div>
+
+              {candidateProposals.slice(0, 7).map((prop, idx) => (
+                <div key={prop.id || prop.trackId || idx} className="flex items-center justify-between w-full mb-1.5 min-w-0">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="text-xs font-bold text-white truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                      {prop.isKaraoke ? "🎤 " : ""}{decodeHtml(prop.title)}
+                    </p>
+                    {prop.guestName ? (
+                      <p className="text-[10px] font-semibold text-pink-400 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                        🎉 Pedido por {prop.guestName}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] font-medium text-slate-300 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                        {prop.artist}
+                      </p>
+                    )}
+                  </div>
+                  <span className="font-mono text-xs font-bold text-amber-400 shrink-0 [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
+                    {prop.voteCount}/{effectiveThreshold}v
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bottom Subtle Dark Gradient */}
+          <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-[#070a13]/95 via-[#070a13]/70 to-transparent pointer-events-none z-20" />
+
+          {/* Bottom HUD Overlay */}
+          <div className="absolute bottom-0 inset-x-0 px-8 py-5 flex items-center justify-between z-30 pointer-events-auto">
+            {/* Left: Now Playing Info */}
+            <div className="flex items-center min-w-0 mr-4">
+              <div className="size-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse shrink-0 mr-3" />
+              <div className="min-w-0">
+                <div className="flex items-center flex-wrap gap-x-2.5">
+                  <span className="font-mono text-[11px] font-bold text-cyan-300 tracking-wider [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
+                    {isParty ? "🎉 EN AIRE • FIESTA" : "EN AIRE"}
+                  </span>
+                  {(nowPlaying?.isKaraoke || karaokeMode) && (
+                    <span className="font-mono text-[11px] font-bold text-rose-500 [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
+                      🎤 KARAOKE
+                    </span>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
-                  <div className="absolute bottom-2 left-2 text-white font-mono text-[10px] uppercase tracking-wider bg-[#0A0E17]/90 px-2 py-0.5 rounded border border-[#283250]">
-                    MODO VINILO · JUKEBOX
+                  {nowPlaying?.guestName && (
+                    <span className="font-mono text-[11px] font-black text-pink-400 [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
+                      🎉 Pedido por {nowPlaying.guestName}
+                    </span>
+                  )}
+                </div>
+                <h1 className="text-xl sm:text-2xl font-bold text-white truncate max-w-2xl mt-0.5 [text-shadow:_2px_2px_8px_rgba(0,0,0,0.95)]">
+                  {decodeHtml(nowPlaying?.title || "Esperando temas...")}
+                </h1>
+                <p className="text-xs sm:text-sm font-medium text-slate-300 truncate max-w-xl [text-shadow:_1px_1px_4px_rgba(0,0,0,0.95)]">
+                  {nowPlaying?.artist || venueName}
+                </p>
+                {nowPlaying?.dedication && (
+                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-950/90 border border-pink-500 shadow-lg max-w-xl">
+                    <span className="text-xs font-bold text-pink-100 truncate">
+                      💬 &ldquo;{nowPlaying.dedication}&rdquo;
+                    </span>
                   </div>
-                </div>
-              </div>
-
-              {/* High-tech Typography Display */}
-              <div className="flex-1 min-w-0 pr-3">
-                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-[10px] mb-2">
-                  <span className="size-1 rounded-full bg-cyan-400" />
-                  AMBIENTACIÓN DEL LOCAL
-                </div>
-                <h1 className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight leading-tight truncate">
-                  {decodeHtml(nowPlaying?.title || "Esperando tema...")}
-                </h1>
-                <h2 className="text-base font-medium text-slate-300 mt-1 truncate">
-                  {nowPlaying?.artist || "Playlist activa"}
-                </h2>
-                <div className="flex items-center gap-3 mt-3 font-mono text-xs text-slate-400">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="material-symbols-outlined text-cyan-400 text-[16px]">album</span>
-                    Audio HD Directo
-                  </span>
-                  <span>•</span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="material-symbols-outlined text-indigo-400 text-[16px]">graphic_eq</span>
-                    Audio Cabina Salón
-                  </span>
-                </div>
+                )}
               </div>
             </div>
-          )}
 
-          {/* ================= METADATA BELOW VIDEO (WHEN VIDEO IS ON AND NOT FULLSCREEN) ================= */}
-          {!isVideoFullscreen && videoMode && (
-            <div className="z-10 mt-2 flex items-center justify-between shrink-0">
-              <div className="min-w-0 flex-1 pr-3">
-                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-cyan-300 font-mono text-[10px] mb-0.5">
-                  <span className="size-1 rounded-full bg-cyan-400" />
-                  AMBIENTACIÓN DEL LOCAL
-                </div>
-                <h1 className="text-base lg:text-lg font-extrabold text-white tracking-tight leading-tight truncate">
-                  {decodeHtml(nowPlaying?.title || "Esperando tema...")}
-                </h1>
-                <h2 className="text-xs lg:text-sm font-medium text-slate-300 truncate">
-                  {nowPlaying?.artist || "Playlist activa"}
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1 bg-indigo-500/15 text-[#c0c1ff] px-2.5 py-1 rounded-full border border-indigo-500/30 font-mono text-[11px] font-bold">
-                  <span className="material-symbols-outlined text-[14px]">
-                    {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0) ? "stars" : "thumb_up"}
-                  </span>
-                  <span>
-                    {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0)
-                      ? "SELECCIÓN BAR"
-                      : `${nowPlaying?.voteCount ?? 0} VOTOS`}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ================= BOTTOM: CLEAN BROADCAST PROGRESS TIMELINE (NO PLAYER CONTROLS ON TV) ================= */}
-          {!isVideoFullscreen && videoMode && (
-            <div className="z-10 mt-2 bg-[#0d1017] p-2.5 rounded-lg border border-[#1e2333] shadow-inner shrink-0">
-              {/* Timeline Counters */}
-              <div className="w-full flex items-center justify-between font-mono text-[11px] text-slate-300 mb-1">
-                <span className="text-cyan-400 font-semibold tracking-wider">{formatDuration(elapsed)}</span>
-                <span className="text-slate-500 text-[10px] tracking-widest uppercase">EN REPRODUCCIÓN</span>
-                <span className="text-slate-400 font-semibold tracking-wider">{formatDuration(duration)}</span>
-              </div>
-
-              {/* Progress Bar (Visual timeline only) */}
-              <div className="w-full h-2 bg-[#161a26] rounded-full overflow-hidden p-0 relative border border-[#232b42]">
+            {/* Right: Table QR Code + Clock */}
+            <div className="flex items-center gap-3 shrink-0">
+              {qr && (
                 <div
-                  className="h-full bg-gradient-to-r from-[#4F46E5] via-[#6366F1] to-[#06B6D4] rounded-full relative shadow-[0_0_10px_rgba(99,102,241,0.5)] transition-all duration-150"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              {/* Salon Broadcast Info Row */}
-              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-[#1e2333] font-mono text-[10px] text-slate-400">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1 text-slate-300">
-                    <span className="material-symbols-outlined text-[13px] text-indigo-400">queue_music</span>
-                    <span>Playlist: <strong className="text-white">{venueName}</strong></span>
-                  </span>
-                  <span className="text-slate-600">·</span>
-                  <span>Audio Cabina Principal</span>
-                </div>
-
-                <div className="flex items-center gap-1.5 bg-indigo-500/15 text-[#c0c1ff] px-2 py-0.5 rounded-full border border-indigo-500/30 font-bold">
-                  <span className="material-symbols-outlined text-[12px]">graphic_eq</span>
-                  <span>TRANSMISIÓN EN SALA</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </section>
-
-        {/* ---------------- RIGHT STAGE: COLA EN VIVO + QR (~42%) (HIDDEN IN FULLSCREEN) ---------------- */}
-        {!isVideoFullscreen && videoMode && (
-          <section className="col-span-5 flex flex-col justify-between gap-2.5 min-h-0">
-            {/* TOP SECTION: CRISP MODERN QR ENGAGEMENT CARD */}
-            <div className="rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg flex items-center gap-3 relative overflow-hidden shrink-0">
-              {/* QR display */}
-              <div
-                onClick={() => setQrModal(true)}
-                className="relative size-24 rounded-lg bg-white p-1.5 shrink-0 border border-indigo-400/50 shadow-md cursor-pointer hover:scale-105 transition-transform"
-                title="Click para agrandar QR"
-              >
-                {qr ? (
+                  onClick={() => setQrModal(true)}
+                  className="size-16 rounded-xl bg-white p-1 shadow-2xl border border-white/30 cursor-pointer hover:scale-105 transition-transform shrink-0"
+                  title="Click para agrandar QR"
+                >
                   <Image
                     src={qr}
-                    alt="QR para votar"
-                    width={96}
-                    height={96}
+                    alt="QR Mesas"
+                    width={64}
+                    height={64}
                     className="w-full h-full object-contain"
                     unoptimized
                   />
-                ) : (
-                  <div className="w-full h-full bg-slate-200 animate-pulse rounded" />
-                )}
-              </div>
-
-              {/* Engagement callout */}
-              <div className="flex-1 min-w-0">
-                <span className="font-mono text-[9px] text-cyan-400 uppercase tracking-widest font-bold block mb-0.5">
-                  ELEGÍ LA MÚSICA DESDE TU MESA
-                </span>
-                <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight leading-snug truncate">
-                  Escaneá el código QR y votá temas
-                </h3>
-                <p className="font-mono text-[10px] text-slate-400 mt-0.5 leading-tight line-clamp-2">
-                  Pedí tu ticket al mozo para sumar créditos de votos instantáneos.
-                </p>
-                <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#0a0e17] border border-[#232b42] font-mono text-[10px] text-slate-300">
-                  <span className="material-symbols-outlined text-[12px] text-indigo-400">link</span>
-                  <span className="truncate">poneleplay.app/p/{slug}</span>
                 </div>
+              )}
+              <div className="flex flex-col items-end">
+                <span className="font-mono text-lg font-bold text-white [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]" suppressHydrationWarning>
+                  {clock}
+                </span>
+                <span className="text-xs font-semibold text-cyan-300 [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
+                  Pedí tu música
+                </span>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            {/* BOTTOM SECTION: DUAL QUEUE & POPULAR PROPOSALS SWITCHER */}
-            <div className="flex-1 rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg flex flex-col justify-between overflow-hidden min-h-0">
-              <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
-                {/* Switcher Tab Header */}
-                <div className="flex items-center justify-between pb-2 border-b border-[#232b42] shrink-0">
-                  <div className="flex items-center gap-1 p-0.5 bg-[#0a0e17] rounded-lg border border-[#1d2232]">
-                    <button
-                      type="button"
-                      onClick={() => setSidebarTab("queue")}
-                      className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-bold transition-all flex items-center gap-1 ${
-                        sidebarTab === "queue"
-                          ? "bg-indigo-600 text-white shadow-sm"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[13px]">queue_music</span>
-                      <span>En Cola ({queue.length})</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setSidebarTab("candidates")}
-                      className={`px-2.5 py-1 rounded-md font-mono text-[11px] font-bold transition-all flex items-center gap-1 ${
-                        sidebarTab === "candidates"
-                          ? "bg-gradient-to-r from-amber-500 to-rose-600 text-white shadow-sm"
-                          : "text-slate-400 hover:text-white"
-                      }`}
-                    >
-                      <Flame className="size-3 text-amber-400" />
-                      <span>Votación en Mesas ({nightState?.candidates?.length ?? 0})</span>
-                    </button>
-                  </div>
-
-                  <span className="font-mono text-[10px] text-slate-500 hidden sm:inline">
-                    Rotación auto 14s
-                  </span>
-                </div>
-
-                {/* Content: TAB 1: CONFIRMED QUEUE */}
-                {sidebarTab === "queue" ? (
-                  <div className="mt-2 space-y-1.5 overflow-hidden flex-1 min-h-0 animate-in fade-in duration-200">
-                    {queue.slice(0, maxQueueFit).map((item, index) => (
-                      <div
-                        key={item.itemId}
-                        className="p-2 rounded-lg bg-[#10141f] border border-[#1d2232] flex items-center justify-between gap-2.5 shadow-sm hover:border-[#2a344e] transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <BallChip n={index + 1} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <h4 className="text-xs font-bold text-white truncate">
-                              {decodeHtml(item.title)}
-                            </h4>
-                            <p className="text-[11px] text-slate-400 truncate">
-                              {item.artist}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="font-mono text-[10px] font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
-                            {(item.voteCount >= 9999 || item.voteCount === 0)
-                              ? "⭐ Selección Bar"
-                              : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-
-                    {queue.length === 0 && (
-                      <div className="py-6 text-center text-xs text-slate-500 font-mono">
-                        No hay canciones en cola de espera.
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  /* Content: TAB 2: CANDIDATE PROPOSALS WAITING FOR 5 VOTES */
-                  <div className="mt-2 space-y-2 overflow-hidden flex-1 min-h-0 animate-in fade-in duration-200">
-                    {/* Voting Round Live Banner on TV */}
-                    {nightState?.votingRound?.enabled && (
-                      <div className="p-2 rounded-lg bg-gradient-to-r from-amber-500/15 via-rose-500/15 to-indigo-500/15 border border-amber-500/30 flex items-center justify-between font-mono text-[11px] shrink-0 mb-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="material-symbols-outlined text-amber-400 text-sm animate-pulse">timer</span>
-                          <span className="font-bold text-white shrink-0">Ronda #{nightState.votingRound.roundNumber}</span>
-                          <span className="text-slate-400 text-[10px] truncate">· La + votada entra a TV</span>
-                        </div>
-                        <span className="font-bold px-2 py-0.5 rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 text-[11px] shrink-0">
-                          {formatDuration(roundSecondsLeft)}
-                        </span>
-                      </div>
-                    )}
-
-                    {nightState?.candidates && nightState.candidates.length > 0 ? (
-                      nightState.candidates.slice(0, maxCandidatesFit).map((cand, index) => {
-                        const needed = Math.max(0, effectiveThreshold - cand.voteCount);
-                        const percent = Math.min(100, (cand.voteCount / Math.max(1, effectiveThreshold)) * 100);
-                        return (
-                          <div
-                            key={cand.id}
-                            className="p-2 rounded-lg bg-[#10141f] border border-[#252030] space-y-1.5 shadow-sm"
-                          >
-                            <div className="flex items-center justify-between gap-2 min-w-0">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <h4 className="text-xs font-bold text-white truncate">
-                                    {decodeHtml(cand.title)}
-                                  </h4>
-                                  {index === 0 && (
-                                    <span className="shrink-0 text-[9px] font-mono font-bold bg-amber-500/25 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded">
-                                      🏆 Líder Ronda
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-slate-400 truncate">
-                                  {cand.artist}
-                                </p>
-                              </div>
-                              <span className="font-mono text-[10px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
-                                <Flame className="size-3 text-amber-400" />
-                                <span>{cand.voteCount}/5 votos</span>
-                              </span>
-                            </div>
-                            {/* Visual Vote Progress Bar */}
-                            <div className="w-full bg-[#181d2a] h-1.5 rounded-full overflow-hidden border border-[#232b42]">
-                              <div
-                                className="h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full transition-all duration-300"
-                                style={{ width: `${percent}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
-                              <span className="text-amber-400 font-semibold">
-                                {needed === 1 ? "¡Falta 1 voto para sonar en la TV!" : `Faltan ${needed} votos para sonar`}
-                              </span>
-                              <span className="text-slate-500">Mesa popular</span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="py-6 text-center text-xs text-slate-500 font-mono space-y-1">
-                        <Flame className="size-6 text-slate-600 mx-auto" />
-                        <p>No hay propuestas juntando votos en este momento.</p>
-                        <p className="text-[10px] text-slate-600">¡Escaneá el QR y proponé la tuya!</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-2 border-t border-[#232b42] flex items-center justify-between font-mono text-[10px] text-slate-400 shrink-0 mt-2">
-                <span>
-                  {sidebarTab === "queue"
-                    ? "Modo: Prioridad por votos ponderados"
-                    : nightState?.votingRound?.enabled
-                      ? `Ronda activa: ${formatDuration(roundSecondsLeft)} restantes`
-                      : "Meta: 5 votos para ingresar"}
-                </span>
-                <span className="text-cyan-400 font-semibold">● En vivo</span>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* ========================================================================= */}
-        {/* MODE 2: ENFASIS EN PLAYLIST Y PROPUESTAS (AUDIO SALON + MAXIMA PARTICIPACION) */}
-        {/* ========================================================================= */}
-        {!isVideoFullscreen && !videoMode && (
-          <>
+      {/* ================= MODE 2: ENFASIS EN PLAYLIST Y PROPUESTAS (AUDIO SALON + MAXIMA PARTICIPACION) ================= */}
+      {screenMode === "PLAYLIST" && (
+        <main className="w-full flex-1 grid grid-cols-12 gap-3 min-h-0 overflow-hidden mb-2">
             {/* COL 1: HERO NOW PLAYING & QR CARD (4 COLS) */}
             <section className="col-span-4 flex flex-col justify-between gap-2.5 min-h-0">
               {/* Upper: Now Playing Hero Card with Vinyl + Scrubber */}
@@ -2440,13 +2212,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 <span className="text-amber-400 font-semibold">Votá desde tu mesa</span>
               </div>
             </section>
-          </>
-        )}
+        </main>
+      )}
 
-      </main>
-
-      {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER) ================= */}
-      {!isVideoFullscreen && (
+      {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER — PLAYLIST MODE ONLY) ================= */}
+      {screenMode === "PLAYLIST" && (
         <footer className="w-full bg-[#0d1017] border border-[#1e2333] rounded-lg py-1 px-3 overflow-hidden z-40 shrink-0 shadow-sm">
           <div className="animate-marquee items-center gap-10 font-mono text-[10px] text-slate-400 whitespace-nowrap">
             <span className="flex items-center gap-3 shrink-0 whitespace-nowrap">
@@ -2746,17 +2516,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         isFullscreen={isFullscreen}
         versionName="2.6.0"
         onToggleMode={toggleScreenMode}
-        onToggleMute={() => {
-          setIsMuted((prev) => {
-            const next = !prev;
-            if (next) engine.mute?.();
-            else {
-              engine.unMute?.();
-              engine.setVolume?.(85);
-            }
-            return next;
-          });
-        }}
         onToggleFullscreen={toggleFullscreen}
         onUnpair={handleUnpair}
         onReload={() => window.location.reload()}

@@ -83,6 +83,8 @@ export function PanelPlaybackFooter({
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
   const [tvMuted, setTvMuted] = useState(false);
+  // 3-way audio routing: BOTH = audio in cabina + TV, CABINA_ONLY = only cabina, TV_ONLY = only TV
+  const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("BOTH");
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
@@ -776,6 +778,44 @@ export function PanelPlaybackFooter({
     }
   };
 
+  /**
+   * 3-way audio routing selector:
+   * BOTH         → Audio en Cabina Y en TV (mute=false, tvMuted=false)
+   * CABINA_ONLY  → Audio SOLO en Cabina (mute=false, tvMuted=true)
+   * TV_ONLY      → Audio SOLO en TV (mute=true, tvMuted=false)
+   */
+  const handleSetAudioRouting = async (routing: "BOTH" | "CABINA_ONLY" | "TV_ONLY") => {
+    setAudioRouting(routing);
+    const nextCabinaMuted = routing === "TV_ONLY";
+    const nextTvMuted = routing === "CABINA_ONLY";
+
+    // Update cabina mute
+    if (nextCabinaMuted !== isMuted) {
+      setIsMuted(nextCabinaMuted);
+      broadcastControl(nextCabinaMuted ? "mute" : "unmute");
+      try {
+        if (nextCabinaMuted) await mutePlayback(slug);
+        else await unmutePlayback(slug);
+      } catch { /* non-blocking */ }
+    }
+
+    // Update TV mute
+    if (nextTvMuted !== tvMuted) {
+      setTvMuted(nextTvMuted);
+      broadcastControl("set_tv_mute", { tvMuted: nextTvMuted });
+      try {
+        await updateTvDeviceDisplay(slug, "all", { tvMuted: nextTvMuted });
+      } catch { /* non-blocking */ }
+    }
+
+    const labels = {
+      BOTH: "🔊 Audio en Cabina + TV",
+      CABINA_ONLY: "🎧 Audio Solo en Cabina",
+      TV_ONLY: "📺 Audio Solo en TV",
+    };
+    showToast(labels[routing]);
+  };
+
   const handleToggleKaraoke = async () => {
     const next = !karaokeMode;
     setKaraokeMode(next);
@@ -911,19 +951,33 @@ export function PanelPlaybackFooter({
               <Search className="size-3.5 text-cyan-400" />
             </button>
 
-            {/* TV Audio Mute/Unmute Toggle */}
-            <button
-              type="button"
-              onClick={() => void handleToggleTvMute()}
-              className={`size-8 rounded-lg border flex items-center justify-center active:scale-95 transition-all ${
-                tvMuted
-                  ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
-                  : "bg-cyan-500/15 text-cyan-300 border-cyan-500/30"
-              }`}
-              title={tvMuted ? "Activar sonido de la TV" : "Silenciar sonido de la TV"}
-            >
-              {tvMuted ? <VolumeX className="size-3.5 text-rose-400" /> : <Volume2 className="size-3.5 text-cyan-400" />}
-            </button>
+            {/* TV Audio Routing — 3-way compact (Mobile) */}
+            <div className="flex items-center gap-0.5 bg-[#131722] rounded-lg border border-[#232b42] overflow-hidden" title="Audio: Cabina / Ambos / Solo TV">
+              <button
+                type="button"
+                onClick={() => void handleSetAudioRouting("CABINA_ONLY")}
+                className={`size-8 flex items-center justify-center active:scale-95 transition-all text-sm ${
+                  audioRouting === "CABINA_ONLY" ? "bg-indigo-600/40 text-indigo-200" : "text-slate-400"
+                }`}
+                title="Audio solo Cabina"
+              >🎧</button>
+              <button
+                type="button"
+                onClick={() => void handleSetAudioRouting("BOTH")}
+                className={`size-8 flex items-center justify-center active:scale-95 transition-all text-sm ${
+                  audioRouting === "BOTH" ? "bg-emerald-600/40 text-emerald-200" : "text-slate-400"
+                }`}
+                title="Audio en Cabina y TV"
+              >🔊</button>
+              <button
+                type="button"
+                onClick={() => void handleSetAudioRouting("TV_ONLY")}
+                className={`size-8 flex items-center justify-center active:scale-95 transition-all text-sm ${
+                  audioRouting === "TV_ONLY" ? "bg-cyan-600/40 text-cyan-200" : "text-slate-400"
+                }`}
+                title="Audio solo TV"
+              >📺</button>
+            </div>
 
             {/* Play / Pause */}
             <button
@@ -1078,29 +1132,48 @@ export function PanelPlaybackFooter({
               <span>Pantallas TV</span>
             </button>
 
-            {/* Remote TV Audio Mute/Unmute Button */}
-            <button
-              type="button"
-              onClick={() => void handleToggleTvMute()}
-              className={`h-8 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border font-mono text-[11px] font-bold transition-all active:scale-95 whitespace-nowrap ${
-                tvMuted
-                  ? "bg-rose-500/20 text-rose-300 border-rose-500/50 shadow-sm"
-                  : "bg-[#131722] text-cyan-300 border-[#232b42] hover:text-white"
-              }`}
-              title={tvMuted ? "Sonido de la TV silenciado — Clic para activar sonido en la TV" : "Sonido de la TV activo — Clic para silenciar la TV desde la cabina"}
-            >
-              {tvMuted ? (
-                <>
-                  <VolumeX className="size-3.5 text-rose-400 shrink-0" />
-                  <span>TV Silenciada</span>
-                </>
-              ) : (
-                <>
-                  <Volume2 className="size-3.5 text-cyan-400 shrink-0" />
-                  <span>Audio TV</span>
-                </>
-              )}
-            </button>
+            {/* 3-Way Audio Routing Selector (Cabina + TV) */}
+            <div className="h-8 shrink-0 flex items-center gap-0.5 bg-[#131722] rounded-lg border border-[#232b42] overflow-hidden" title="Enrutamiento de audio: elegí dónde se escucha la música">
+              <button
+                type="button"
+                onClick={() => void handleSetAudioRouting("CABINA_ONLY")}
+                className={`h-full px-2 font-mono text-[10px] font-bold transition-all flex items-center gap-1 ${
+                  audioRouting === "CABINA_ONLY"
+                    ? "bg-indigo-600/40 text-indigo-200 border-r border-indigo-500/40"
+                    : "text-slate-400 hover:text-white border-r border-[#232b42]"
+                }`}
+                title="Audio solo en Cabina (TV silenciada)"
+              >
+                <span className="text-[11px]">🎧</span>
+                <span className="hidden lg:inline">Cabina</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSetAudioRouting("BOTH")}
+                className={`h-full px-2 font-mono text-[10px] font-bold transition-all flex items-center gap-1 ${
+                  audioRouting === "BOTH"
+                    ? "bg-emerald-600/40 text-emerald-200 border-r border-emerald-500/40"
+                    : "text-slate-400 hover:text-white border-r border-[#232b42]"
+                }`}
+                title="Audio en Cabina y en TV"
+              >
+                <span className="text-[11px]">🔊</span>
+                <span className="hidden lg:inline">Ambos</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSetAudioRouting("TV_ONLY")}
+                className={`h-full px-2 font-mono text-[10px] font-bold transition-all flex items-center gap-1 ${
+                  audioRouting === "TV_ONLY"
+                    ? "bg-cyan-600/40 text-cyan-200"
+                    : "text-slate-400 hover:text-white"
+                }`}
+                title="Audio solo en TV (cabina silenciada)"
+              >
+                <span className="text-[11px]">📺</span>
+                <span className="hidden lg:inline">Solo TV</span>
+              </button>
+            </div>
 
             {/* Karaoke Mode Toggle Button */}
             <button

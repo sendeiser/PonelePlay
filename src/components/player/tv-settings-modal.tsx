@@ -11,7 +11,6 @@ import {
   LogOut,
   X,
   HelpCircle,
-  Radio,
 } from "lucide-react";
 
 interface TvSettingsModalProps {
@@ -23,7 +22,6 @@ interface TvSettingsModalProps {
   isFullscreen: boolean;
   versionName?: string;
   onToggleMode: () => void;
-  onToggleMute: () => void;
   onToggleFullscreen: () => void;
   onUnpair: () => void;
   onReload: () => void;
@@ -39,7 +37,6 @@ export function TvSettingsModal({
   isFullscreen,
   versionName = "2.6.0",
   onToggleMode,
-  onToggleMute,
   onToggleFullscreen,
   onUnpair,
   onReload,
@@ -124,14 +121,12 @@ export function TvSettingsModal({
           </div>
         </button>
 
-        {/* TV Sound Mute/Unmute Switcher */}
-        <button
-          type="button"
-          onClick={onToggleMute}
-          className={`w-full p-3.5 rounded-xl border-2 text-left transition-all shadow-md group ${
+        {/* TV Audio Routing (Read-only — controlled from Cabina) */}
+        <div
+          className={`w-full p-3.5 rounded-xl border-2 text-left shadow-md ${
             isMuted
-              ? "bg-[#25131b] border-rose-500/40 hover:border-rose-400"
-              : "bg-[#0f241d] border-emerald-500/40 hover:border-emerald-400"
+              ? "bg-[#25131b] border-rose-500/40"
+              : "bg-[#0f241d] border-emerald-500/40"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -139,20 +134,23 @@ export function TvSettingsModal({
               <span className="text-xl">{isMuted ? "🔇" : "🔊"}</span>
               <div>
                 <span className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
-                  Sonido de la TV (Presioná para alternar)
+                  Audio de la TV
                 </span>
                 <span className={`text-sm font-extrabold ${isMuted ? "text-rose-300" : "text-emerald-300"}`}>
                   {isMuted
-                    ? "🔇 SILENCIADO (El audio sale por la Cabina)"
-                    : "🔊 ACTIVO (El audio sale por este parlante / TV)"}
+                    ? "🔇 SILENCIADO (Audio solo en Cabina)"
+                    : "🔊 ACTIVO (Audio en este TV / Parlante)"}
+                </span>
+                <span className="block text-[10px] font-mono text-slate-400 mt-0.5">
+                  Controlado exclusivamente desde el Panel Admin / Cabina
                 </span>
               </div>
             </div>
-            <span className="font-mono text-xs px-2 py-1 rounded bg-black/40 text-slate-300 border border-white/10">
-              (Tecla M)
+            <span className="font-mono text-[10px] px-2 py-1 rounded bg-black/40 text-slate-400 border border-white/10 whitespace-nowrap">
+              Solo Cabina
             </span>
           </div>
-        </button>
+        </div>
 
         {/* Linked Venue Info Box */}
         <div className="bg-[#141A2E] border border-[#263252] rounded-xl p-3.5 flex items-center justify-between">
