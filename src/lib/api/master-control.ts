@@ -7,16 +7,10 @@ export interface PlaybackState {
   isPaused: boolean;
   volume: number;
   isMuted: boolean;
-  cabinaMuted?: boolean;
-  tvMuted?: boolean;
-  audioRouting?: "BOTH" | "CABINA_ONLY" | "TV_ONLY";
   karaokeMode: boolean;
   currentTrack: PlayerTrack | null;
   lastCommand: string | null;
   commandSeq: number;
-  positionSeconds?: number;
-  startedAtMs?: number;
-  alreadyAdvanced?: boolean;
   error?: string;
 }
 
@@ -29,7 +23,6 @@ export type PlaybackCommand =
   | "unmute"
   | "toggle_mute"
   | "skip"
-  | "track_ended"
   | "play_now"
   | "enqueue_top"
   | "reload"
@@ -39,9 +32,7 @@ export type PlaybackCommand =
   | "set_fullscreen"
   | "toggle_video_mode"
   | "set_video_mode"
-  | "set_tv_mute"
-  | "set_audio_routing"
-  | "set_tv_display";
+  | "set_tv_mute";
 
 export async function fetchPlaybackState(slug: string): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
@@ -67,10 +58,12 @@ export async function sendPlaybackCommand(
   payload: Record<string, unknown> = {},
 ): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
+  const isTestEnv = typeof process !== "undefined" && process.env?.NODE_ENV === "test";
+
   let res: PlaybackState | null = null;
 
-  // 1. Primary path in browser runtime: Authoritative Server API (/api/playback/command)
-  const isTestEnv = typeof process !== "undefined" && process.env?.NODE_ENV === "test";
+  // 1. In production browser runtime, use the authoritative server route (/api/playback/command)
+  // which atomically persists positionSeconds, anchorTimestampMs, seekSeq, tvMuted, and fallback rotation.
   if (!isTestEnv && typeof fetch === "function") {
     try {
       const apiRes = await fetch("/api/playback/command", {
@@ -89,36 +82,8 @@ export async function sendPlaybackCommand(
     }
   }
 
-  // 2. Fallback / Unit Test path: Supabase RPC
+  // 2. Fallback to Supabase RPC (also used by unit tests mocking supabase.rpc)
   if (!res) {
-    if (command === "seek" && typeof payload.seconds === "number") {
-      try {
-        const { data: v } = await supabase
-          .from("venues")
-          .select("id")
-          .eq("slug", slug)
-          .maybeSingle();
-        if (v?.id) {
-          const { data: cur } = await supabase
-            .from("venue_playback_state")
-            .select("current_track")
-            .eq("venue_id", v.id)
-            .maybeSingle();
-          const updatedTrack = {
-            ...((cur?.current_track as Record<string, unknown>) || {}),
-            positionSeconds: payload.seconds,
-            startedAtMs: Date.now(),
-          };
-          await supabase
-            .from("venue_playback_state")
-            .update({ current_track: updatedTrack })
-            .eq("venue_id", v.id);
-        }
-      } catch {
-        // Non-blocking fallback
-      }
-    }
-
     const { data, error } = await supabase.rpc("send_playback_command" as never, {
       p_venue_slug: slug,
       p_command: command,
@@ -135,38 +100,25 @@ export async function sendPlaybackCommand(
     }
   }
 
-  // 3. Also broadcast via local realtime channel for sub-30ms instant TV reaction
+  // 3. Broadcast via realtime channel for sub-30ms instant TV reaction
   try {
-    const channels = supabase.getChannels();
+    const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
     const existing = channels.find(
       (c) =>
         c.topic === `realtime:playback-control:${slug}` ||
         c.topic === `playback-control:${slug}`,
     );
-    const effectiveCmd =
-      (command === "skip" || command === "track_ended") && res.currentTrack
-        ? "play_now"
-        : command;
-    const broadcastPayload = {
-      command: effectiveCmd,
-      payload: {
-        ...payload,
-        ...(res.currentTrack ? { track: res.currentTrack } : {}),
-        ...(typeof res.positionSeconds === "number" ? { positionSeconds: res.positionSeconds, seconds: res.positionSeconds } : {}),
-        ...(typeof res.startedAtMs === "number" ? { startedAtMs: res.startedAtMs } : {}),
-        ...(typeof res.cabinaMuted === "boolean" ? { cabinaMuted: res.cabinaMuted } : {}),
-        ...(typeof res.tvMuted === "boolean" ? { tvMuted: res.tvMuted } : {}),
-        ...(res.audioRouting ? { audioRouting: res.audioRouting } : {}),
-      },
+    const msgPayload = {
+      command,
+      payload,
       state: res,
-      commandSeq: res.commandSeq,
       timestamp: Date.now(),
     };
     if (existing && existing.state === "joined") {
       void existing.send({
         type: "broadcast",
         event: "playback_command",
-        payload: broadcastPayload,
+        payload: msgPayload,
       });
     } else {
       const channel = existing ?? supabase.channel(`playback-control:${slug}`);
@@ -174,7 +126,7 @@ export async function sendPlaybackCommand(
         void channel.send({
           type: "broadcast",
           event: "playback_command",
-          payload: broadcastPayload,
+          payload: msgPayload,
         });
       } else {
         channel.subscribe((status) => {
@@ -182,7 +134,7 @@ export async function sendPlaybackCommand(
             void channel.send({
               type: "broadcast",
               event: "playback_command",
-              payload: broadcastPayload,
+              payload: msgPayload,
             });
           }
         });
@@ -308,18 +260,4 @@ export async function toggleVideoModePlayback(slug: string): Promise<PlaybackSta
 
 export async function setVideoModePlayback(slug: string, enabled: boolean): Promise<PlaybackState> {
   return sendPlaybackCommand(slug, "set_video_mode", { enabled });
-}
-
-export async function setAudioRoutingPlayback(
-  slug: string,
-  routing: "BOTH" | "CABINA_ONLY" | "TV_ONLY",
-): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "set_audio_routing", { routing });
-}
-
-export async function reportTrackEndedPlayback(
-  slug: string,
-  endedTrackKey: string,
-): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "track_ended", { endedTrackKey });
 }

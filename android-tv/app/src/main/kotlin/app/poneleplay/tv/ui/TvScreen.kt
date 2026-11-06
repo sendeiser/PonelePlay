@@ -166,48 +166,51 @@ fun TvScreen(
         }
     }
 
-    // Effective mute and volume state: TV local mute or Cabina tvMuted / CABINA_ONLY routing takes precedence.
-    // Muting Cabina ("TV_ONLY") never mutes the TV.
-    val effectiveMuted = localIsMuted || feed.playback.tvMuted || feed.playback.audioRouting == "CABINA_ONLY"
+    // Effective mute and volume state: TV local mute or Cabina tvMuted takes precedence
+    // (cabinaMuted only mutes the DJ booth, never the TV)
+    val effectiveMuted = localIsMuted || feed.playback.tvMuted
     val effectiveVolume = if (effectiveMuted) 0 else feed.playback.volume
 
-    // Reactive Control: React to master control commands from DJ booth (Cabina)
+    // Reactive Control: React to master control commands & seekSeq from DJ booth (Cabina)
     var lastExecutedSeq by remember { mutableStateOf(feed.playback.commandSeq) }
-    LaunchedEffect(feed.playback.commandSeq) {
+    var lastExecutedSeekSeq by remember { mutableStateOf(feed.playback.seekSeq) }
+    LaunchedEffect(feed.playback.commandSeq, feed.playback.seekSeq) {
+        if (feed.playback.seekSeq > 0L && feed.playback.seekSeq != lastExecutedSeekSeq) {
+            lastExecutedSeekSeq = feed.playback.seekSeq
+            lastExecutedSeq = feed.playback.commandSeq
+            videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
+            return@LaunchedEffect
+        }
         if (feed.playback.commandSeq > lastExecutedSeq) {
             lastExecutedSeq = feed.playback.commandSeq
             when (feed.playback.lastCommand) {
                 "pause" -> videoController.pause()
                 "resume" -> videoController.play()
-                "toggle_pause" -> if (feed.playback.isPaused) videoController.pause() else videoController.play()
+                "toggle_pause" -> videoController.togglePlayPause()
                 "seek" -> {
-                    if (feed.playback.positionSeconds >= 0f) {
-                        videoController.seekTo(feed.playback.positionSeconds)
-                    }
+                    videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
                 }
                 "set_volume" -> {
-                    if (!effectiveMuted) {
+                    if (!localIsMuted && !feed.playback.tvMuted) {
                         videoController.setVolume(feed.playback.volume)
                         videoController.unMute()
                     }
                 }
-                "set_tv_mute", "set_audio_routing", "mute", "unmute", "toggle_mute" -> {
-                    if (effectiveMuted) {
+                "set_tv_mute" -> {
+                    if (localIsMuted || feed.playback.tvMuted) {
                         videoController.mute()
                     } else {
                         videoController.unMute()
-                        videoController.setVolume(feed.playback.volume)
                     }
                 }
-                "play_now", "skip", "track_ended" -> {
-                    val vid = feed.nowPlaying?.youtubeVideoId
-                    if (!vid.isNullOrBlank()) {
-                        videoController.loadVideo(vid, feed.playback.positionSeconds.coerceAtLeast(0f))
-                    }
-                    if (!feed.playback.isPaused) {
-                        videoController.play()
-                    }
+                "mute" -> {
+                    if (feed.playback.tvMuted) videoController.mute()
                 }
+                "unmute" -> {
+                    if (!localIsMuted && !feed.playback.tvMuted) videoController.unMute()
+                }
+                "skip" -> onVideoEnded()
+                "play_now" -> videoController.play()
             }
         }
     }
@@ -236,7 +239,7 @@ fun TvScreen(
             isPaused = feed.playback.isPaused,
             volume = effectiveVolume,
             isMuted = effectiveMuted,
-            serverPositionSeconds = feed.playback.positionSeconds,
+            initialPositionSeconds = feed.playback.positionSeconds.coerceAtLeast(0f),
             controller = videoController,
             onEnded = onVideoEnded,
             onDisplayConfig = onDisplayConfig,

@@ -63,13 +63,7 @@ class VideoPlayerController {
     fun loadVideo(videoId: String, startSeconds: Float = 0f) {
         if (videoId == currentVideoId) return
         currentVideoId = videoId
-        val safeSec = startSeconds.coerceAtLeast(0f)
-        webView?.evaluateJavascript("loadVideo('$videoId', $safeSec);", null)
-    }
-
-    fun syncServerPosition(seconds: Float) {
-        if (seconds < 0f) return
-        webView?.evaluateJavascript("syncServerPosition($seconds);", null)
+        webView?.evaluateJavascript("loadVideo('$videoId', $startSeconds);", null)
     }
 
     fun play() {
@@ -119,23 +113,16 @@ fun NativeVideoPlayer(
     isPaused: Boolean = false,
     volume: Int = 85,
     isMuted: Boolean = false,
-    serverPositionSeconds: Float = 0f,
+    initialPositionSeconds: Float = 0f,
     controller: VideoPlayerController,
     modifier: Modifier = Modifier,
     onEnded: () -> Unit = {},
     onDisplayConfig: (String) -> Unit = {}
 ) {
-    // React to video changes, starting at the server's live position if joining mid-song
+    // React to video changes
     LaunchedEffect(videoId) {
         if (videoId.isNotBlank()) {
-            controller.loadVideo(videoId, serverPositionSeconds.coerceAtLeast(0f))
-        }
-    }
-
-    // Continuous drift alignment with server clock on each poll update
-    LaunchedEffect(serverPositionSeconds, isPaused, videoId) {
-        if (!isPaused && serverPositionSeconds >= 0f) {
-            controller.syncServerPosition(serverPositionSeconds)
+            controller.loadVideo(videoId, initialPositionSeconds.coerceAtLeast(0f))
         }
     }
 
@@ -209,7 +196,7 @@ fun NativeVideoPlayer(
                     isPaused = isPaused,
                     volume = volume,
                     isMuted = isMuted,
-                    initialPositionSeconds = serverPositionSeconds
+                    initialPositionSeconds = initialPositionSeconds.coerceAtLeast(0f)
                 )
                 val originUrl = "https://poneleplay.netlify.app"
                 loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
@@ -267,13 +254,17 @@ private fun buildPlayerHtml(
             var currentMuted = ${if (isMuted) "true" else "false"};
             var venueSlug = '${venueSlug.trim()}';
             var lastSyncSeekAt = 0;
-            var currentTvTime = 0;
+            var currentTvTime = ${initialPositionSeconds};
             var currentDuration = 0;
             var currentTvState = -1;
             var isPreloadSent = false;
             var isFadingOut = false;
             var localTrackLock = { id: null, until: 0 };
             var originalVolume = currentVolume > 0 ? currentVolume : 85;
+            var hasSyncedFirstFrame = false;
+            var latestMasterTargetSec = ${initialPositionSeconds};
+            var latestMasterSentAt = Date.now();
+            var lastAppliedSeekSeq = 0;
 
             // Send command directly to YouTube iframe via postMessage AND player instance
             function sendCommand(func, args) {
@@ -340,8 +331,44 @@ private fun buildPlayerHtml(
             }
 
             function seekTo(sec) {
+              var clamped = Math.max(0, Number(sec) || 0);
               lastSyncSeekAt = Date.now();
-              sendCommand('seekTo', [sec, true]);
+              currentTvTime = clamped;
+              sendCommand('seekTo', [clamped, true]);
+            }
+
+            function notifyFirstFramePlaying() {
+              if (hasSyncedFirstFrame) return;
+              hasSyncedFirstFrame = true;
+
+              // 1. Notify Cabina via WebSocket broadcast so Cabina releases its pre-buffer start hold
+              try {
+                if (ws && ws.readyState === WebSocket.OPEN && venueSlug) {
+                  ws.send(JSON.stringify({
+                    topic: "realtime:playback-control:" + venueSlug,
+                    event: "broadcast",
+                    payload: {
+                      type: "broadcast",
+                      event: "tv_ready",
+                      payload: {
+                        videoId: currentVideoId,
+                        deviceId: myDeviceId,
+                        sentAt: Date.now()
+                      }
+                    },
+                    ref: "tv-ready-" + Date.now()
+                  }));
+                }
+              } catch(_) {}
+
+              // 2. If Cabina is already ahead when TV finishes buffering its first frame, snap immediately!
+              try {
+                var elapsedSinceMaster = Math.max(0, Math.min(2.5, (Date.now() - latestMasterSentAt) / 1000));
+                var expectedSec = desiredPaused ? latestMasterTargetSec : (latestMasterTargetSec + elapsedSinceMaster);
+                if (expectedSec > 0.3 && Math.abs(expectedSec - currentTvTime) > 0.35) {
+                  seekTo(expectedSec);
+                }
+              } catch(_) {}
             }
 
             function setVolume(v) {
@@ -364,31 +391,6 @@ private fun buildPlayerHtml(
               sendCommand('setVolume', [currentVolume > 0 ? currentVolume : 85]);
             }
 
-            function syncServerPosition(serverSec) {
-              try {
-                if (desiredPaused || isEndedSent || !currentVideoId) return;
-                var now = Date.now();
-                if (now < lastSyncSeekAt || (now - lastLoadAt < 5000)) return;
-                var tvSec = -1;
-                if (player && typeof player.getCurrentTime === 'function') {
-                  try {
-                    var pt = player.getCurrentTime();
-                    if (typeof pt === 'number' && pt >= 0) tvSec = pt;
-                  } catch(_) {}
-                }
-                if (tvSec < 0 && typeof currentTvTime === 'number' && currentTvTime >= 0) {
-                  tvSec = currentTvTime;
-                }
-                if (tvSec >= 3.0 && currentTvState === 1 && typeof serverSec === 'number' && serverSec >= 0) {
-                  var drift = Math.abs(tvSec - serverSec);
-                  if (drift >= 2.8 && (now - lastSyncSeekAt > 7000)) {
-                    lastSyncSeekAt = now;
-                    seekTo(serverSec);
-                  }
-                }
-              } catch(_) {}
-            }
-
             // Load video cleanly: start at volume 0 and smoothly fade in over 1.5s!
             function loadVideo(id, startSec) {
               if (!id) return;
@@ -409,14 +411,17 @@ private fun buildPlayerHtml(
               isEndedSent = false;
               isPreloadSent = false;
               isFadingOut = false;
+              hasSyncedFirstFrame = false;
               currentVideoId = id;
               currentDuration = 0;
               currentTvState = -1;
               lastLoadAt = Date.now();
 
-              // Give 8-second grace period for initial buffering without seek interruptions
-              lastSyncSeekAt = Date.now() + 8000;
+              // Brief 900ms window to let loadVideoById initialize, then allow first-frame & seek sync
+              lastSyncSeekAt = Date.now() + 900;
               currentTvTime = sec;
+              latestMasterTargetSec = sec;
+              latestMasterSentAt = Date.now();
 
               // Kill audio of existing video immediately with 0 volume
               sendCommand('pauseVideo', []);
@@ -462,6 +467,9 @@ private fun buildPlayerHtml(
                   }
                   if (typeof data.info.playerState === 'number') {
                     currentTvState = data.info.playerState;
+                    if (data.info.playerState === 1 && !desiredPaused) {
+                      notifyFirstFramePlaying();
+                    }
                   }
 
                   // Preload next track 10-15s before end & crossfade audio
@@ -507,6 +515,8 @@ private fun buildPlayerHtml(
                     isEndedSent = false;
                     if (desiredPaused) {
                       sendCommand('pauseVideo', []);
+                    } else {
+                      notifyFirstFramePlaying();
                     }
                   }
                 }
@@ -551,6 +561,8 @@ private fun buildPlayerHtml(
                         isEndedSent = false;
                         if (desiredPaused) {
                           sendCommand('pauseVideo', []);
+                        } else {
+                          notifyFirstFramePlaying();
                         }
                       }
                     },
@@ -647,60 +659,63 @@ private fun buildPlayerHtml(
                       } else if (cmd === 'resume') {
                         playVideo();
                       } else if (cmd === 'toggle_pause') {
-                        if (typeof p.isPaused === 'boolean') {
-                          if (p.isPaused) pauseVideo(); else playVideo();
-                        } else {
-                          togglePlayPause();
-                        }
+                        togglePlayPause();
                       } else if (cmd === 'seek') {
-                        var sec = Number(p.seconds != null ? p.seconds : (p.positionSeconds != null ? p.positionSeconds : (eventPayload.seconds != null ? eventPayload.seconds : 0)));
-                        seekTo(sec);
+                        var sec = Number(p.seconds != null ? p.seconds : (eventPayload.seconds != null ? eventPayload.seconds : 0));
+                        var sSeq = Number(p.seekSeq || eventPayload.seekSeq || 0);
+                        if (sSeq > 0) lastAppliedSeekSeq = sSeq;
+                        latestMasterTargetSec = Math.max(0, sec);
+                        latestMasterSentAt = Date.now();
+                        seekTo(latestMasterTargetSec);
                       } else if (cmd === 'set_volume') {
                         var vol = Number(p.volume != null ? p.volume : (eventPayload.volume != null ? eventPayload.volume : 85));
                         setVolume(vol);
-                        if (p.tvMuted === false && p.audioRouting !== 'CABINA_ONLY') {
-                          unMute();
-                        }
+                        unMute();
                       } else if (cmd === 'set_tv_mute') {
                         var tvM = Boolean(p.tvMuted != null ? p.tvMuted : eventPayload.tvMuted);
                         if (tvM) mute(); else unMute();
-                      } else if (cmd === 'set_audio_routing') {
-                        var routing = String(p.audioRouting || eventPayload.audioRouting || 'BOTH').toUpperCase();
-                        if (routing === 'CABINA_ONLY' || p.tvMuted === true) {
+                      } else if (cmd === 'mute') {
+                        if (p.tvMuted === true || (p.cabinaMuted == null && eventPayload.cabinaMuted == null)) {
                           mute();
-                        } else {
-                          unMute();
                         }
-                      } else if (cmd === 'mute' || cmd === 'unmute' || cmd === 'toggle_mute') {
-                        // Never mute TV when Cabina-only mute changes unless tvMuted / CABINA_ONLY is explicitly set
-                        if (typeof p.tvMuted === 'boolean') {
-                          if (p.tvMuted) mute(); else unMute();
-                        } else if (p.audioRouting === 'CABINA_ONLY') {
-                          mute();
-                        } else if (p.audioRouting === 'TV_ONLY' || p.audioRouting === 'BOTH') {
-                          unMute();
+                      } else if (cmd === 'unmute') {
+                        unMute();
+                      } else if (cmd === 'toggle_mute') {
+                        if (currentMuted) unMute(); else mute();
+                      } else if (cmd === 'skip') {
+                        if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
+                          window.AndroidBridge.onStateChange(0);
                         }
-                      } else if (cmd === 'skip' || cmd === 'play_now' || cmd === 'track_ended') {
+                      } else if (cmd === 'play_now') {
                         var trk = p.track || eventPayload.track;
-                        var startPos = Number(p.positionSeconds != null ? p.positionSeconds : 0);
                         if (trk && trk.youtubeVideoId) {
                           desiredPaused = false;
                           localTrackLock = { id: trk.youtubeVideoId, until: Date.now() + 10000 };
-                          currentTvTime = startPos > 0 ? startPos : 0;
-                          loadVideo(trk.youtubeVideoId, startPos > 0 ? startPos : 0);
-                        } else if (cmd === 'skip') {
-                          if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
-                            window.AndroidBridge.onStateChange(0);
-                          }
+                          currentTvTime = 0;
+                          latestMasterTargetSec = 0;
+                          latestMasterSentAt = Date.now();
+                          loadVideo(trk.youtubeVideoId, 0);
                         }
                       }
                     } else if (eventName === "tv_playback_progress" && eventPayload) {
-                      // 2. Continuous Sync: Keep TV synchronized without interrupting playback
+                      // 2. Continuous Sync: Keep TV synchronized from start (0:00) and on seeks
                       var curr = eventPayload.currentTime;
                       var isP = eventPayload.isPaused;
                       var sentAt = eventPayload.sentAt;
                       var trk = eventPayload.track;
+                      var forceSeek = Boolean(eventPayload.forceSeek);
+                      var incomingSeekSeq = typeof eventPayload.seekSeq === 'number' ? eventPayload.seekSeq : 0;
                       var now = Date.now();
+
+                      var latency = 0;
+                      if (typeof sentAt === 'number' && sentAt > 0) {
+                        latency = Math.max(0, Math.min(1.2, (now - sentAt) / 1000));
+                      }
+
+                      if (typeof curr === 'number' && !isNaN(curr)) {
+                        latestMasterTargetSec = Math.max(0, curr);
+                        latestMasterSentAt = (typeof sentAt === 'number' && sentAt > 0) ? sentAt : now;
+                      }
 
                       // Sync Pause from master Cabina
                       if (typeof isP === 'boolean') {
@@ -720,8 +735,16 @@ private fun buildPlayerHtml(
                         return;
                       }
 
-                      // Drift Correction: Only perform seek if TV is actively PLAYING (never when buffering/loading!)
-                      // and drift is noticeably large (>= 2.8s, e.g. operator scrubbed the bar in Cabina)
+                      // Authoritative Immediate Seek (+10s, -10s, scrubber bar, or Restart 0:00)
+                      var isNewSeekSeq = incomingSeekSeq > 0 && incomingSeekSeq !== lastAppliedSeekSeq;
+                      if ((forceSeek || isNewSeekSeq) && typeof curr === 'number' && !isNaN(curr)) {
+                        if (incomingSeekSeq > 0) lastAppliedSeekSeq = incomingSeekSeq;
+                        var forcedTarget = (curr <= 0.25) ? 0 : Math.max(0, curr + (isP ? 0 : latency));
+                        seekTo(forcedTarget);
+                        return;
+                      }
+
+                      // Tight Drift Correction: Lock onto master right from 0:00 and throughout the song
                       if (typeof curr === 'number' && !isNaN(curr) && !desiredPaused && now > lastSyncSeekAt) {
                         var tvSec = -1;
                         if (player && typeof player.getCurrentTime === 'function') {
@@ -734,29 +757,20 @@ private fun buildPlayerHtml(
                           tvSec = currentTvTime;
                         }
 
-                        // Must be PLAYING (currentTvState === 1) and past first 3.5s of playback
-                        if (tvSec >= 3.5 && currentTvState === 1) {
-                          var latency = 0;
-                          if (typeof sentAt === 'number' && sentAt > 0) {
-                            latency = Math.max(0, Math.min(1.0, (now - sentAt) / 1000));
-                          }
+                        if (tvSec >= 0 && currentTvState === 1) {
                           var targetSec = curr + latency;
                           var drift = Math.abs(tvSec - targetSec);
+                          var isEarlyWindow = tvSec < 5.0 || (now - lastLoadAt < 6500);
+                          var driftThreshold = isEarlyWindow ? 0.55 : 1.5;
+                          var cooldownMs = isEarlyWindow ? 1400 : 3000;
 
-                          // Only align on substantial drift (>= 2.8s) with minimum 7s cooldown
-                          if (drift >= 2.8 && (now - lastSyncSeekAt > 7000)) {
-                            lastSyncSeekAt = now;
+                          if (drift > driftThreshold && (now - lastSyncSeekAt > cooldownMs)) {
                             seekTo(targetSec);
                           }
                         }
                       }
 
-                      // Volume & TV Mute routing
-                      if (typeof eventPayload.tvMuted === 'boolean') {
-                        if (eventPayload.tvMuted) mute(); else unMute();
-                      } else if (typeof eventPayload.audioRouting === 'string') {
-                        if (eventPayload.audioRouting === 'CABINA_ONLY') mute(); else unMute();
-                      }
+                      // Volume & Mute if not overridden by local mute
                       if (!eventPayload.isFromAdminAudio && !currentMuted) {
                         if (typeof eventPayload.volume === 'number') setVolume(eventPayload.volume);
                       }

@@ -30,6 +30,7 @@ export function resolveVideoId(track?: PlayerTrack | null): string {
 export function createIframeEngine(
   getIframe: () => HTMLIFrameElement | null,
   onPlayStateChange?: (isPlaying: boolean) => void,
+  onTrackFirstPlaying?: (videoId: string) => void,
 ): IframePlaybackEngine {
   let endedCallbacks: Array<() => void> = [];
   let errorCallbacks: Array<(reason: string) => void> = [];
@@ -45,6 +46,8 @@ export function createIframeEngine(
   let duration = 0;
   let seekLockUntil = 0;
   let lastPlayerState: number | null = null;
+  let hasPlayedCurrentVideo = false;
+  let pendingSeekSeconds: number | null = null;
 
   let desiredVolume: number | null = 85;
   let desiredMuted: boolean | null = true;
@@ -137,6 +140,20 @@ export function createIframeEngine(
     if (state === YT_PLAYING) {
       desiredPlaying = true;
       onPlayStateChange?.(true);
+      if (pendingSeekSeconds !== null) {
+        const s = pendingSeekSeconds;
+        pendingSeekSeconds = null;
+        if (ytReady && ytPlayer) {
+          try {
+            ytPlayer.seekTo(s, true);
+          } catch {}
+        }
+        post("seekTo", [s, true]);
+      }
+      if (!hasPlayedCurrentVideo && currentVideoId) {
+        hasPlayedCurrentVideo = true;
+        onTrackFirstPlaying?.(currentVideoId);
+      }
     } else if (state === YT_PAUSED) {
       onPlayStateChange?.(false);
     } else if (state === YT_ENDED && lastPlayerState !== YT_ENDED) {
@@ -283,7 +300,9 @@ export function createIframeEngine(
       currentTime = 0;
       duration = track.durationSeconds ?? 0;
       lastPlayerState = null;
-      seekLockUntil = Date.now() + 1500;
+      hasPlayedCurrentVideo = false;
+      pendingSeekSeconds = null;
+      seekLockUntil = Date.now() + 1800;
       desiredPlaying = true;
 
       if (ytReady && ytPlayer) {
@@ -361,15 +380,23 @@ export function createIframeEngine(
     seekTo(seconds: number): void {
       const target = Math.max(0, Math.round(seconds * 10) / 10);
       currentTime = target;
-      seekLockUntil = Date.now() + 1500;
+      seekLockUntil = Date.now() + 1800;
+
+      if (lastPlayerState !== YT_PLAYING && lastPlayerState !== YT_PAUSED) {
+        pendingSeekSeconds = target;
+      }
 
       if (ytReady && ytPlayer) {
         try {
           ytPlayer.seekTo(target, true);
+          if (desiredPlaying) ytPlayer.playVideo();
         } catch {}
       }
 
       post("seekTo", [target, true]);
+      if (desiredPlaying) {
+        post("playVideo");
+      }
 
       // Fallback: If not bridged, reload iframe directly at seek position
       if (!hasLiveBridge && !ytReady) {

@@ -28,6 +28,7 @@ export interface PanelAudioEngineProps {
 export interface PanelAudioEngineRef {
   seekTo: (seconds: number) => void;
   unlockAudio: () => void;
+  releaseStartHold: () => void;
   isUnlocked: boolean;
 }
 
@@ -67,6 +68,9 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     onProgressRef.current = onProgress;
     const lastReportedTimeRef = useRef<number>(0);
     const trackLoadedAtRef = useRef<number>(0);
+    const seekLockUntilRef = useRef<number>(0);
+    const startHoldUntilRef = useRef<number>(0);
+    const startHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const capturedWidgetIdRef = useRef<number | string | null>(null);
 
     // Reset elapsed timer on track change
@@ -92,7 +96,12 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         }
         if (data.event === "infoDelivery" && data.info) {
           const info = data.info as { currentTime?: number; duration?: number };
-          if (typeof info.currentTime === "number" && info.currentTime > 0) {
+          if (
+            typeof info.currentTime === "number" &&
+            info.currentTime >= 0 &&
+            Date.now() >= seekLockUntilRef.current &&
+            Date.now() >= startHoldUntilRef.current
+          ) {
             lastReportedTimeRef.current = Math.round(info.currentTime * 10) / 10;
           }
         }
@@ -269,6 +278,13 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         currentVideoIdRef.current = videoId;
         trackLoadedAtRef.current = Date.now();
         lastReportedTimeRef.current = 0;
+        if (startHoldTimerRef.current) {
+          clearTimeout(startHoldTimerRef.current);
+          startHoldTimerRef.current = null;
+        }
+        // Hold Cabina playback at 0:00 for up to 1100ms (or until TV sends tv_ready)
+        // so the TV finishes loading/buffering and starts at 0:00 in lockstep with Cabina
+        startHoldUntilRef.current = Date.now() + 1100;
         try {
           // Silence & stop the previous song immediately so it can never leak
           playerRef.current.setVolume(0);
@@ -278,25 +294,35 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           playerRef.current.loadVideoById(videoId);
           playerRef.current.seekTo(0, true);
           playerRef.current.setVolume(0);
-          if (isMutedRef.current) {
-            playerRef.current.mute();
-          } else {
-            playerRef.current.unMute();
-            const targetVol = volumeRef.current;
-            const steps = 5;
-            for (let s = 1; s <= steps; s++) {
-              setTimeout(() => {
-                if (!isMutedRef.current && playerRef.current) {
-                  playerRef.current.setVolume(Math.round((targetVol / steps) * s));
+          playerRef.current.pauseVideo();
+
+          startHoldTimerRef.current = setTimeout(() => {
+            startHoldTimerRef.current = null;
+            startHoldUntilRef.current = 0;
+            if (!playerRef.current) return;
+            try {
+              playerRef.current.seekTo(0, true);
+              if (isMutedRef.current) {
+                playerRef.current.mute();
+              } else {
+                playerRef.current.unMute();
+                const targetVol = volumeRef.current;
+                const steps = 5;
+                for (let s = 1; s <= steps; s++) {
+                  setTimeout(() => {
+                    if (!isMutedRef.current && playerRef.current) {
+                      playerRef.current.setVolume(Math.round((targetVol / steps) * s));
+                    }
+                  }, s * 250);
                 }
-              }, s * 300);
-            }
-          }
-          if (isPausedRef.current) {
-            playerRef.current.pauseVideo();
-          } else {
-            playerRef.current.playVideo();
-          }
+              }
+              if (isPausedRef.current) {
+                playerRef.current.pauseVideo();
+              } else {
+                playerRef.current.playVideo();
+              }
+            } catch {}
+          }, 1100);
         } catch (e) {
           console.warn("Error loading video in existing YT player:", e);
         }
@@ -436,6 +462,24 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
 
       const timer = setInterval(() => {
         if (isPausedRef.current) return;
+        const now = Date.now();
+
+        // While holding at 0:00 waiting for TV to buffer the new track, keep currentTime at 0
+        if (now < startHoldUntilRef.current) {
+          lastReportedTimeRef.current = 0;
+          onProgressRef.current?.(0, currentTrackRef.current?.durationSeconds ?? 210);
+          return;
+        }
+
+        // Right after an operator seek, hold the exact sought time for 1.6s so stale pre-seek
+        // YouTube readings never snap the scrubber or TV back to the old position
+        if (now < seekLockUntilRef.current) {
+          onProgressRef.current?.(
+            lastReportedTimeRef.current,
+            currentTrackRef.current?.durationSeconds ?? 210,
+          );
+          return;
+        }
 
         let currentTime = -1;
         let duration = currentTrackRef.current?.durationSeconds ?? 210;
@@ -451,11 +495,11 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
             const loadedId = vd?.video_id;
             const isStale =
               (loadedId && currentVideoIdRef.current && loadedId !== currentVideoIdRef.current) ||
-              Date.now() - trackLoadedAtRef.current < 1200;
+              now - trackLoadedAtRef.current < 1200;
             if (!isStale) {
               const t = playerRef.current.getCurrentTime() || 0;
               const d = Math.floor(playerRef.current.getDuration() || 0);
-              if (t > 0) currentTime = Math.round(t * 10) / 10;
+              if (t >= 0) currentTime = Math.round(t * 10) / 10;
               if (d > 0) duration = d;
             }
           } catch {
@@ -466,6 +510,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         if (currentTime >= 0) {
           lastReportedTimeRef.current = currentTime;
         } else {
+          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.5) * 10) / 10;
           currentTime = lastReportedTimeRef.current;
         }
 
@@ -487,17 +532,53 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       };
     }, []);
 
+    const releaseStartHold = useCallback(() => {
+      if (startHoldTimerRef.current) {
+        clearTimeout(startHoldTimerRef.current);
+        startHoldTimerRef.current = null;
+      }
+      if (startHoldUntilRef.current > Date.now()) {
+        startHoldUntilRef.current = 0;
+        lastReportedTimeRef.current = 0;
+        if (playerRef.current) {
+          try {
+            playerRef.current.seekTo(0, true);
+            if (isMutedRef.current) {
+              playerRef.current.mute();
+            } else {
+              playerRef.current.unMute();
+              playerRef.current.setVolume(volumeRef.current);
+            }
+            if (!isPausedRef.current) {
+              playerRef.current.playVideo();
+            }
+          } catch {}
+        }
+      }
+    }, []);
+
     // Expose imperative handle for seeking and unlocking
     useImperativeHandle(ref, () => ({
       seekTo: (seconds: number) => {
-        lastReportedTimeRef.current = seconds;
+        const clamped = Math.max(0, seconds);
+        lastReportedTimeRef.current = clamped;
+        seekLockUntilRef.current = Date.now() + 1600;
+        startHoldUntilRef.current = 0;
+        if (startHoldTimerRef.current) {
+          clearTimeout(startHoldTimerRef.current);
+          startHoldTimerRef.current = null;
+        }
         if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
-          html5AudioRef.current.currentTime = seconds;
+          html5AudioRef.current.currentTime = clamped;
         } else {
-          sendIframeCommand("seekTo", [seconds, true]);
+          sendIframeCommand("seekTo", [clamped, true]);
+          if (!isPausedRef.current) {
+            sendIframeCommand("playVideo");
+          }
         }
       },
       unlockAudio,
+      releaseStartHold,
       isUnlocked: isUnlockedRef.current,
     }));
 

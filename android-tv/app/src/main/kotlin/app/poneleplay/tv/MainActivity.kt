@@ -57,7 +57,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
 
@@ -344,15 +343,15 @@ fun NativeTvApp(
                 pInfo.versionCode
             }
         } catch (_: Exception) {
-            2
+            4
         }
     }
 
     val currentVersionName = remember {
         try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.7.0"
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.8.0"
         } catch (_: Exception) {
-            "2.7.0"
+            "2.8.0"
         }
     }
 
@@ -525,51 +524,30 @@ fun NativeTvApp(
                     localIsMuted = isMuted,
                     videoController = videoController,
                     onVideoEnded = {
-                        val endedKey = currentFeed.nowPlaying?.youtubeVideoId
-                            ?: currentFeed.nowPlaying?.id
-                            ?: ""
+                        val endedVideoId = currentFeed.nowPlaying?.youtubeVideoId
                         coroutineScope.launch(Dispatchers.IO) {
                             try {
-                                val cmdEndpoint = "${serverUrl.trimEnd('/')}/api/playback/command"
-                                val conn = (URL(cmdEndpoint).openConnection() as HttpURLConnection).apply {
-                                    connectTimeout = 4000
-                                    readTimeout = 4000
-                                    requestMethod = "POST"
-                                    doOutput = true
-                                    setRequestProperty("Content-Type", "application/json")
-                                    setRequestProperty("Accept", "application/json")
-                                }
-                                val bodyJson = JSONObject().apply {
+                                val cmdUrl = URL("${serverUrl.trimEnd('/')}/api/playback/command")
+                                val conn = cmdUrl.openConnection() as HttpURLConnection
+                                conn.connectTimeout = 4000
+                                conn.readTimeout = 4000
+                                conn.requestMethod = "POST"
+                                conn.doOutput = true
+                                conn.setRequestProperty("Content-Type", "application/json")
+                                val bodyObj = org.json.JSONObject().apply {
                                     put("slug", venueSlug.trim())
-                                    put("command", "track_ended")
-                                    put("payload", JSONObject().apply {
-                                        put("endedTrackKey", endedKey)
-                                    })
-                                }.toString()
-                                conn.outputStream.use { os ->
-                                    os.write(bodyJson.toByteArray(Charsets.UTF_8))
-                                }
-                                val code = conn.responseCode
-                                conn.disconnect()
-                                if (code in 200..299) {
-                                    val devId = prefs.getString("tv_device_id", "") ?: ""
-                                    val query = if (devId.isNotBlank()) "?device_id=${java.net.URLEncoder.encode(devId, "UTF-8")}" else ""
-                                    val tvEndpoint = "${serverUrl.trimEnd('/')}/api/tv/${venueSlug.trim()}$query"
-                                    val tvConn = (URL(tvEndpoint).openConnection() as HttpURLConnection).apply {
-                                        connectTimeout = 4000
-                                        readTimeout = 4000
-                                        requestMethod = "GET"
-                                        setRequestProperty("Accept", "application/json")
-                                    }
-                                    if (tvConn.responseCode in 200..299) {
-                                        val responseText = tvConn.inputStream.bufferedReader().use { it.readText() }
-                                        val parsed = TvFeedParser.parse(responseText)
-                                        withContext(Dispatchers.Main) {
-                                            feed = parsed
+                                    put("command", "skip")
+                                    put("payload", org.json.JSONObject().apply {
+                                        if (!endedVideoId.isNullOrBlank()) {
+                                            put("expectedVideoId", endedVideoId)
                                         }
-                                    }
-                                    tvConn.disconnect()
+                                    })
                                 }
+                                conn.outputStream.use { os ->
+                                    os.write(bodyObj.toString().toByteArray(Charsets.UTF_8))
+                                }
+                                conn.responseCode
+                                conn.disconnect()
                             } catch (_: Exception) {}
                         }
                     },
