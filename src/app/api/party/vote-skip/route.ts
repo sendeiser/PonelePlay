@@ -133,12 +133,26 @@ export async function POST(req: NextRequest) {
 
         const { data: queuedItems } = await admin
           .from("queue_items")
-          .select("id, track_id, vote_count, created_at, tracks(id, title, artist, duration_seconds, thumbnail_url, youtube_video_id, source)")
+          .select("id, track_id, vote_count, created_at, proposed_by_participant_id, tracks(id, title, artist, duration_seconds, thumbnail_url, youtube_video_id, source)")
           .eq("night_session_id", night.id)
           .eq("status", "queued");
 
-        if (Array.isArray(queuedItems) && queuedItems.length > 0) {
-          const sorted = [...queuedItems].sort((a, b) => {
+        const effectiveQueueThreshold = Math.max(
+          1,
+          partyConfig.venueType === "party" ? Number(partyConfig.minVotesToQueue ?? 1) : 5,
+        );
+
+        const eligibleItems = (queuedItems || []).filter((q) => {
+          const votes = Number(q.vote_count ?? 0);
+          const isGuestProposal =
+            Boolean(q.proposed_by_participant_id) ||
+            Boolean(itemMeta[q.id]?.isGuestProposal) ||
+            (votes > 0 && votes < 9999);
+          return !isGuestProposal || votes >= effectiveQueueThreshold;
+        });
+
+        if (eligibleItems.length > 0) {
+          const sorted = [...eligibleItems].sort((a, b) => {
             const va = Number(a.vote_count ?? 0) >= 9999 ? 0 : Number(a.vote_count ?? 0);
             const vb = Number(b.vote_count ?? 0) >= 9999 ? 0 : Number(b.vote_count ?? 0);
             if (va !== vb) return vb - va;

@@ -86,8 +86,15 @@ export async function GET(
       return n >= 9999 ? 0 : Math.max(0, n);
     };
 
-    // Clean up any legacy 99999 vote counts in DB in background
+    // Clean up any legacy 99999 vote counts and self-heal 0-vote guest proposals in DB
     void admin.from("queue_items").update({ vote_count: 0 }).gte("vote_count", 9999);
+    void admin
+      .from("queue_items")
+      .update({ vote_count: 1 })
+      .eq("venue_id", venue.id)
+      .eq("status", "queued")
+      .eq("vote_count", 0)
+      .not("proposed_by_participant_id", "is", null);
 
     const host = req.headers.get("host") || "poneleplay.netlify.app";
     const proto = req.headers.get("x-forwarded-proto") || "https";

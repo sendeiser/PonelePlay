@@ -1,6 +1,8 @@
 import { createBrowserSupabase } from "./supabase/browser";
 import { nightStateSchema, type NightState } from "./contracts";
 import type { NightStateSource } from "@/hooks/use-night-state";
+import { partitionQueueAndProposals } from "@/lib/domain/queue";
+import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
 
 export async function fetchNightState(slug: string): Promise<NightState> {
   const supabase = createBrowserSupabase();
@@ -27,7 +29,12 @@ export async function fetchNightState(slug: string): Promise<NightState> {
           const partyConfig = partyRes.partyConfig;
           const itemMeta = (partyRes.itemMeta || {}) as Record<
             string,
-            { guestName?: string | null; dedication?: string | null; isKaraoke?: boolean }
+            {
+              guestName?: string | null;
+              dedication?: string | null;
+              isKaraoke?: boolean;
+              isGuestProposal?: boolean;
+            }
           >;
 
           const enrichItem = <
@@ -39,6 +46,7 @@ export async function fetchNightState(slug: string): Promise<NightState> {
               guestName?: string | null;
               dedication?: string | null;
               isKaraoke?: boolean;
+              isGuestProposal?: boolean;
             },
           >(
             item: T,
@@ -54,8 +62,18 @@ export async function fetchNightState(slug: string): Promise<NightState> {
               guestName: item.guestName ?? meta.guestName ?? null,
               dedication: item.dedication ?? meta.dedication ?? null,
               isKaraoke: item.isKaraoke ?? meta.isKaraoke ?? false,
+              isGuestProposal: item.isGuestProposal ?? meta.isGuestProposal ?? false,
             };
           };
+
+          const enrichedQueue = parsed.queue.map(enrichItem);
+          const enrichedCandidates = (parsed.candidates ?? []).map(enrichItem);
+          const effectiveThreshold = resolveEffectiveQueueThreshold(partyConfig);
+          const { activeQueue, candidateProposals } = partitionQueueAndProposals(
+            enrichedQueue,
+            enrichedCandidates,
+            effectiveThreshold,
+          );
 
           return {
             ...parsed,
@@ -65,8 +83,8 @@ export async function fetchNightState(slug: string): Promise<NightState> {
               partyConfig,
             },
             nowPlaying: parsed.nowPlaying ? enrichItem(parsed.nowPlaying) : null,
-            queue: parsed.queue.map(enrichItem),
-            candidates: (parsed.candidates ?? []).map(enrichItem),
+            queue: activeQueue,
+            candidates: candidateProposals,
           };
         }
       }

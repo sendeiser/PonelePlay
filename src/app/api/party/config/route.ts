@@ -20,6 +20,17 @@ export async function GET(req: NextRequest) {
     const admin = createAdminSupabase();
     const { venueId, partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
 
+    // Self-heal any guest proposals inserted by legacy RPC with vote_count = 0 so they start at 1 vote in pre-queue
+    if (venueId) {
+      await admin
+        .from("queue_items")
+        .update({ vote_count: 1 })
+        .eq("venue_id", venueId)
+        .eq("status", "queued")
+        .eq("vote_count", 0)
+        .not("proposed_by_participant_id", "is", null);
+    }
+
     const now = Date.now();
     const cleanedConfig = { ...partyConfig };
 

@@ -121,7 +121,16 @@ export async function POST(req: NextRequest) {
     const threshold = resolveEffectiveQueueThreshold(partyConfig);
     const initialStatus = threshold <= 1 ? "queued" : "proposed";
 
-    // Try inserting with guest_name, dedication, is_karaoke first; fallback if columns don't exist
+    // Self-heal any legacy guest proposals in this night session that were inserted with vote_count = 0
+    await admin
+      .from("queue_items")
+      .update({ vote_count: 1 })
+      .eq("night_session_id", night.id)
+      .eq("status", "queued")
+      .eq("vote_count", 0)
+      .not("proposed_by_participant_id", "is", null);
+
+    // Try inserting with guest_name, dedication, is_karaoke first; fallback if columns or 'proposed' enum value don't exist
     let queueItemId = "";
     const { data: insertedWithCols, error: colErr } = await admin
       .from("queue_items")
@@ -153,46 +162,66 @@ export async function POST(req: NextRequest) {
         .select("id")
         .single();
 
-      if (basicErr || !insertedBasic?.id) {
-        return NextResponse.json(
-          { ok: false, error: basicErr?.message || "queue_insert_failed" },
-          { status: 500 },
-        );
+      if (!basicErr && insertedBasic?.id) {
+        queueItemId = insertedBasic.id;
+      } else {
+        // Fallback when DB enum public.queue_status does not yet contain 'proposed'
+        const { data: insertedQueued, error: queuedErr } = await admin
+          .from("queue_items")
+          .insert({
+            venue_id: venueId,
+            night_session_id: night.id,
+            track_id: existingTrack.id,
+            status: "queued",
+            vote_count: 1,
+          })
+          .select("id")
+          .single();
+
+        if (queuedErr || !insertedQueued?.id) {
+          return NextResponse.json(
+            { ok: false, error: queuedErr?.message || basicErr?.message || "queue_insert_failed" },
+            { status: 500 },
+          );
+        }
+        queueItemId = insertedQueued.id;
       }
-      queueItemId = insertedBasic.id;
     }
 
     // 5. Persist guest metadata in venue_playlists (__party_item_meta__) so it always resolves
-    if (guestName || dedication || isKaraoke) {
-      const metaEntry: PartyItemMeta = { guestName, dedication, isKaraoke };
-      const nextMeta: Record<string, PartyItemMeta> = {
-        ...itemMeta,
-        [queueItemId]: metaEntry,
-        [existingTrack.id]: metaEntry,
-        ...(youtubeVideoId ? { [`yt:${youtubeVideoId}`]: metaEntry } : {}),
-        [`title:${title.toLowerCase()}`]: metaEntry,
-      };
+    const metaEntry: PartyItemMeta = {
+      guestName,
+      dedication,
+      isKaraoke,
+      isGuestProposal: true,
+    };
+    const nextMeta: Record<string, PartyItemMeta> = {
+      ...itemMeta,
+      [queueItemId]: metaEntry,
+      [existingTrack.id]: metaEntry,
+      ...(youtubeVideoId ? { [`yt:${youtubeVideoId}`]: metaEntry } : {}),
+      [`title:${title.toLowerCase()}`]: metaEntry,
+    };
 
-      const { data: metaRow } = await admin
+    const { data: metaRow } = await admin
+      .from("venue_playlists")
+      .select("id")
+      .eq("venue_id", venueId)
+      .eq("name", "__party_item_meta__")
+      .maybeSingle();
+
+    if (metaRow?.id) {
+      await admin
         .from("venue_playlists")
-        .select("id")
-        .eq("venue_id", venueId)
-        .eq("name", "__party_item_meta__")
-        .maybeSingle();
-
-      if (metaRow?.id) {
-        await admin
-          .from("venue_playlists")
-          .update({ description: JSON.stringify(nextMeta) })
-          .eq("id", metaRow.id);
-      } else {
-        await admin.from("venue_playlists").insert({
-          venue_id: venueId,
-          name: "__party_item_meta__",
-          description: JSON.stringify(nextMeta),
-          is_active: false,
-        });
-      }
+        .update({ description: JSON.stringify(nextMeta) })
+        .eq("id", metaRow.id);
+    } else {
+      await admin.from("venue_playlists").insert({
+        venue_id: venueId,
+        name: "__party_item_meta__",
+        description: JSON.stringify(nextMeta),
+        is_active: false,
+      });
     }
 
     return NextResponse.json({

@@ -369,7 +369,23 @@ export function ClientNight({ slug }: { slug: string }) {
             // Ignore
           }
         }
-        notify("¡Voto computado con éxito! La lista se actualizó.", "ok");
+        const wasCandidate = candidateProposals.some((c) => c.id === queueItemId);
+        const newVotes = Number(res.voteCount ?? 1);
+        if (wasCandidate && effectiveThreshold > 1) {
+          if (newVotes >= effectiveThreshold) {
+            notify(
+              `🎉 ¡Alcanzó ${newVotes}/${effectiveThreshold} votos y entró a la Cola Principal!`,
+              "ok",
+            );
+          } else {
+            notify(
+              `🗳️ ¡Voto sumado en Pre-Cola! (${newVotes}/${effectiveThreshold} votos para entrar a la cola)`,
+              "ok",
+            );
+          }
+        } else {
+          notify("¡Voto computado con éxito! La lista se actualizó.", "ok");
+        }
         await refresh();
       } else {
         notify(

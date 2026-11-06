@@ -173,7 +173,7 @@ export function ProposalSearch({
       if (cleanName) payload.guestName = cleanName;
       if (cleanDedication && allowDedications) payload.dedication = cleanDedication;
       if (isKaraoke && allowGuestKaraoke) payload.isKaraoke = true;
-      if (slug && (isPartyMode || cleanDedication || cleanName)) {
+      if (slug) {
         payload.slug = slug;
         payload.isPartyMode = isPartyMode || Boolean(cleanDedication || cleanName);
       }

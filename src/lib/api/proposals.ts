@@ -184,8 +184,8 @@ export async function proposeTrack(
   if (input.dedication) payload.dedication = input.dedication;
   if (typeof input.isKaraoke === "boolean") payload.isKaraoke = input.isKaraoke;
 
-  // In Party Mode, use /api/party/propose so there is no bar cooldown and threshold/metadata are applied
-  if (input.isPartyMode && input.slug) {
+  // When venue slug is present, use /api/party/propose so proposals always start with 1 vote in pre-queue and apply metadata
+  if (input.slug) {
     try {
       const partyRes = await fetch("/api/party/propose", {
         method: "POST",

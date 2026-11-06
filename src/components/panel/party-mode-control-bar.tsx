@@ -56,7 +56,11 @@ export function PartyModeControlBar({
   };
 
   const handleSelectMode = (partyMode: PartyMode) => {
-    void onConfigChange({ partyMode });
+    void onConfigChange(
+      partyMode === "democratic" && config.minVotesToQueue <= 1
+        ? { partyMode, minVotesToQueue: 3 }
+        : { partyMode },
+    );
     if (partyMode === "democratic") {
       showToast("🗳️ Modo Democrático activado en vivo.");
     } else if (partyMode === "hybrid_turbo") {

@@ -20,6 +20,7 @@ import { TvStandbyScreen } from "@/components/player/tv-standby-screen";
 import { TvSettingsModal } from "@/components/player/tv-settings-modal";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
+import { partitionQueueAndProposals } from "@/lib/domain/queue";
 import {
   DEFAULT_BAR_PARTY_CONFIG,
   DEDICATION_STYLES,
@@ -211,9 +212,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
   const liveNightQueue: PlayerTrack[] = useMemo(() => {
     if (nightState?.queue && nightState.queue.length > 0) {
-      return nightState.queue
-        .filter((item) => item.status === "queued" || item.voteCount >= effectiveThreshold)
-        .map((item) => ({
+      const { activeQueue } = partitionQueueAndProposals(
+        nightState.queue,
+        nightState.candidates,
+        effectiveThreshold,
+      );
+      return activeQueue.map((item) => ({
         itemId: item.id,
         trackId: item.trackId,
         title: item.title,

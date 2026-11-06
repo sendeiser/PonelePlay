@@ -10,6 +10,7 @@ export interface PartyItemMeta {
   guestName?: string | null;
   dedication?: string | null;
   isKaraoke?: boolean;
+  isGuestProposal?: boolean;
 }
 
 export async function loadVenuePartyConfigFromDb(
@@ -42,35 +43,7 @@ export async function loadVenuePartyConfigFromDb(
     ? { ...DEFAULT_PARTY_CONFIG }
     : { ...DEFAULT_BAR_PARTY_CONFIG };
 
-  // 1. Check venue_playlists __party_config__ and __party_item_meta__
-  const { data: rows } = await admin
-    .from("venue_playlists")
-    .select("name, description")
-    .eq("venue_id", venue.id)
-    .in("name", ["__party_config__", "__party_item_meta__"]);
-
-  let itemMeta: Record<string, PartyItemMeta> = {};
-
-  if (Array.isArray(rows)) {
-    for (const r of rows) {
-      if (r.name === "__party_config__" && r.description) {
-        try {
-          const parsed = JSON.parse(r.description) as Partial<PartyConfig>;
-          baseConfig = normalizePartyConfigPatch(parsed, baseConfig);
-        } catch {
-          // Ignore malformed JSON
-        }
-      } else if (r.name === "__party_item_meta__" && r.description) {
-        try {
-          itemMeta = JSON.parse(r.description) as Record<string, PartyItemMeta>;
-        } catch {
-          // Ignore malformed JSON
-        }
-      }
-    }
-  }
-
-  // 2. Also check venue_settings columns if migration was applied
+  // 1. Check venue_settings columns first as fallback base
   try {
     const { data: settingsRow } = await admin
       .from("venue_settings")
@@ -118,6 +91,34 @@ export async function loadVenuePartyConfigFromDb(
     }
   } catch {
     // Non-blocking fallback
+  }
+
+  // 2. Check authoritative venue_playlists __party_config__ and __party_item_meta__
+  const { data: rows } = await admin
+    .from("venue_playlists")
+    .select("name, description")
+    .eq("venue_id", venue.id)
+    .in("name", ["__party_config__", "__party_item_meta__"]);
+
+  let itemMeta: Record<string, PartyItemMeta> = {};
+
+  if (Array.isArray(rows)) {
+    for (const r of rows) {
+      if (r.name === "__party_config__" && r.description) {
+        try {
+          const parsed = JSON.parse(r.description) as Partial<PartyConfig>;
+          baseConfig = normalizePartyConfigPatch(parsed, baseConfig);
+        } catch {
+          // Ignore malformed JSON
+        }
+      } else if (r.name === "__party_item_meta__" && r.description) {
+        try {
+          itemMeta = JSON.parse(r.description) as Record<string, PartyItemMeta>;
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+    }
   }
 
   if (inferredPartyFromVenue && baseConfig.venueType !== "party") {

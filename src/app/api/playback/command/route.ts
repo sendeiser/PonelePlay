@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
+import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
 
 export const dynamic = "force-dynamic";
 
@@ -273,6 +275,9 @@ export async function POST(req: NextRequest) {
       let nextPicked: Record<string, unknown> | null = null;
 
       if (openNight?.id) {
+        const { partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, venue.slug);
+        const effectiveThreshold = resolveEffectiveQueueThreshold(partyConfig);
+
         await admin
           .from("queue_items")
           .update({ status: "skipped", ended_at: new Date().toISOString() })
@@ -281,17 +286,28 @@ export async function POST(req: NextRequest) {
 
         const { data: nextQueueItems } = await admin
           .from("queue_items")
-          .select("id, track_id, vote_count, created_at")
+          .select("id, track_id, vote_count, created_at, proposed_by_participant_id")
           .eq("night_session_id", openNight.id)
           .eq("status", "queued")
           .order("vote_count", { ascending: false })
           .order("created_at", { ascending: true })
-          .limit(5);
+          .limit(30);
 
-        if (nextQueueItems && nextQueueItems.length > 0) {
+        // Filter out pre-queue guest proposals that have not yet reached effectiveThreshold votes
+        const eligibleMainQueueItems = (nextQueueItems || []).filter((q) => {
+          const votes = Number(q.vote_count ?? 0);
+          const isGuestProposal =
+            Boolean(q.proposed_by_participant_id) ||
+            Boolean(itemMeta[q.id]?.isGuestProposal) ||
+            (votes > 0 && votes < 9999);
+          return !isGuestProposal || votes >= effectiveThreshold;
+        });
+
+        if (eligibleMainQueueItems.length > 0) {
           const chosen =
-            nextQueueItems.find((q) => String(q.track_id) !== String(curTrack.trackId || "")) ||
-            nextQueueItems[0];
+            eligibleMainQueueItems.find(
+              (q) => String(q.track_id) !== String(curTrack.trackId || ""),
+            ) || eligibleMainQueueItems[0];
 
           const { data: trk } = await admin
             .from("tracks")

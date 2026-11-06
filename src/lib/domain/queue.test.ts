@@ -91,6 +91,29 @@ describe("queue ordering", () => {
       expect(after.activeQueue).toHaveLength(1);
       expect(after.candidateProposals).toHaveLength(0);
     });
+
+    it("keeps guest proposals in pre-queue (candidateProposals) until reaching 3 votes in Democratic mode even when status is queued and candidateItems is []", () => {
+      const items = [
+        { id: "house-1", voteCount: 0, createdAt: "2026-11-06T20:00:00Z", status: "queued" },
+        { id: "guest-1vote", voteCount: 1, createdAt: "2026-11-06T20:05:00Z", status: "queued" },
+        { id: "guest-2votes", voteCount: 2, createdAt: "2026-11-06T20:06:00Z", status: "queued" },
+      ];
+
+      // Threshold = 3 (Democratic mode with 3 votes required)
+      const step1 = partitionQueueAndProposals(items, [], 3);
+      expect(step1.activeQueue.map((i) => i.id)).toEqual(["house-1"]);
+      expect(step1.candidateProposals.map((i) => i.id)).toEqual(["guest-2votes", "guest-1vote"]);
+
+      // Once guest-2votes receives its 3rd vote, it promotes to the top of activeQueue
+      const itemsAfter3rdVote = [
+        { id: "house-1", voteCount: 0, createdAt: "2026-11-06T20:00:00Z", status: "queued" },
+        { id: "guest-1vote", voteCount: 1, createdAt: "2026-11-06T20:05:00Z", status: "queued" },
+        { id: "guest-2votes", voteCount: 3, createdAt: "2026-11-06T20:06:00Z", status: "queued" },
+      ];
+      const step2 = partitionQueueAndProposals(itemsAfter3rdVote, [], 3);
+      expect(step2.activeQueue.map((i) => i.id)).toEqual(["guest-2votes", "house-1"]);
+      expect(step2.candidateProposals.map((i) => i.id)).toEqual(["guest-1vote"]);
+    });
   });
 
   describe("selectRoundWinner (Rondas de Votación)", () => {

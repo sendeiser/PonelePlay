@@ -27,47 +27,45 @@ export function sortQueue<T extends QueueCandidate>(items: T[]): T[] {
 }
 
 export function partitionQueueAndProposals<
-  T extends { id: string; voteCount: number; createdAt: string; status?: string }
+  T extends {
+    id: string;
+    voteCount: number;
+    createdAt: string;
+    status?: string;
+    proposedByParticipantId?: string | null;
+    isGuestProposal?: boolean;
+  }
 >(
   queueItems: T[],
   candidateItems?: T[],
   threshold = MIN_VOTES_FOR_QUEUE,
 ): { activeQueue: T[]; candidateProposals: T[] } {
-  // If candidates are provided explicitly from backend RPC
-  if (candidateItems && candidateItems.length > 0) {
-    if (threshold < MIN_VOTES_FOR_QUEUE) {
-      const combined = [...queueItems, ...candidateItems.filter((c) => !queueItems.some((q) => q.id === c.id))];
-      const active = sortQueue(
-        combined.filter((i) => i.status !== "playing" && (i.status === "queued" || i.voteCount >= threshold)),
-      );
-      const cand = sortQueue(
-        combined.filter((i) => i.status !== "playing" && i.status !== "queued" && i.voteCount < threshold),
-      );
-      return { activeQueue: active, candidateProposals: cand };
-    }
-    const active = sortQueue(queueItems.filter((i) => i.status !== "proposed" && (i.status === "queued" || i.voteCount >= threshold)));
-    const cand = sortQueue([...candidateItems]);
-    return { activeQueue: active, candidateProposals: cand };
-  }
+  const combined =
+    candidateItems && candidateItems.length > 0
+      ? [...queueItems, ...candidateItems.filter((c) => !queueItems.some((q) => q.id === c.id))]
+      : queueItems;
 
-  // Otherwise, partition items by status and threshold
   const active: T[] = [];
   const cand: T[] = [];
 
-  for (const item of queueItems) {
+  for (const item of combined) {
     if (item.status === "playing") continue;
 
-    const isAlreadyQueuedFromRpc = candidateItems !== undefined && item.status === "queued";
-    const isHouseTrack = item.status === "queued" && (item.voteCount === 0 || item.voteCount >= 9999);
+    const isGuestProposal =
+      item.status === "proposed" ||
+      Boolean(item.isGuestProposal) ||
+      Boolean(item.proposedByParticipantId) ||
+      (item.voteCount > 0 && item.voteCount < 9999);
 
-    if (
-      !isAlreadyQueuedFromRpc &&
-      !isHouseTrack &&
-      (item.voteCount < threshold || (threshold >= MIN_VOTES_FOR_QUEUE && item.status === "proposed"))
-    ) {
-      cand.push(item);
-    } else {
+    if (!isGuestProposal) {
+      // House / Playlist / Operator tracks (voteCount === 0 or >= 9999)
       active.push(item);
+    } else if (item.voteCount >= threshold) {
+      // Guest proposal that reached the required vote threshold (e.g. 3 votes in Democratic mode)
+      active.push(item);
+    } else {
+      // Guest proposal in pre-queue waiting to reach threshold votes
+      cand.push(item);
     }
   }
 
