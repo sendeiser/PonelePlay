@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Flame, HelpCircle, Maximize2, Mic, Minimize2, Music2, X } from "lucide-react";
+import { Flame, HelpCircle, Maximize2, Mic, Minimize2, Music2, Settings, Volume2, VolumeX, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import {
@@ -17,6 +17,7 @@ import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
 import { TvPairingModal } from "@/components/player/tv-pairing-modal";
 import { TvStandbyScreen } from "@/components/player/tv-standby-screen";
+import { TvSettingsModal } from "@/components/player/tv-settings-modal";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import {
@@ -72,8 +73,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [activeSkipVote, setActiveSkipVote] = useState<PartySkipVoteState | null>(null);
   const [maxQueueFit, setMaxQueueFit] = useState(8);
   const [maxCandidatesFit, setMaxCandidatesFit] = useState(6);
+  // Screen mode: VIDEO (Video+Cola), PLAYLIST (Solo Playlist & Votos), CLEAN (Video 100% puro)
+  const [screenMode, setScreenMode] = useState<"VIDEO" | "PLAYLIST" | "CLEAN">("VIDEO");
   // Video Mode: default to true so video is always visible
   const [videoMode, setVideoMode] = useState<boolean>(true);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Compute how many songs fit dynamically inside the screen's max height
   useEffect(() => {
@@ -268,15 +272,24 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     setMounted(true);
     if (typeof window !== "undefined") {
       setOrigin(window.location.origin);
-      const saved = localStorage.getItem("poneleplay.player.videoMode");
-      if (saved !== null) {
-        setVideoMode(saved === "true");
+      const savedMode = localStorage.getItem("poneleplay.player.screenMode");
+      if (savedMode === "PLAYLIST" || savedMode === "CLEAN" || savedMode === "VIDEO") {
+        setScreenMode(savedMode);
+        setVideoMode(savedMode !== "PLAYLIST");
+        if (savedMode === "CLEAN") setIsVideoFullscreen(true);
+      } else {
+        const saved = localStorage.getItem("poneleplay.player.videoMode");
+        if (saved !== null) {
+          const vm = saved === "true";
+          setVideoMode(vm);
+          setScreenMode(vm ? "VIDEO" : "PLAYLIST");
+        }
       }
     }
   }, []);
 
   const [volume, setVolume] = useState(85);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
@@ -383,11 +396,14 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, [searchParams, slug]);
 
   const handleUnpair = useCallback(() => {
-    if (window.confirm("¿Deseás desvincular esta pantalla TV del salón?")) {
+    if (typeof window !== "undefined" && window.confirm("¿Deseás desvincular esta pantalla TV del salón?")) {
       setToken(null);
       localStorage.removeItem(`poneleplay.player.${slug}`);
+      localStorage.removeItem("poneleplay.player.screenMode");
+      localStorage.removeItem("poneleplay.player.videoMode");
       engine.pause?.();
       setIsPlaying(false);
+      window.location.href = "/tv";
     }
   }, [slug, engine]);
 
@@ -564,14 +580,31 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     toggleVideoFullscreen();
   }, [toggleVideoFullscreen]);
 
-  function toggleVideoMode() {
-    setVideoMode((prev) => {
-      const next = !prev;
+  const toggleScreenMode = useCallback(() => {
+    setScreenMode((prev) => {
+      const next = prev === "VIDEO" ? "PLAYLIST" : prev === "PLAYLIST" ? "CLEAN" : "VIDEO";
       if (typeof window !== "undefined") {
-        localStorage.setItem("poneleplay.player.videoMode", String(next));
+        localStorage.setItem("poneleplay.player.screenMode", next);
+        localStorage.setItem("poneleplay.player.videoMode", String(next !== "PLAYLIST"));
       }
+      setVideoMode(next !== "PLAYLIST");
+      setIsVideoFullscreen(next === "CLEAN");
+      setLiveToast({
+        icon: next === "VIDEO" ? "smart_display" : next === "PLAYLIST" ? "queue_music" : "fullscreen",
+        message:
+          next === "VIDEO"
+            ? "Modo: Video Salón + Playlist"
+            : next === "PLAYLIST"
+              ? "Modo: Solo Playlist & Votos"
+              : "Modo: Video Limpio 100%",
+      });
+      setTimeout(() => setLiveToast(null), 3000);
       return next;
     });
+  }, []);
+
+  function toggleVideoMode() {
+    toggleScreenMode();
   }
 
   const handleUnlockAudio = useCallback(() => {
@@ -615,22 +648,33 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.removeEventListener("click", onFirstClick);
   }, [audioUnlocked, handleUnlockAudio]);
 
-  // TV Screen Remote Navigation (Display only - No local playback controls)
+  // TV Screen Remote Navigation & Hotkeys
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.target instanceof HTMLInputElement) return;
 
       const key = event.key.toLowerCase();
+
+      // Space: Toggle Play / Pause
+      if (key === " " || event.code === "Space") {
+        event.preventDefault();
+        setIsPlaying((prev) => {
+          const next = !prev;
+          if (next) void engine.play?.();
+          else engine.pause?.();
+          setLiveToast({
+            icon: next ? "play_arrow" : "pause",
+            message: next ? "▶️ Reproducción Reanudada" : "⏸️ Reproducción Pausada",
+          });
+          setTimeout(() => setLiveToast(null), 2500);
+          return next;
+        });
+      }
       if (key === "f" || key === "enter") {
         toggleVideoFullscreen();
       }
       if (key === "v" || key === "p") {
-        toggleVideoMode();
-        setLiveToast({
-          icon: videoMode ? "queue_music" : "smart_display",
-          message: videoMode ? "Modo: Énfasis en Playlist & Propuestas" : "Modo: Video Salón HD",
-        });
-        setTimeout(() => setLiveToast(null), 3000);
+        toggleScreenMode();
       }
       if (key === "m") {
         setIsMuted((prev) => {
@@ -654,19 +698,38 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (key === "q") {
         setQrModal((val) => !val);
       }
+      if (key === "o" || key === "s" || key === "f2" || key === "menu") {
+        setShowSettingsModal((prev) => !prev);
+      }
       if (key === "escape") {
+        if (showSettingsModal) {
+          setShowSettingsModal(false);
+          return;
+        }
+        if (showHotkeysHelp) {
+          setShowHotkeysHelp(false);
+          return;
+        }
+        if (qrModal) {
+          setQrModal(false);
+          return;
+        }
+        if (pairModalOpen) {
+          setPairModalOpen(false);
+          return;
+        }
         if (document.fullscreenElement) {
           document.exitFullscreen().catch(() => {});
+          return;
         }
-        setQrModal(false);
-        setPairModalOpen(false);
-        setShowHotkeysHelp(false);
+        // Esc opens Settings menu when no modal is active (mirroring Android TV Back button!)
+        setShowSettingsModal(true);
       }
     }
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [videoMode, toggleVideoFullscreen]);
+  }, [screenMode, toggleScreenMode, toggleVideoFullscreen, showSettingsModal, showHotkeysHelp, qrModal, pairModalOpen, engine]);
 
   // Unified track list (live night queue -> runtime queue -> venue fallback -> demo)
   const allTracks: PlayerTrack[] = useMemo(() => {
@@ -980,7 +1043,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 return next;
               });
             } else if (cmd === "set_tv_mute") {
-              const muted = Boolean(p.muted);
+              const muted = Boolean(p.tvMuted ?? p.muted);
               setIsMuted(muted);
               if (muted) engine.mute?.();
               else {
@@ -1065,12 +1128,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             } else if (cmd === "set_tv_display") {
               const cfg = (p.config || p.displayConfig || {}) as Record<string, unknown>;
               if (cfg.mode === "VIDEO") {
+                setScreenMode("VIDEO");
                 setIsVideoFullscreen(false);
                 setVideoMode(true);
               } else if (cfg.mode === "PLAYLIST") {
+                setScreenMode("PLAYLIST");
                 setIsVideoFullscreen(false);
                 setVideoMode(false);
               } else if (cfg.mode === "CLEAN") {
+                setScreenMode("CLEAN");
                 setIsVideoFullscreen(true);
                 setVideoMode(true);
               }
@@ -1091,12 +1157,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             if (!active || !msg.payload?.config) return;
             const cfg = msg.payload.config;
             if (cfg.mode === "VIDEO") {
+              setScreenMode("VIDEO");
               setIsVideoFullscreen(false);
               setVideoMode(true);
             } else if (cfg.mode === "PLAYLIST") {
+              setScreenMode("PLAYLIST");
               setIsVideoFullscreen(false);
               setVideoMode(false);
             } else if (cfg.mode === "CLEAN") {
+              setScreenMode("CLEAN");
               setIsVideoFullscreen(true);
               setVideoMode(true);
             }
@@ -1453,19 +1522,78 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             {/* Mode Switcher Pill Button (TV Remote & Click) */}
             <button
               type="button"
-              onClick={toggleVideoMode}
+              onClick={toggleScreenMode}
               className={`flex items-center gap-1.5 px-3 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-md active:scale-95 ${
-                videoMode
+                screenMode === "VIDEO"
                   ? "bg-indigo-600/25 text-indigo-300 border-indigo-500/40 hover:bg-indigo-600/35 hover:text-white"
-                  : "bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/35 hover:text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]"
+                  : screenMode === "PLAYLIST"
+                    ? "bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/35 hover:text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]"
+                    : "bg-purple-600/25 text-purple-300 border-purple-500/40 hover:bg-purple-600/35 hover:text-white"
               }`}
-              title="Alternar entre Modo Video y Modo Énfasis en Playlist & Votos (Tecla V o control remoto)"
+              title="Alternar Modo de Pantalla (V o control remoto)"
             >
               <span className="material-symbols-outlined text-[15px] text-cyan-400">
-                {videoMode ? "smart_display" : "queue_music"}
+                {screenMode === "VIDEO" ? "smart_display" : screenMode === "PLAYLIST" ? "queue_music" : "fullscreen"}
               </span>
-              <span>{videoMode ? "Modo: Video + Playlist" : "Énfasis: Playlist & Votos"}</span>
+              <span>
+                {screenMode === "VIDEO"
+                  ? "Modo: Video + Cola"
+                  : screenMode === "PLAYLIST"
+                    ? "Modo: Solo Playlist"
+                    : "Modo: Video Limpio"}
+              </span>
               <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">(V)</span>
+            </button>
+
+            {/* TV Sound Mute / Unmute Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsMuted((prev) => {
+                  const next = !prev;
+                  if (next) engine.mute?.();
+                  else {
+                    engine.unMute?.();
+                    engine.setVolume?.(85);
+                  }
+                  setLiveToast({
+                    icon: next ? "volume_off" : "volume_up",
+                    message: next ? "Audio TV Silenciado" : "Audio TV Activado (85%)",
+                  });
+                  setTimeout(() => setLiveToast(null), 3000);
+                  return next;
+                });
+              }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-sm active:scale-95 ${
+                isMuted
+                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300 hover:bg-rose-500/30"
+                  : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30"
+              }`}
+              title="Silenciar / Activar sonido de la TV (M)"
+            >
+              {isMuted ? (
+                <>
+                  <VolumeX className="size-3.5 text-rose-400" />
+                  <span className="hidden sm:inline">Silenciada</span>
+                </>
+              ) : (
+                <>
+                  <Volume2 className="size-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Audio TV</span>
+                </>
+              )}
+              <span className="text-[9px] text-slate-400 font-normal">(M)</span>
+            </button>
+
+            {/* Settings Modal Button (Matching Android TV OSD) */}
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal((prev) => !prev)}
+              className="flex items-center gap-1.5 bg-[#0d1017] hover:bg-[#1a2030] px-2.5 py-1 rounded-lg border border-[#1e2333] hover:border-cyan-400/50 font-mono text-[11px] text-slate-300 hover:text-white transition-all shadow-sm active:scale-95"
+              title="Ajustes de Pantalla TV (Esc / O)"
+            >
+              <Settings className="size-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Ajustes</span>
             </button>
 
             {/* Clock */}
@@ -1508,10 +1636,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         {/* ---------------- LEFT STAGE: HERO NOW PLAYING (~58% OR FULLSCREEN 100%) ---------------- */}
         <section
           className={
-            isVideoFullscreen
-              ? "fixed inset-0 z-[99999] w-screen h-screen bg-black block overflow-hidden"
-              : !videoMode
-                ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
+            !videoMode
+              ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
+              : isVideoFullscreen || screenMode === "CLEAN"
+                ? "fixed inset-0 z-[99999] w-screen h-screen bg-black block overflow-hidden"
                 : "col-span-7 flex flex-col justify-between rounded-xl bg-[#141824] border border-[#232b42] p-3 shadow-lg relative overflow-hidden min-h-0"
           }
         >
@@ -1592,11 +1720,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           <div
             ref={videoContainerRef}
             className={
-              isVideoFullscreen
-                ? "w-full h-full bg-black flex items-center justify-center overflow-hidden relative"
-                : videoMode
-                  ? "relative w-full aspect-video max-h-[50vh] rounded-xl overflow-hidden border border-[#232b42] shadow-xl bg-black my-auto z-10 group"
-                  : "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
+              !videoMode
+                ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
+                : isVideoFullscreen || screenMode === "CLEAN"
+                  ? "w-full h-full bg-black flex items-center justify-center overflow-hidden relative"
+                  : "relative w-full aspect-video max-h-[50vh] rounded-xl overflow-hidden border border-[#232b42] shadow-xl bg-black my-auto z-10 group"
             }
           >
             <div className="w-full h-full relative">
@@ -2574,6 +2702,66 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           </div>
         </div>
       )}
+
+      {/* Floating Audio Unlock Banner (Browsers block autoplay unmuted by default) */}
+      {!audioUnlocked && !isMuted && (
+        <div
+          onClick={handleUnlockAudio}
+          className="fixed bottom-14 left-1/2 -translate-x-1/2 z-[110] cursor-pointer bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 text-white font-mono text-xs font-black px-6 py-3 rounded-full border-2 border-white/50 shadow-2xl animate-bounce flex items-center gap-2.5 hover:scale-105 transition-all"
+        >
+          <Volume2 className="size-4 animate-pulse text-cyan-300" />
+          <span>🔊 Hacé clic acá o presioná cualquier tecla para activar el audio del salón</span>
+        </div>
+      )}
+
+      {/* Floating Quick Settings button when in fullscreen or clean video */}
+      {(isVideoFullscreen || screenMode === "CLEAN") && (
+        <div className="fixed top-4 right-4 z-[9999] opacity-0 hover:opacity-100 transition-opacity flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSettingsModal(true)}
+            className="bg-black/85 hover:bg-black text-white font-mono text-xs px-3.5 py-1.5 rounded-lg border border-white/20 flex items-center gap-1.5 shadow-2xl backdrop-blur-md cursor-pointer transition-colors"
+          >
+            <Settings className="size-3.5 text-cyan-400" />
+            <span>Ajustes</span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleVideoFullscreen}
+            className="bg-black/85 hover:bg-black text-white font-mono text-xs px-3.5 py-1.5 rounded-lg border border-white/20 flex items-center gap-1.5 shadow-2xl backdrop-blur-md cursor-pointer transition-colors"
+          >
+            <Minimize2 className="size-3.5 text-cyan-400" />
+            <span>Salir Fullscreen</span>
+          </button>
+        </div>
+      )}
+
+      {/* PC Kiosk TV Settings Modal (Full native TV parity) */}
+      <TvSettingsModal
+        isOpen={showSettingsModal}
+        currentSlug={slug}
+        venueName={venueName}
+        screenMode={screenMode}
+        isMuted={isMuted}
+        isFullscreen={isFullscreen}
+        versionName="2.6.0"
+        onToggleMode={toggleScreenMode}
+        onToggleMute={() => {
+          setIsMuted((prev) => {
+            const next = !prev;
+            if (next) engine.mute?.();
+            else {
+              engine.unMute?.();
+              engine.setVolume?.(85);
+            }
+            return next;
+          });
+        }}
+        onToggleFullscreen={toggleFullscreen}
+        onUnpair={handleUnpair}
+        onReload={() => window.location.reload()}
+        onDismiss={() => setShowSettingsModal(false)}
+      />
 
       {/* Hotkeys Remote Control Cheat-Sheet Modal */}
       {showHotkeysHelp && (
