@@ -25,6 +25,9 @@ export type PlaybackCommand =
   | "skip"
   | "play_now"
   | "enqueue_top"
+  | "play_playlist"
+  | "enqueue_playlist"
+  | "activate_playlist"
   | "reload"
   | "set_karaoke_mode"
   | "seek"
@@ -144,6 +147,33 @@ export async function sendPlaybackCommand(
     // Non-blocking broadcast fallback
   }
 
+  // 4. Notify same-tab listeners (e.g. PanelPlaybackFooter & useNightState when triggered from PlaylistManager/CatalogManager)
+  if (typeof window !== "undefined") {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("poneleplay:playback-command", {
+          detail: { slug, command, payload, state: res },
+        }),
+      );
+      if (
+        command === "play_now" ||
+        command === "enqueue_top" ||
+        command === "play_playlist" ||
+        command === "enqueue_playlist" ||
+        command === "activate_playlist" ||
+        command === "skip"
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("poneleplay:queue-updated", {
+            detail: { slug, command },
+          }),
+        );
+      }
+    } catch {
+      // Non-blocking window event
+    }
+  }
+
   return res;
 }
 
@@ -214,6 +244,7 @@ export async function setFullscreenPlayback(
 export async function playTrackNow(
   slug: string,
   track: {
+    trackId?: string;
     title: string;
     artist: string;
     youtubeVideoId: string;
@@ -235,6 +266,7 @@ export async function playTrackNow(
 export async function enqueueTrackTop(
   slug: string,
   track: {
+    trackId?: string;
     title: string;
     artist: string;
     youtubeVideoId: string;
@@ -242,13 +274,15 @@ export async function enqueueTrackTop(
     thumbnailUrl?: string | null;
     isKaraoke?: boolean;
   },
+  options?: { asPlaylistTrack?: boolean },
 ): Promise<PlaybackState> {
   return sendPlaybackCommand(slug, "enqueue_top", {
+    asPlaylistTrack: Boolean(options?.asPlaylistTrack),
     track: {
       ...track,
       itemId: `vip-${Date.now()}`,
       source: "youtube",
-      voteCount: 5,
+      voteCount: options?.asPlaylistTrack ? 0 : 5,
     },
   });
 }

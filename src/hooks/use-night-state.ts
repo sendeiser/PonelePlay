@@ -58,9 +58,19 @@ export function useNightState(
       void doFetch();
     }, pollMs);
 
+    const onQueueUpdated = () => {
+      void doFetch();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("poneleplay:queue-updated", onQueueUpdated);
+    }
+
     return () => {
       unsub();
       clearInterval(interval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("poneleplay:queue-updated", onQueueUpdated);
+      }
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }

@@ -20,6 +20,9 @@ export async function fetchPlaylists(venueId: string): Promise<VenuePlaylist[]> 
     .select("*, playlist_tracks(count)")
     .eq("venue_id", venueId)
     .neq("name", "__tv_display_config__")
+    .neq("name", "__party_config__")
+    .neq("name", "__party_item_meta__")
+    .neq("name", "__venue_subscription__")
     .order("is_active", { ascending: false })
     .order("created_at", { ascending: true });
 
@@ -27,23 +30,25 @@ export async function fetchPlaylists(venueId: string): Promise<VenuePlaylist[]> 
     throw new Error(error.message);
   }
 
-  return (data || []).map((row) => {
-    const ptCount =
-      Array.isArray(row.playlist_tracks) && row.playlist_tracks[0]
-        ? Number(row.playlist_tracks[0].count || 0)
-        : 0;
+  return (data || [])
+    .filter((row) => !String(row.name || "").startsWith("__"))
+    .map((row) => {
+      const ptCount =
+        Array.isArray(row.playlist_tracks) && row.playlist_tracks[0]
+          ? Number(row.playlist_tracks[0].count || 0)
+          : 0;
 
-    return {
-      id: row.id,
-      venueId: row.venue_id,
-      name: row.name,
-      description: row.description,
-      isActive: Boolean(row.is_active),
-      trackCount: ptCount,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    };
-  });
+      return {
+        id: row.id,
+        venueId: row.venue_id,
+        name: row.name,
+        description: row.description,
+        isActive: Boolean(row.is_active),
+        trackCount: ptCount,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
 }
 
 export async function createPlaylist(
@@ -192,10 +197,41 @@ export async function removeTrackFromPlaylist(
 export async function setActivePlaylistAsFallback(
   venueId: string,
   playlistId: string,
+  slug?: string,
 ): Promise<void> {
+  // 1. If slug is known (or resolvable), execute via server route (/api/playback/command) using Service Role
+  if (slug) {
+    try {
+      const { sendPlaybackCommand } = await import("@/lib/api/master-control");
+      await sendPlaybackCommand(slug, "activate_playlist", { playlistId });
+      return;
+    } catch {
+      // Fall through to client Supabase
+    }
+  }
+
   const supabase = createBrowserSupabase();
 
-  // 1. Update is_active flags
+  // Resolve slug if not passed so we can use Service Role route
+  if (!slug) {
+    try {
+      const { data: v } = await supabase
+        .from("venues")
+        .select("slug")
+        .eq("id", venueId)
+        .maybeSingle();
+      const resolvedSlug = v && typeof v === "object" && "slug" in v ? String((v as { slug: string }).slug) : "";
+      if (resolvedSlug) {
+        const { sendPlaybackCommand } = await import("@/lib/api/master-control");
+        await sendPlaybackCommand(resolvedSlug, "activate_playlist", { playlistId });
+        return;
+      }
+    } catch {
+      // Fall through to client Supabase
+    }
+  }
+
+  // Fallback client-side update
   await supabase
     .from("venue_playlists")
     .update({ is_active: false } as never)
@@ -206,18 +242,22 @@ export async function setActivePlaylistAsFallback(
     .update({ is_active: true } as never)
     .eq("id", playlistId);
 
-  // 2. Fetch tracks in this playlist
   const tracks = await fetchPlaylistTracks(playlistId);
 
-  // 3. Clear existing fallback tracks for venue and insert new list
   await supabase.from("fallback_tracks").delete().eq("venue_id", venueId);
 
   if (tracks.length > 0) {
-    const rows = tracks.map((t, idx) => ({
-      venue_id: venueId,
-      track_id: t.id,
-      position: idx,
-    }));
+    const seen = new Set<string>();
+    const rows: Array<{ venue_id: string; track_id: string; position: number }> = [];
+    for (const t of tracks) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      rows.push({
+        venue_id: venueId,
+        track_id: t.id,
+        position: rows.length,
+      });
+    }
 
     const { error: insErr } = await supabase
       .from("fallback_tracks")
@@ -234,35 +274,18 @@ export async function playPlaylistNow(
   slug: string,
   playlistId: string,
 ): Promise<{ firstTrackTitle: string; totalTracks: number }> {
-  // 1. Set this playlist as the active fallback playlist
-  await setActivePlaylistAsFallback(venueId, playlistId);
-
-  // 2. Fetch tracks
   const tracks = await fetchPlaylistTracks(playlistId);
   if (tracks.length === 0) {
     throw new Error("La playlist seleccionada no contiene canciones.");
   }
 
-  // 3. Immediately play track 1 on TV
-  const { playTrackNow, enqueueTrackTop } = await import("@/lib/api/master-control");
-  await playTrackNow(slug, {
-    title: tracks[0].title,
-    artist: tracks[0].artist,
-    youtubeVideoId: tracks[0].youtubeVideoId || "T_FkEw27XJ0",
-    durationSeconds: tracks[0].durationSeconds ?? 210,
-    thumbnailUrl: tracks[0].thumbnailUrl,
+  // Single atomic server call: activates playlist in fallback_tracks, starts Track #1 on TV & Cabina,
+  // and batch-enqueues Tracks #2..#N in exact playlist order in <150ms
+  const { sendPlaybackCommand } = await import("@/lib/api/master-control");
+  await sendPlaybackCommand(slug, "play_playlist", {
+    playlistId,
+    venueId,
   });
-
-  // 4. Enqueue subsequent tracks into the live queue so they appear in the queue list
-  for (let i = 1; i < tracks.length; i++) {
-    await enqueueTrackTop(slug, {
-      title: tracks[i].title,
-      artist: tracks[i].artist,
-      youtubeVideoId: tracks[i].youtubeVideoId || "T_FkEw27XJ0",
-      durationSeconds: tracks[i].durationSeconds ?? 210,
-      thumbnailUrl: tracks[i].thumbnailUrl,
-    });
-  }
 
   return { firstTrackTitle: tracks[0].title, totalTracks: tracks.length };
 }
@@ -276,16 +299,11 @@ export async function enqueuePlaylistTracks(
     throw new Error("La playlist no contiene canciones para encolar.");
   }
 
-  const { enqueueTrackTop } = await import("@/lib/api/master-control");
-  for (const t of tracks) {
-    await enqueueTrackTop(slug, {
-      title: t.title,
-      artist: t.artist,
-      youtubeVideoId: t.youtubeVideoId || "T_FkEw27XJ0",
-      durationSeconds: t.durationSeconds ?? 210,
-      thumbnailUrl: t.thumbnailUrl,
-    });
-  }
+  // Single atomic server call: batch-enqueues all tracks #1..#N in exact playlist order in <100ms
+  const { sendPlaybackCommand } = await import("@/lib/api/master-control");
+  await sendPlaybackCommand(slug, "enqueue_playlist", {
+    playlistId,
+  });
 
   return tracks.length;
 }
@@ -296,6 +314,7 @@ export async function playTrackFromPlaylistNow(
 ): Promise<void> {
   const { playTrackNow } = await import("@/lib/api/master-control");
   await playTrackNow(slug, {
+    trackId: track.id,
     title: track.title,
     artist: track.artist,
     youtubeVideoId: track.youtubeVideoId || "T_FkEw27XJ0",
@@ -309,13 +328,18 @@ export async function enqueueTrackFromPlaylist(
   track: TrackRow,
 ): Promise<void> {
   const { enqueueTrackTop } = await import("@/lib/api/master-control");
-  await enqueueTrackTop(slug, {
-    title: track.title,
-    artist: track.artist,
-    youtubeVideoId: track.youtubeVideoId || "T_FkEw27XJ0",
-    durationSeconds: track.durationSeconds ?? 210,
-    thumbnailUrl: track.thumbnailUrl,
-  });
+  await enqueueTrackTop(
+    slug,
+    {
+      trackId: track.id,
+      title: track.title,
+      artist: track.artist,
+      youtubeVideoId: track.youtubeVideoId || "T_FkEw27XJ0",
+      durationSeconds: track.durationSeconds ?? 210,
+      thumbnailUrl: track.thumbnailUrl,
+    },
+    { asPlaylistTrack: true },
+  );
 }
 
 export async function addYouTubeTrackToVenue(

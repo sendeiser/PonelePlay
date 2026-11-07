@@ -197,17 +197,6 @@ export async function POST(req: NextRequest) {
       // Ignore if columns not yet migrated
     }
 
-    // 3. If in Party Mode, promote any proposed items that now meet minVotesToQueue
-    if (nextConfig.venueType === "party") {
-      const threshold = resolveEffectiveQueueThreshold(nextConfig);
-      await admin
-        .from("queue_items")
-        .update({ status: "queued" })
-        .eq("venue_id", venueId)
-        .eq("status", "proposed")
-        .gte("vote_count", threshold);
-    }
-
     return NextResponse.json({
       ok: true,
       partyConfig: nextConfig,

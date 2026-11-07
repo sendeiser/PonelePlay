@@ -59,6 +59,7 @@ export function PlaylistManager({
   const [hasInitializedExpanded, setHasInitializedExpanded] = useState(false);
   const [playlistTracks, setPlaylistTracks] = useState<Record<string, TrackRow[]>>({});
   const [loadingTracks, setLoadingTracks] = useState<string | null>(null);
+  const [busyActionId, setBusyActionId] = useState<string | null>(null);
 
   const toggleExpand = (id: string) => {
     setExpandedMap((prev) => ({
@@ -172,8 +173,11 @@ export function PlaylistManager({
   }
 
   async function handleActivate(pl: VenuePlaylist) {
+    const targetSlug = slug || "billar-aurora";
+    setBusyActionId(`activate:${pl.id}`);
+    setError(null);
     try {
-      await setActivePlaylistAsFallback(venueId, pl.id);
+      await setActivePlaylistAsFallback(venueId, pl.id, targetSlug);
       setPlaylists((prev) =>
         prev.map((p) => ({ ...p, isActive: p.id === pl.id })),
       );
@@ -184,38 +188,50 @@ export function PlaylistManager({
       setError(
         err instanceof Error ? err.message : "Error al activar playlist",
       );
+    } finally {
+      setBusyActionId(null);
     }
   }
 
   async function handlePlayPlaylist(pl: VenuePlaylist) {
     const targetSlug = slug || "billar-aurora";
+    setBusyActionId(`play-pl:${pl.id}`);
+    setError(null);
     try {
       const res = await playPlaylistNow(venueId, targetSlug, pl.id);
       setPlaylists((prev) =>
         prev.map((p) => ({ ...p, isActive: p.id === pl.id })),
       );
-      setFeedback(`▶️ ¡Reproduciendo playlist «${pl.name}» en la TV! (${res.firstTrackTitle})`);
+      setFeedback(`▶️ ¡Reproduciendo playlist «${pl.name}» en la TV y encolados ${res.totalTracks} temas! (${res.firstTrackTitle})`);
       onActivatedFallback?.();
       setTimeout(() => setFeedback(null), 4500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al reproducir playlist");
+    } finally {
+      setBusyActionId(null);
     }
   }
 
   async function handleEnqueuePlaylist(pl: VenuePlaylist) {
     const targetSlug = slug || "billar-aurora";
+    setBusyActionId(`enqueue-pl:${pl.id}`);
+    setError(null);
     try {
       const count = await enqueuePlaylistTracks(targetSlug, pl.id);
-      setFeedback(`⬆️ Se agregaron ${count} canciones de «${pl.name}» a la cola en vivo.`);
+      setFeedback(`⬆️ Se agregaron ${count} canciones de «${pl.name}» a la cola activa.`);
       onActivatedFallback?.();
       setTimeout(() => setFeedback(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al encolar playlist");
+    } finally {
+      setBusyActionId(null);
     }
   }
 
   async function handlePlayTrackSingle(t: TrackRow) {
     const targetSlug = slug || "billar-aurora";
+    setBusyActionId(`play-trk:${t.id}`);
+    setError(null);
     try {
       await playTrackFromPlaylistNow(targetSlug, t);
       setFeedback(`▶️ Reproduciendo ahora en TV: «${t.title}»`);
@@ -223,18 +239,24 @@ export function PlaylistManager({
       setTimeout(() => setFeedback(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al reproducir tema");
+    } finally {
+      setBusyActionId(null);
     }
   }
 
   async function handleEnqueueTrackSingle(t: TrackRow) {
     const targetSlug = slug || "billar-aurora";
+    setBusyActionId(`enqueue-trk:${t.id}`);
+    setError(null);
     try {
       await enqueueTrackFromPlaylist(targetSlug, t);
-      setFeedback(`⬆️ «${t.title}» agregada como siguiente en la cola.`);
+      setFeedback(`⬆️ «${t.title}» agregada a la cola activa.`);
       onActivatedFallback?.();
       setTimeout(() => setFeedback(null), 4000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error al encolar tema");
+    } finally {
+      setBusyActionId(null);
     }
   }
 
@@ -426,21 +448,31 @@ export function PlaylistManager({
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      disabled={busyActionId === `play-pl:${pl.id}`}
                       onClick={() => void handlePlayPlaylist(pl)}
-                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
+                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
                       title="Reproducir esta playlist inmediatamente en la pantalla TV"
                     >
-                      <Play className="size-3.5 fill-white" />
+                      {busyActionId === `play-pl:${pl.id}` ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Play className="size-3.5 fill-white" />
+                      )}
                       <span>Reproducir Playlist</span>
                     </button>
 
                     <button
                       type="button"
+                      disabled={busyActionId === `enqueue-pl:${pl.id}`}
                       onClick={() => void handleEnqueuePlaylist(pl)}
-                      className="px-3 py-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] border border-[#2a3450] text-slate-300 hover:text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] disabled:opacity-60 border border-[#2a3450] text-slate-300 hover:text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
                       title="Agregar todas las canciones a la cola en vivo de la noche"
                     >
-                      <ListPlus className="size-3.5 text-indigo-400" />
+                      {busyActionId === `enqueue-pl:${pl.id}` ? (
+                        <Loader2 className="size-3.5 text-indigo-400 animate-spin" />
+                      ) : (
+                        <ListPlus className="size-3.5 text-indigo-400" />
+                      )}
                       <span>Encolar Todo</span>
                     </button>
 
@@ -559,21 +591,31 @@ export function PlaylistManager({
 
                               <button
                                 type="button"
+                                disabled={busyActionId === `play-trk:${t.id}`}
                                 onClick={() => void handlePlayTrackSingle(t)}
-                                className="p-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all flex items-center gap-1 font-mono text-[11px]"
+                                className="p-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 disabled:opacity-60 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all flex items-center gap-1 font-mono text-[11px]"
                                 title="Reproducir este tema ahora en la TV"
                               >
-                                <Play className="size-3 fill-current" />
+                                {busyActionId === `play-trk:${t.id}` ? (
+                                  <Loader2 className="size-3 animate-spin" />
+                                ) : (
+                                  <Play className="size-3 fill-current" />
+                                )}
                                 <span className="hidden sm:inline">Reproducir</span>
                               </button>
 
                               <button
                                 type="button"
+                                disabled={busyActionId === `enqueue-trk:${t.id}`}
                                 onClick={() => void handleEnqueueTrackSingle(t)}
-                                className="p-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] text-slate-300 hover:text-cyan-400 border border-[#2a3450] transition-colors flex items-center gap-1 font-mono text-[11px]"
+                                className="p-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] disabled:opacity-60 text-slate-300 hover:text-cyan-400 border border-[#2a3450] transition-colors flex items-center gap-1 font-mono text-[11px]"
                                 title="Poner como siguiente en la cola en vivo"
                               >
-                                <Plus className="size-3" />
+                                {busyActionId === `enqueue-trk:${t.id}` ? (
+                                  <Loader2 className="size-3 animate-spin text-cyan-400" />
+                                ) : (
+                                  <Plus className="size-3" />
+                                )}
                                 <span className="hidden sm:inline">Encolar</span>
                               </button>
 

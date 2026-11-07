@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       .select("id, status, vote_count")
       .eq("night_session_id", night.id)
       .eq("track_id", existingTrack.id)
-      .in("status", ["queued", "playing", "proposed"])
+      .in("status", ["queued", "playing"])
       .limit(1)
       .maybeSingle();
 
@@ -117,9 +117,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 4. Determine initial status based on effective threshold
+    // 4. Determine effective threshold (guest proposals start at 1 vote with status 'queued' and stay in pre-queue until vote_count >= threshold)
     const threshold = resolveEffectiveQueueThreshold(partyConfig);
-    const initialStatus = threshold <= 1 ? "queued" : "proposed";
 
     // Self-heal any legacy guest proposals in this night session that were inserted with vote_count = 0
     await admin
@@ -130,63 +129,26 @@ export async function POST(req: NextRequest) {
       .eq("vote_count", 0)
       .not("proposed_by_participant_id", "is", null);
 
-    // Try inserting with guest_name, dedication, is_karaoke first; fallback if columns or 'proposed' enum value don't exist
     let queueItemId = "";
-    const { data: insertedWithCols, error: colErr } = await admin
+    const { data: insertedQueued, error: queuedErr } = await admin
       .from("queue_items")
       .insert({
         venue_id: venueId,
         night_session_id: night.id,
         track_id: existingTrack.id,
-        status: initialStatus,
+        status: "queued",
         vote_count: 1,
-        guest_name: guestName,
-        dedication,
-        is_karaoke: isKaraoke,
-      } as never)
+      })
       .select("id")
       .single();
 
-    if (!colErr && insertedWithCols?.id) {
-      queueItemId = insertedWithCols.id;
-    } else {
-      const { data: insertedBasic, error: basicErr } = await admin
-        .from("queue_items")
-        .insert({
-          venue_id: venueId,
-          night_session_id: night.id,
-          track_id: existingTrack.id,
-          status: initialStatus,
-          vote_count: 1,
-        })
-        .select("id")
-        .single();
-
-      if (!basicErr && insertedBasic?.id) {
-        queueItemId = insertedBasic.id;
-      } else {
-        // Fallback when DB enum public.queue_status does not yet contain 'proposed'
-        const { data: insertedQueued, error: queuedErr } = await admin
-          .from("queue_items")
-          .insert({
-            venue_id: venueId,
-            night_session_id: night.id,
-            track_id: existingTrack.id,
-            status: "queued",
-            vote_count: 1,
-          })
-          .select("id")
-          .single();
-
-        if (queuedErr || !insertedQueued?.id) {
-          return NextResponse.json(
-            { ok: false, error: queuedErr?.message || basicErr?.message || "queue_insert_failed" },
-            { status: 500 },
-          );
-        }
-        queueItemId = insertedQueued.id;
-      }
+    if (queuedErr || !insertedQueued?.id) {
+      return NextResponse.json(
+        { ok: false, error: queuedErr?.message || "queue_insert_failed" },
+        { status: 500 },
+      );
     }
+    queueItemId = insertedQueued.id;
 
     // 5. Persist guest metadata in venue_playlists (__party_item_meta__) so it always resolves
     const metaEntry: PartyItemMeta = {
@@ -230,7 +192,7 @@ export async function POST(req: NextRequest) {
       trackId: existingTrack.id,
       duplicate: false,
       voteCount: 1,
-      status: initialStatus,
+      status: threshold <= 1 ? "queued" : "proposed",
     });
   } catch (err: unknown) {
     return NextResponse.json(

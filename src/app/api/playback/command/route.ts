@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
               .select("id")
               .eq("night_session_id", openNight.id)
               .eq("track_id", trackId)
-              .in("status", ["queued", "proposed", "playing"])
+              .in("status", ["queued", "playing"])
               .limit(1)
               .maybeSingle();
             if (existingQueueItem?.id) {
@@ -259,11 +259,28 @@ export async function POST(req: NextRequest) {
               })
               .eq("id", targetQueueItemId);
             newCurrentTrack.itemId = targetQueueItemId;
+          } else {
+            const { data: insertedPlaying } = await admin
+              .from("queue_items")
+              .insert({
+                venue_id: venue.id,
+                night_session_id: openNight.id,
+                track_id: trackId,
+                status: "playing",
+                vote_count: 0,
+                started_at: new Date().toISOString(),
+              })
+              .select("id")
+              .maybeSingle();
+            if (insertedPlaying?.id) {
+              newCurrentTrack.itemId = insertedPlaying.id;
+            }
           }
         }
       }
     } else if (command === "enqueue_top") {
       const incoming = (payload.track || {}) as Record<string, unknown>;
+      const asPlaylistTrack = Boolean(payload.asPlaylistTrack);
       if (incoming.title) {
         let trackId = incoming.trackId ? String(incoming.trackId) : null;
         const ytId = incoming.youtubeVideoId ? String(incoming.youtubeVideoId) : null;
@@ -326,42 +343,251 @@ export async function POST(req: NextRequest) {
 
           const { data: queuedRows } = await admin
             .from("queue_items")
-            .select("vote_count")
+            .select("vote_count, created_at")
             .eq("night_session_id", openNight.id)
             .eq("status", "queued")
             .lt("vote_count", 9999);
 
-          let maxVotes = threshold;
+          let maxVotes = 0;
+          let earliestCreatedMs = nowMs;
           for (const row of queuedRows || []) {
             maxVotes = Math.max(maxVotes, Number(row.vote_count ?? 0));
+            const rowMs = row.created_at ? Date.parse(String(row.created_at)) : nowMs;
+            if (!Number.isNaN(rowMs) && rowMs < earliestCreatedMs) {
+              earliestCreatedMs = rowMs;
+            }
           }
           const topVotes = Math.max(threshold, maxVotes + 1);
 
           const { data: existingItem } = await admin
             .from("queue_items")
-            .select("id")
+            .select("id, status")
             .eq("night_session_id", openNight.id)
             .eq("track_id", trackId)
-            .in("status", ["queued", "proposed"])
+            .in("status", ["queued", "playing"])
             .limit(1)
             .maybeSingle();
 
           if (existingItem?.id) {
-            await admin
-              .from("queue_items")
-              .update({
-                status: "queued",
-                vote_count: topVotes,
-              })
-              .eq("id", existingItem.id);
+            if (existingItem.status === "queued") {
+              await admin
+                .from("queue_items")
+                .update({
+                  status: "queued",
+                  vote_count: asPlaylistTrack && maxVotes === 0 ? 0 : topVotes,
+                  created_at: new Date(earliestCreatedMs - 1000).toISOString(),
+                })
+                .eq("id", existingItem.id);
+            }
           } else {
             await admin.from("queue_items").insert({
               venue_id: venue.id,
               night_session_id: openNight.id,
               track_id: trackId,
               status: "queued",
-              vote_count: topVotes,
+              vote_count: asPlaylistTrack ? 0 : topVotes,
+              proposed_by_participant_id: null,
+              created_at: new Date(nowMs).toISOString(),
             });
+          }
+        }
+      }
+    } else if (
+      command === "play_playlist" ||
+      command === "enqueue_playlist" ||
+      command === "activate_playlist"
+    ) {
+      const playlistId = payload.playlistId ? String(payload.playlistId).trim() : "";
+
+      if (playlistId) {
+        const { data: ptRows } = await admin
+          .from("playlist_tracks")
+          .select("position, track_id")
+          .eq("playlist_id", playlistId)
+          .order("position", { ascending: true });
+
+        const trackIds = (ptRows || []).map((r) => r.track_id);
+        const { data: trackRows } =
+          trackIds.length > 0
+            ? await admin
+                .from("tracks")
+                .select("id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id")
+                .in("id", trackIds)
+            : { data: [] };
+
+        const trackMap = new Map((trackRows || []).map((t) => [t.id, t]));
+        const orderedTracks = (ptRows || [])
+          .map((pt) => trackMap.get(pt.track_id))
+          .filter((t): t is NonNullable<typeof t> => Boolean(t));
+
+        // 1. If play_playlist or activate_playlist, mark playlist active & sync fallback_tracks via service role
+        if (command === "play_playlist" || command === "activate_playlist") {
+          await admin
+            .from("venue_playlists")
+            .update({ is_active: false })
+            .eq("venue_id", venue.id);
+          await admin
+            .from("venue_playlists")
+            .update({ is_active: true })
+            .eq("id", playlistId);
+
+          await admin.from("fallback_tracks").delete().eq("venue_id", venue.id);
+          if (orderedTracks.length > 0) {
+            const seenFb = new Set<string>();
+            const fbRows: Array<{ venue_id: string; track_id: string; position: number }> = [];
+            for (const t of orderedTracks) {
+              if (seenFb.has(t.id)) continue;
+              seenFb.add(t.id);
+              fbRows.push({
+                venue_id: venue.id,
+                track_id: t.id,
+                position: fbRows.length,
+              });
+            }
+            if (fbRows.length > 0) {
+              await admin.from("fallback_tracks").insert(fbRows);
+            }
+          }
+        }
+
+        // 2. If play_playlist or enqueue_playlist, batch-enqueue tracks into queue_items in exact order
+        if (
+          (command === "play_playlist" || command === "enqueue_playlist") &&
+          orderedTracks.length > 0
+        ) {
+          let { data: openNight } = await admin
+            .from("night_sessions")
+            .select("id")
+            .eq("venue_id", venue.id)
+            .eq("status", "open")
+            .order("opened_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!openNight?.id) {
+            const { data: createdNight } = await admin
+              .from("night_sessions")
+              .insert({
+                venue_id: venue.id,
+                status: "open",
+              })
+              .select("id")
+              .single();
+            openNight = createdNight;
+          }
+
+          if (openNight?.id) {
+            const uniqueOrdered: typeof orderedTracks = [];
+            const seenTrackIds = new Set<string>();
+            for (const t of orderedTracks) {
+              if (seenTrackIds.has(t.id)) continue;
+              seenTrackIds.add(t.id);
+              uniqueOrdered.push(t);
+            }
+
+            if (command === "play_playlist") {
+              const first = uniqueOrdered[0];
+              const rest = uniqueOrdered.slice(1);
+
+              // Mark any currently playing item as skipped
+              await admin
+                .from("queue_items")
+                .update({ status: "skipped", ended_at: new Date(nowMs).toISOString() })
+                .eq("night_session_id", openNight.id)
+                .eq("status", "playing");
+
+              // Clear any existing queued rows for the tracks in this playlist so they enqueue in exact playlist order
+              await admin
+                .from("queue_items")
+                .delete()
+                .eq("night_session_id", openNight.id)
+                .eq("status", "queued")
+                .in(
+                  "track_id",
+                  uniqueOrdered.map((t) => t.id),
+                );
+
+              const { data: insertedPlaying } = await admin
+                .from("queue_items")
+                .insert({
+                  venue_id: venue.id,
+                  night_session_id: openNight.id,
+                  track_id: first.id,
+                  status: "playing",
+                  vote_count: 0,
+                  proposed_by_participant_id: null,
+                  created_at: new Date(nowMs).toISOString(),
+                  started_at: new Date(nowMs).toISOString(),
+                })
+                .select("id")
+                .maybeSingle();
+
+              newPaused = false;
+              newCurrentTrack = {
+                itemId: insertedPlaying?.id || `pl-${first.id}`,
+                trackId: first.id,
+                title: first.title,
+                artist: first.artist,
+                source: first.source || "youtube",
+                durationSeconds: Number(first.duration_seconds ?? 210),
+                youtubeVideoId: first.youtube_video_id,
+                thumbnailUrl: first.thumbnail_url ?? null,
+                voteCount: 0,
+                tvMuted: curTrack.tvMuted ?? false,
+                positionSeconds: 0,
+                anchorTimestampMs: nowMs + 1200,
+                startedAtMs: nowMs,
+                seekSeq: prevSeekSeq + 1,
+              };
+
+              if (rest.length > 0) {
+                const queueRows = rest.map((t, idx) => ({
+                  venue_id: venue.id,
+                  night_session_id: openNight!.id,
+                  track_id: t.id,
+                  status: "queued" as const,
+                  vote_count: 0,
+                  proposed_by_participant_id: null,
+                  created_at: new Date(nowMs + (idx + 1) * 50).toISOString(),
+                }));
+                await admin.from("queue_items").insert(queueRows);
+              }
+            } else {
+              // command === "enqueue_playlist"
+              const { data: playingRow } = await admin
+                .from("queue_items")
+                .select("track_id")
+                .eq("night_session_id", openNight.id)
+                .eq("status", "playing")
+                .maybeSingle();
+
+              const playingTrackId = playingRow?.track_id ? String(playingRow.track_id) : null;
+
+              // Clear existing queued entries for these playlist tracks to re-insert in clean playlist order
+              await admin
+                .from("queue_items")
+                .delete()
+                .eq("night_session_id", openNight.id)
+                .eq("status", "queued")
+                .in(
+                  "track_id",
+                  uniqueOrdered.map((t) => t.id),
+                );
+
+              const tracksToInsert = uniqueOrdered.filter((t) => t.id !== playingTrackId);
+              if (tracksToInsert.length > 0) {
+                const queueRows = tracksToInsert.map((t, idx) => ({
+                  venue_id: venue.id,
+                  night_session_id: openNight!.id,
+                  track_id: t.id,
+                  status: "queued" as const,
+                  vote_count: 0,
+                  proposed_by_participant_id: null,
+                  created_at: new Date(nowMs + idx * 50).toISOString(),
+                }));
+                await admin.from("queue_items").insert(queueRows);
+              }
+            }
           }
         }
       }

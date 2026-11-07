@@ -469,6 +469,46 @@ export function PanelPlaybackFooter({
     void loadState();
   }, [loadState]);
 
+  // Listen to same-tab playback/playlist commands (e.g. from PlaylistManager or CatalogManager)
+  useEffect(() => {
+    const onLocalPlaybackCommand = (e: Event) => {
+      const detail = (
+        e as CustomEvent<{
+          slug?: string;
+          command?: string;
+          payload?: Record<string, unknown>;
+          state?: { currentTrack?: PlayerTrack | null; isPaused?: boolean };
+        }>
+      ).detail;
+      if (!detail || (detail.slug && detail.slug !== slug)) return;
+
+      const cmd = detail.command;
+      if (cmd === "play_now" || cmd === "play_playlist") {
+        const nextTrack = (detail.state?.currentTrack ||
+          detail.payload?.track) as PlayerTrack | undefined;
+        if (nextTrack && (nextTrack.youtubeVideoId || nextTrack.title)) {
+          lastLiveKeyRef.current = trackAudioKey(nextTrack);
+          setLocalTrack(nextTrack);
+          setIsPaused(false);
+          setElapsed(0);
+          setVideoDuration(null);
+          audioEngineRef.current?.unlockAudio();
+        }
+        void refreshNightState();
+      } else if (
+        cmd === "enqueue_top" ||
+        cmd === "enqueue_playlist" ||
+        cmd === "activate_playlist"
+      ) {
+        void refreshNightState();
+      }
+    };
+
+    window.addEventListener("poneleplay:playback-command", onLocalPlaybackCommand);
+    return () =>
+      window.removeEventListener("poneleplay:playback-command", onLocalPlaybackCommand);
+  }, [slug, setLocalTrack, refreshNightState]);
+
   // 2. Realtime listener
   useEffect(() => {
     let active = true;
