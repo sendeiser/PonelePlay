@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BrandMark, Wordmark } from "@/components/brand";
+import { LandingSubscriptionsSection } from "@/components/landing/landing-subscriptions-section";
 
 export default function HomePage() {
   return (
@@ -15,6 +16,13 @@ export default function HomePage() {
           <Wordmark className="text-lg sm:text-xl" />
         </div>
         <div className="flex items-center gap-2 sm:gap-3">
+          <Link
+            href="#planes"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono font-semibold text-amber-300 hover:text-amber-200 hover:bg-[#181b25] border border-transparent hover:border-amber-500/30 transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm text-amber-400">workspace_premium</span>
+            <span>Planes y Precios</span>
+          </Link>
           <Link
             href="/como-funciona"
             className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono font-semibold text-slate-300 hover:text-white hover:bg-[#181b25] border border-transparent hover:border-[#232b42] transition-colors"
@@ -165,10 +173,17 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Subscriptions & Pricing Section (Bar & Party Plans) */}
+      <LandingSubscriptionsSection />
+
       {/* Footer */}
       <footer className="w-full text-center text-slate-500 font-mono text-xs py-6 border-t border-[#1E2333] bg-[#0A0E17]/60 flex flex-col sm:flex-row items-center justify-between px-6 gap-3">
         <span>PonelePlay Precision System · Sistema Integral de Jukebox</span>
         <div className="flex items-center gap-4 text-[11px]">
+          <Link href="#planes" className="hover:text-amber-300 transition-colors">
+            Planes y Suscripciones
+          </Link>
+          <span className="text-slate-700">·</span>
           <Link href="/como-funciona" className="hover:text-slate-300 transition-colors">
             Cómo Funciona & App TV
           </Link>

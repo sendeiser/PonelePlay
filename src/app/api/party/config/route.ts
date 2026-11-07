@@ -155,18 +155,21 @@ export async function POST(req: NextRequest) {
     const nextConfig = normalizePartyConfigPatch(safePatch, current);
 
     // 1. Persist in venue_playlists (__party_config__) so it always works regardless of schema columns
-    const { data: existingRow } = await admin
+    const { data: existingRows } = await admin
       .from("venue_playlists")
       .select("id")
       .eq("venue_id", venueId)
-      .eq("name", "__party_config__")
-      .maybeSingle();
+      .eq("name", "__party_config__");
 
-    if (existingRow?.id) {
+    if (Array.isArray(existingRows) && existingRows.length > 0) {
       await admin
         .from("venue_playlists")
         .update({ description: JSON.stringify(nextConfig) })
-        .eq("id", existingRow.id);
+        .eq("id", existingRows[0].id);
+      if (existingRows.length > 1) {
+        const extraIds = existingRows.slice(1).map((r) => r.id);
+        await admin.from("venue_playlists").delete().in("id", extraIds);
+      }
     } else {
       await admin.from("venue_playlists").insert({
         venue_id: venueId,

@@ -324,14 +324,74 @@ export function PanelPlaybackFooter({
     }
   };
 
-  const handleBoostQueueItem = async (item: QueueItemView) => {
+  const handleBoostQueueItem = async (
+    item: QueueItemView,
+    mode: "queue" | "candidate" = "queue",
+  ) => {
     setPendingActionId(item.id);
     try {
+      try {
+        const res = await fetch("/api/panel/queue/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "boost",
+            itemId: item.id,
+            slug,
+            mode,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as {
+            ok?: boolean;
+            promotedToQueue?: boolean;
+            voteCount?: number;
+          };
+          if (data?.ok) {
+            if (mode === "queue") {
+              showToast(`⬆ Subida al tope de la cola: "${item.title}"`);
+            } else if (data.promotedToQueue) {
+              showToast(`🎉 "${item.title}" subió a la Cola Activa`);
+            } else {
+              showToast(`+1 voto sumado para "${item.title}"`);
+            }
+            await refreshNightState();
+            return;
+          }
+        }
+      } catch {
+        // Fallback to castVote below
+      }
       await castVote(item.id, slug);
       showToast(`+1 voto sumado para "${item.title}"`);
       await refreshNightState();
     } catch {
-      showToast("Error al sumar voto");
+      showToast("Error al subir canción");
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  const handlePromoteCandidateToQueue = async (item: QueueItemView) => {
+    setPendingActionId(item.id);
+    try {
+      const res = await fetch("/api/panel/queue/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "promote",
+          itemId: item.id,
+          slug,
+        }),
+      });
+      if (res.ok) {
+        showToast(`✅ "${item.title}" aprobada y pasada a la Cola Activa`);
+        await refreshNightState();
+      } else {
+        showToast("Error al pasar a la cola");
+      }
+    } catch {
+      showToast("Error al pasar a la cola");
     } finally {
       setPendingActionId(null);
     }
@@ -876,7 +936,7 @@ export function PanelPlaybackFooter({
     <>
       {/* Toast Feedback */}
       {feedbackToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#0A0E17]/95 text-white font-mono text-xs font-bold px-5 py-2 rounded-full border border-indigo-500/50 shadow-2xl backdrop-blur-md animate-fade-in flex items-center gap-2">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[90] bg-[#0A0E17]/95 text-white font-mono text-xs font-bold px-5 py-2 rounded-full border border-indigo-500/50 shadow-2xl backdrop-blur-md animate-fade-in flex items-center gap-2">
           <span>{feedbackToast}</span>
         </div>
       )}
@@ -1019,13 +1079,13 @@ export function PanelPlaybackFooter({
         </div>
 
         {/* ==================== DESKTOP CONTROLS ROW (>= md) ==================== */}
-        <div className="hidden md:flex items-center justify-between gap-3 lg:gap-6 w-full px-4">
+        <div className="hidden md:flex items-center justify-between gap-2 lg:gap-4 xl:gap-6 w-full px-2 lg:px-4">
           {/* LEFT: Currently Playing Track Details + Cola Trigger + Poner Tema */}
-          <div className="flex items-center gap-2.5 min-w-0 max-w-[320px] lg:max-w-[380px] shrink justify-start">
+          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden justify-start">
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
-              className="flex items-center gap-2.5 min-w-0 max-w-[200px] xl:max-w-[260px] text-left p-1 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all cursor-pointer group shrink-0"
+              className="flex items-center gap-2.5 min-w-0 flex-1 max-w-[180px] lg:max-w-[230px] xl:max-w-[280px] text-left p-1 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all cursor-pointer group"
               title="Click para abrir la cola de reproducción y gestionar temas"
             >
               <div className="relative size-10 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] group-hover:border-indigo-500/50 shrink-0 shadow-md flex items-center justify-center transition-colors">
@@ -1043,8 +1103,8 @@ export function PanelPlaybackFooter({
                 )}
               </div>
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
+              <div className="min-w-0 flex-1 overflow-hidden">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-white text-xs font-bold truncate leading-tight group-hover:text-cyan-300 transition-colors">
                     {currentTrack?.title || "Sin música activa"}
                   </span>
@@ -1084,7 +1144,7 @@ export function PanelPlaybackFooter({
           </div>
 
           {/* CENTER: Main Playback Transport Buttons */}
-          <div className="flex items-center justify-center gap-1.5 lg:gap-2 shrink-0">
+          <div className="flex items-center justify-center gap-1.5 lg:gap-2 shrink-0 px-1">
             {/* Prev / Restart */}
             <button
               type="button"
@@ -1137,7 +1197,7 @@ export function PanelPlaybackFooter({
           </div>
 
           {/* RIGHT: Volume & Display Remote Manager */}
-          <div className="flex items-center justify-end gap-2 lg:gap-2.5 shrink-0">
+          <div className="flex items-center justify-end gap-1.5 xl:gap-2 shrink-0">
             {/* TV Screen & Display Remote Manager */}
             <button
               type="button"
@@ -1146,7 +1206,8 @@ export function PanelPlaybackFooter({
               title="Administrar pantallas TV: cambiar modos, ocultar/mostrar listas, temas y tamaños desde la cabina"
             >
               <Tv className="size-3.5 text-cyan-400 shrink-0" />
-              <span>Pantallas TV</span>
+              <span className="hidden xl:inline">Pantallas TV</span>
+              <span className="xl:hidden">TV</span>
             </button>
 
             {/* 3-Way Audio Routing Selector (Cabina + TV) */}
@@ -1162,7 +1223,7 @@ export function PanelPlaybackFooter({
                 title="Audio solo en Cabina (TV silenciada)"
               >
                 <span className="text-[11px]">🎧</span>
-                <span className="hidden lg:inline">Cabina</span>
+                <span className="hidden xl:inline">Cabina</span>
               </button>
               <button
                 type="button"
@@ -1175,7 +1236,7 @@ export function PanelPlaybackFooter({
                 title="Audio en Cabina y en TV"
               >
                 <span className="text-[11px]">🔊</span>
-                <span className="hidden lg:inline">Ambos</span>
+                <span className="hidden xl:inline">Ambos</span>
               </button>
               <button
                 type="button"
@@ -1188,7 +1249,7 @@ export function PanelPlaybackFooter({
                 title="Audio solo en TV (cabina silenciada)"
               >
                 <span className="text-[11px]">📺</span>
-                <span className="hidden lg:inline">Solo TV</span>
+                <span className="hidden xl:inline">Solo TV</span>
               </button>
             </div>
 
@@ -1365,7 +1426,10 @@ export function PanelPlaybackFooter({
         onClose={() => setManualModalOpen(false)}
         slug={slug}
         defaultKaraoke={karaokeMode}
-        onActionComplete={() => void loadState()}
+        onActionComplete={() => {
+          void refreshNightState();
+          void loadState();
+        }}
       />
 
       {/* Modern Smart TV Devices & Display Manager Modal */}
@@ -1598,18 +1662,19 @@ export function PanelPlaybackFooter({
                             title="Reproducir inmediatamente en TV"
                           >
                             <PlayCircle className="size-3.5" />
-                            <span className="hidden sm:inline">Poner Ya</span>
+                            <span>Poner Ya</span>
                           </button>
 
-                          {/* Boost / +1 Voto */}
+                          {/* Boost / Subir al tope de la cola */}
                           <button
                             type="button"
-                            onClick={() => void handleBoostQueueItem(item)}
+                            onClick={() => void handleBoostQueueItem(item, "queue")}
                             disabled={pendingActionId === item.id}
-                            className="size-8 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 flex items-center justify-center active:scale-95 transition-all"
-                            title="Subir de puesto (+1 voto)"
+                            className="px-2 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            title="Subir de puesto al tope de la cola"
                           >
                             <ArrowUp className="size-3.5" />
+                            <span className="hidden sm:inline">Subir</span>
                           </button>
 
                           {/* Veto */}
@@ -1636,7 +1701,7 @@ export function PanelPlaybackFooter({
                       <Sparkles className="size-8 mx-auto text-amber-500 mb-2" />
                       <p className="text-sm font-bold text-white">No hay propuestas esperando votos</p>
                       <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                        Cuando los clientes propongan canciones desde sus mesas, aparecerán aquí hasta juntar 5 votos.
+                        Cuando los invitados propongan canciones desde sus celulares, aparecerán aquí hasta juntar {effectiveThreshold} votos.
                       </p>
                     </div>
                   ) : (
@@ -1668,27 +1733,39 @@ export function PanelPlaybackFooter({
 
                         {/* Actions for candidate */}
                         <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Promote directly to Cola Activa */}
+                          <button
+                            type="button"
+                            onClick={() => void handlePromoteCandidateToQueue(item)}
+                            disabled={pendingActionId === item.id}
+                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            title="Aprobar y subir a la Cola Principal"
+                          >
+                            <ArrowUp className="size-3.5 text-cyan-300" />
+                            <span>Subir a Cola</span>
+                          </button>
+
                           {/* Play Now directly */}
                           <button
                             type="button"
                             onClick={() => void handlePlayQueueItemNow(item)}
                             disabled={pendingActionId === item.id}
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95"
-                            title="Aprobar y reproducir directamente en TV"
+                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            title="Reproducir inmediatamente en TV"
                           >
                             <PlayCircle className="size-3.5" />
                             <span className="hidden sm:inline">Poner Ya</span>
                           </button>
 
-                          {/* Add vote */}
+                          {/* Add +1 vote */}
                           <button
                             type="button"
-                            onClick={() => void handleBoostQueueItem(item)}
+                            onClick={() => void handleBoostQueueItem(item, "candidate")}
                             disabled={pendingActionId === item.id}
-                            className="size-8 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 flex items-center justify-center active:scale-95"
-                            title="Sumar voto (+1)"
+                            className="px-2 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold flex items-center justify-center active:scale-95 transition-all"
+                            title="Sumar +1 voto"
                           >
-                            <ArrowUp className="size-3.5" />
+                            +1
                           </button>
 
                           {/* Veto */}
@@ -1696,7 +1773,7 @@ export function PanelPlaybackFooter({
                             type="button"
                             onClick={() => void handleVetoQueueItem(item)}
                             disabled={pendingActionId === item.id}
-                            className="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center active:scale-95"
+                            className="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center active:scale-95 transition-all"
                             title="Rechazar propuesta"
                           >
                             <Trash2 className="size-3.5" />

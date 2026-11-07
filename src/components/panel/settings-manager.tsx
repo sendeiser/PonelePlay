@@ -15,6 +15,8 @@ import {
 import {
   fetchServerPartyConfig,
   getStoredPartyConfig,
+  normalizePartyConfigPatch,
+  saveStoredPartyConfig,
   updatePartyConfig,
 } from "@/lib/api/party-control";
 import { PrintQrModal } from "./print-qr-modal";
@@ -65,9 +67,15 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
   // Load venue and settings via Admin API (with browser fallback)
   const loadSettings = useCallback(async () => {
     try {
-      const res = await fetch(`/api/panel/settings?slug=${encodeURIComponent(slug)}`, {
-        cache: "no-store",
-      });
+      const [res, partyData] = await Promise.all([
+        fetch(`/api/panel/settings?slug=${encodeURIComponent(slug)}`, {
+          cache: "no-store",
+        }),
+        fetchServerPartyConfig(slug),
+      ]);
+      if (partyData?.partyConfig) {
+        setPartyConfig(partyData.partyConfig);
+      }
       if (res.ok) {
         const json = (await res.json()) as {
           venue?: { id: string; name: string; accent_color: string | null; join_message: string | null };
@@ -80,6 +88,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
             voting_rounds_enabled?: boolean;
             voting_round_seconds?: number;
           } | null;
+          partyConfig?: Partial<PartyConfig>;
         };
         if (json.venue) {
           setVenueId(json.venue.id);
@@ -95,8 +104,14 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
             setVotingRoundsEnabled(json.settings.voting_rounds_enabled ?? true);
             setVotingRoundSeconds(json.settings.voting_round_seconds ?? 180);
           }
-          const { partyConfig: serverPartyCfg } = await fetchServerPartyConfig(slug);
-          setPartyConfig(serverPartyCfg);
+          if (json.partyConfig) {
+            const merged = normalizePartyConfigPatch(
+              json.partyConfig,
+              partyData?.partyConfig ?? getStoredPartyConfig(slug),
+            );
+            saveStoredPartyConfig(slug, merged);
+            setPartyConfig(merged);
+          }
           const sum = await fetchNightSummary(json.venue.id).catch(() => null);
           if (sum) setSummary(sum);
           return;
@@ -182,7 +197,9 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
     setSaving(true);
     setError(null);
     try {
-      await updatePartyConfig(slug, partyConfig);
+      const savedPartyCfg = await updatePartyConfig(slug, partyConfig);
+      setPartyConfig(savedPartyCfg);
+      saveStoredPartyConfig(slug, savedPartyCfg);
 
       const splitKeywords = keywords
         .split(",")
@@ -204,6 +221,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
           maxQueue,
           votingRoundsEnabled,
           votingRoundSeconds,
+          partyConfig: savedPartyCfg,
         }),
       });
 
@@ -335,10 +353,37 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
               </div>
             </div>
 
-            <div className="bg-[#0d111a]/90 p-3.5 rounded-xl border border-[#232b42]">
-              <label className="block text-[11px] font-mono text-cyan-300 font-bold uppercase mb-1.5">
+            <div className="bg-[#0d111a]/90 p-3.5 rounded-xl border border-[#232b42] space-y-2.5">
+              <label className="block text-[11px] font-mono text-cyan-300 font-bold uppercase">
                 Votos para que la canción suba a la cola
               </label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: "1 (Directo)", val: 1 },
+                  { label: "2 votos", val: 2 },
+                  { label: "3 votos", val: 3 },
+                  { label: "5 votos", val: 5 },
+                  { label: "8 votos", val: 8 },
+                ].map((preset) => (
+                  <button
+                    key={preset.val}
+                    type="button"
+                    onClick={() =>
+                      setPartyConfig((prev) => ({
+                        ...prev,
+                        minVotesToQueue: preset.val,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded-lg font-mono text-[10px] font-bold border transition-all ${
+                      partyConfig.minVotesToQueue === preset.val
+                        ? "bg-cyan-500/25 border-cyan-400 text-cyan-200 shadow-sm"
+                        : "bg-[#141824] border-[#232b42] text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
@@ -356,7 +401,7 @@ export function SettingsManager({ slug }: SettingsManagerProps) {
                 <span className="text-[11px] text-slate-400 font-mono">
                   {partyConfig.minVotesToQueue <= 1
                     ? "Pasa directo a la cola (1 voto)"
-                    : `Sube con ${partyConfig.minVotesToQueue} votos`}
+                    : `Entra en Pre-Cola y sube con ${partyConfig.minVotesToQueue} votos`}
                 </span>
               </div>
             </div>

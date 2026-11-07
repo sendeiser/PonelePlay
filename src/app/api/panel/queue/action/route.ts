@@ -1,36 +1,114 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
+import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const action = body?.action; // "veto" | "skip"
+    const action = body?.action as string | undefined; // "veto" | "skip" | "boost" | "promote"
     const itemId = body?.itemId?.trim();
+    const slug = typeof body?.slug === "string" ? body.slug.trim() : "";
+    const mode = body?.mode === "candidate" ? "candidate" : "queue";
 
     if (!itemId) {
       return NextResponse.json({ ok: false, error: "itemId_required" }, { status: 400 });
     }
 
-    if (action !== "veto" && action !== "skip") {
+    if (
+      action !== "veto" &&
+      action !== "skip" &&
+      action !== "boost" &&
+      action !== "promote"
+    ) {
       return NextResponse.json({ ok: false, error: "invalid_action" }, { status: 400 });
     }
 
     const admin = createAdminSupabase();
-    const targetStatus = action === "veto" ? "vetoed" : "skipped";
 
     // 1. Fetch item to confirm existence
     const { data: item, error: fetchErr } = await admin
       .from("queue_items")
-      .select("id, status, venue_id, night_session_id")
+      .select("id, status, venue_id, night_session_id, vote_count")
       .eq("id", itemId)
       .single();
 
     if (fetchErr || !item) {
-      // If item is already deleted or not found, treat as success or return not found
       return NextResponse.json({ ok: true, alreadyHandled: true });
     }
+
+    if (action === "boost" || action === "promote") {
+      let targetSlug = slug;
+      if (!targetSlug && item.venue_id) {
+        const { data: v } = await admin
+          .from("venues")
+          .select("slug")
+          .eq("id", item.venue_id)
+          .maybeSingle();
+        targetSlug = v?.slug || "";
+      }
+
+      const { partyConfig } = targetSlug
+        ? await loadVenuePartyConfigFromDb(admin, targetSlug)
+        : { partyConfig: { venueType: "party" as const, minVotesToQueue: 1 } };
+
+      const threshold = resolveEffectiveQueueThreshold(partyConfig);
+      const rawVotes = Number(item.vote_count ?? 0);
+      const baseVotes = rawVotes >= 9999 || rawVotes < 0 ? 0 : rawVotes;
+
+      let newVoteCount = baseVotes + 1;
+
+      if (action === "promote") {
+        // Promote candidate proposal directly into Cola Activa
+        newVoteCount = Math.max(threshold, baseVotes);
+      } else if (mode === "queue") {
+        // Boosting an item already in Cola Activa moves it to the top of the active queue
+        let maxQueuedVotes = baseVotes;
+        if (item.night_session_id) {
+          const { data: siblings } = await admin
+            .from("queue_items")
+            .select("id, vote_count")
+            .eq("night_session_id", item.night_session_id)
+            .eq("status", "queued")
+            .lt("vote_count", 9999);
+          for (const sib of siblings || []) {
+            if (sib.id !== item.id) {
+              maxQueuedVotes = Math.max(maxQueuedVotes, Number(sib.vote_count ?? 0));
+            }
+          }
+        }
+        newVoteCount = Math.max(threshold, maxQueuedVotes + 1, baseVotes + 1);
+      }
+
+      const newStatus =
+        action === "promote" || mode === "queue" || newVoteCount >= threshold
+          ? "queued"
+          : item.status;
+
+      const { error: boostErr } = await admin
+        .from("queue_items")
+        .update({
+          vote_count: newVoteCount,
+          status: newStatus,
+        })
+        .eq("id", itemId);
+
+      if (boostErr) {
+        return NextResponse.json({ ok: false, error: boostErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        itemId,
+        voteCount: newVoteCount,
+        status: newStatus,
+        promotedToQueue: newVoteCount >= threshold,
+      });
+    }
+
+    const targetStatus = action === "veto" ? "vetoed" : "skipped";
 
     // 2. Update status directly with service role
     const { error: updateErr } = await admin

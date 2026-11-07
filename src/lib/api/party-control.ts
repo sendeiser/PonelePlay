@@ -111,7 +111,10 @@ export function getStoredPartyConfig(
     const raw = window.localStorage.getItem(`${STORAGE_PREFIX}${slug}`);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PartyConfig>;
-      return normalizePartyConfigPatch({ ...base, ...parsed }, base);
+      const merged = serverConfig
+        ? { ...base, ...parsed, ...serverConfig }
+        : { ...base, ...parsed };
+      return normalizePartyConfigPatch(merged, base);
     }
   } catch {
     // Ignore storage read errors
@@ -239,11 +242,12 @@ export async function updatePartyConfig(
   });
 
   // 1. Persist via Next.js server route (/api/party/config) using Service Role
+  // Send `safePatch` (not `next`) so the server merges only the modified fields onto its authoritative DB state
   try {
     const res = await fetch("/api/party/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, patch: next }),
+      body: JSON.stringify({ slug, patch: safePatch }),
     });
     if (res.ok) {
       const data = await res.json();

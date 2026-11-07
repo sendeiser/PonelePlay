@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
+import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { normalizePartyConfigPatch } from "@/lib/api/party-control";
+import type { PartyConfig } from "@/lib/domain/party";
 
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug");
@@ -27,16 +30,16 @@ export async function GET(req: NextRequest) {
       join_message: string | null;
     };
 
-    const { data: settings } = await supabase
-      .from("venue_settings")
-      .select("*")
-      .eq("venue_id", v.id)
-      .maybeSingle();
+    const [{ data: settings }, { partyConfig }] = await Promise.all([
+      supabase.from("venue_settings").select("*").eq("venue_id", v.id).maybeSingle(),
+      loadVenuePartyConfigFromDb(supabase, slug),
+    ]);
 
     return NextResponse.json({
       ok: true,
       venue: v,
       settings: settings || null,
+      partyConfig,
     });
   } catch (err) {
     return NextResponse.json(
@@ -60,6 +63,7 @@ export async function POST(req: NextRequest) {
       maxQueue?: number;
       votingRoundsEnabled?: boolean;
       votingRoundSeconds?: number;
+      partyConfig?: Partial<PartyConfig>;
     };
 
     if (!body.slug) {
@@ -156,11 +160,53 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 3. Persist partyConfig in venue_playlists (__party_config__) if provided
+    let savedPartyConfig: PartyConfig | undefined;
+    if (body.partyConfig && typeof body.partyConfig === "object") {
+      const { partyConfig: currentParty } = await loadVenuePartyConfigFromDb(supabase, body.slug);
+      savedPartyConfig = normalizePartyConfigPatch(
+        {
+          ...body.partyConfig,
+          activeSkipVote: currentParty.activeSkipVote ?? null,
+          venueType:
+            currentParty.venueType === "party"
+              ? "party"
+              : (body.partyConfig.venueType ?? currentParty.venueType),
+        },
+        currentParty,
+      );
+
+      const { data: existingRows } = await supabase
+        .from("venue_playlists")
+        .select("id")
+        .eq("venue_id", venueId)
+        .eq("name", "__party_config__");
+
+      if (Array.isArray(existingRows) && existingRows.length > 0) {
+        await supabase
+          .from("venue_playlists")
+          .update({ description: JSON.stringify(savedPartyConfig) })
+          .eq("id", existingRows[0].id);
+        if (existingRows.length > 1) {
+          const extraIds = existingRows.slice(1).map((r) => r.id);
+          await supabase.from("venue_playlists").delete().in("id", extraIds);
+        }
+      } else {
+        await supabase.from("venue_playlists").insert({
+          venue_id: venueId,
+          name: "__party_config__",
+          description: JSON.stringify(savedPartyConfig),
+          is_active: false,
+        });
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       maxProposals,
       maxQueue,
       maxDuration,
+      partyConfig: savedPartyConfig,
     });
   } catch (err) {
     return NextResponse.json(

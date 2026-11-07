@@ -210,23 +210,46 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
 
         if (openNight?.id && trackId) {
+          const incomingItemId = incoming.itemId ? String(incoming.itemId) : "";
+          const isRealItemUuid =
+            incomingItemId.length >= 20 &&
+            !incomingItemId.startsWith("manual-") &&
+            !incomingItemId.startsWith("fb-") &&
+            !incomingItemId.startsWith("vip-");
+
+          let targetQueueItemId: string | null = null;
+          if (isRealItemUuid) {
+            const { data: exactItem } = await admin
+              .from("queue_items")
+              .select("id")
+              .eq("id", incomingItemId)
+              .maybeSingle();
+            if (exactItem?.id) {
+              targetQueueItemId = exactItem.id;
+            }
+          }
+
+          if (!targetQueueItemId) {
+            const { data: existingQueueItem } = await admin
+              .from("queue_items")
+              .select("id")
+              .eq("night_session_id", openNight.id)
+              .eq("track_id", trackId)
+              .in("status", ["queued", "proposed", "playing"])
+              .limit(1)
+              .maybeSingle();
+            if (existingQueueItem?.id) {
+              targetQueueItemId = existingQueueItem.id;
+            }
+          }
+
           await admin
             .from("queue_items")
             .update({ status: "skipped", ended_at: new Date().toISOString() })
             .eq("night_session_id", openNight.id)
-            .eq("status", "playing")
-            .neq("track_id", trackId);
+            .eq("status", "playing");
 
-          const { data: existingQueueItem } = await admin
-            .from("queue_items")
-            .select("id")
-            .eq("night_session_id", openNight.id)
-            .eq("track_id", trackId)
-            .in("status", ["queued", "playing"])
-            .limit(1)
-            .maybeSingle();
-
-          if (existingQueueItem?.id) {
+          if (targetQueueItemId) {
             await admin
               .from("queue_items")
               .update({
@@ -234,8 +257,111 @@ export async function POST(req: NextRequest) {
                 started_at: new Date().toISOString(),
                 ended_at: null,
               })
-              .eq("id", existingQueueItem.id);
-            newCurrentTrack.itemId = existingQueueItem.id;
+              .eq("id", targetQueueItemId);
+            newCurrentTrack.itemId = targetQueueItemId;
+          }
+        }
+      }
+    } else if (command === "enqueue_top") {
+      const incoming = (payload.track || {}) as Record<string, unknown>;
+      if (incoming.title) {
+        let trackId = incoming.trackId ? String(incoming.trackId) : null;
+        const ytId = incoming.youtubeVideoId ? String(incoming.youtubeVideoId) : null;
+
+        if (!trackId || trackId.startsWith("manual-") || trackId.startsWith("fb-") || trackId.startsWith("vip-")) {
+          const { data: existingTrack } = await admin
+            .from("tracks")
+            .select("id")
+            .eq("venue_id", venue.id)
+            .eq("youtube_video_id", ytId || "")
+            .maybeSingle();
+
+          if (existingTrack?.id) {
+            trackId = existingTrack.id;
+          } else if (ytId) {
+            const { data: createdTrack } = await admin
+              .from("tracks")
+              .insert({
+                venue_id: venue.id,
+                source: "youtube",
+                title: String(incoming.title).trim(),
+                artist: String(incoming.artist || "YouTube").trim(),
+                duration_seconds: Number(incoming.durationSeconds ?? 210),
+                thumbnail_url: incoming.thumbnailUrl ? String(incoming.thumbnailUrl) : null,
+                youtube_video_id: ytId,
+                dedupe_key: `yt:${ytId}`,
+                created_by_kind: "owner",
+              })
+              .select("id")
+              .maybeSingle();
+            if (createdTrack?.id) trackId = createdTrack.id;
+          }
+        }
+
+        // Ensure an open night session exists
+        let { data: openNight } = await admin
+          .from("night_sessions")
+          .select("id")
+          .eq("venue_id", venue.id)
+          .eq("status", "open")
+          .order("opened_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!openNight?.id) {
+          const { data: createdNight } = await admin
+            .from("night_sessions")
+            .insert({
+              venue_id: venue.id,
+              status: "open",
+            })
+            .select("id")
+            .single();
+          openNight = createdNight;
+        }
+
+        if (openNight?.id && trackId) {
+          const { partyConfig } = await loadVenuePartyConfigFromDb(admin, venue.slug);
+          const threshold = resolveEffectiveQueueThreshold(partyConfig);
+
+          const { data: queuedRows } = await admin
+            .from("queue_items")
+            .select("vote_count")
+            .eq("night_session_id", openNight.id)
+            .eq("status", "queued")
+            .lt("vote_count", 9999);
+
+          let maxVotes = threshold;
+          for (const row of queuedRows || []) {
+            maxVotes = Math.max(maxVotes, Number(row.vote_count ?? 0));
+          }
+          const topVotes = Math.max(threshold, maxVotes + 1);
+
+          const { data: existingItem } = await admin
+            .from("queue_items")
+            .select("id")
+            .eq("night_session_id", openNight.id)
+            .eq("track_id", trackId)
+            .in("status", ["queued", "proposed"])
+            .limit(1)
+            .maybeSingle();
+
+          if (existingItem?.id) {
+            await admin
+              .from("queue_items")
+              .update({
+                status: "queued",
+                vote_count: topVotes,
+              })
+              .eq("id", existingItem.id);
+          } else {
+            await admin.from("queue_items").insert({
+              venue_id: venue.id,
+              night_session_id: openNight.id,
+              track_id: trackId,
+              status: "queued",
+              vote_count: topVotes,
+            });
           }
         }
       }

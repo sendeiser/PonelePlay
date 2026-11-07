@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildPartyBroadcastPayload,
   castPartyVote,
+  getStoredPartyConfig,
   normalizePartyConfigPatch,
   saveStoredPartyConfig,
   updatePartyConfig,
@@ -66,6 +67,19 @@ describe("Party Control API & Broadcast Helpers", () => {
     expect(res.ok).toBe(true);
     expect(res.voteCount).toBe(4);
     fetchSpy.mockRestore();
+  });
+
+  it("prioritizes serverConfig.minVotesToQueue over stale localStorage when reloading settings", () => {
+    saveStoredPartyConfig("juntada", {
+      ...DEFAULT_PARTY_CONFIG,
+      minVotesToQueue: 1,
+    });
+    const resolved = getStoredPartyConfig("juntada", {
+      venueType: "party",
+      partyMode: "democratic",
+      minVotesToQueue: 3,
+    });
+    expect(resolved.minVotesToQueue).toBe(3);
   });
 
   it("builds duel and roulette realtime payloads cleanly", () => {

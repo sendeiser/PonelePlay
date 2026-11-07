@@ -1,11 +1,6 @@
-import { SubscriptionManager } from "@/components/panel/subscription-manager";
+import { redirect } from "next/navigation";
 
-interface SubscriptionPageProps {
-  params: Promise<{ slug: string }>;
-}
-
-export default async function SubscriptionPage({ params }: SubscriptionPageProps) {
-  const { slug } = await params;
-  return <SubscriptionManager slug={slug} />;
+export default function SubscriptionPage() {
+  redirect("/#planes");
 }
 
