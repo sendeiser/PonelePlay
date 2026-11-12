@@ -19,7 +19,9 @@ class YouTubeBridge(
     private val onEnded: () -> Unit,
     private val onError: (errorCode: Int) -> Unit = {},
     private val getDeviceId: () -> String = { "" },
-    private val onDisplayConfig: (String) -> Unit = {}
+    private val onDisplayConfig: (String) -> Unit = {},
+    private val onVideoCued: (String) -> Unit = {},
+    private val onTimeUpdate: (Float, Int) -> Unit = { _, _ -> }
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -54,19 +56,63 @@ class YouTubeBridge(
     fun onDisplayConfig(jsonStr: String) {
         mainHandler.post { onDisplayConfig(jsonStr) }
     }
+
+    @JavascriptInterface
+    fun onVideoCued(videoId: String) {
+        mainHandler.post { onVideoCued(videoId) }
+    }
+
+    @JavascriptInterface
+    fun onTimeUpdate(currentTimeSec: Float, playerState: Int) {
+        mainHandler.post { onTimeUpdate(currentTimeSec, playerState) }
+    }
 }
 
 class VideoPlayerController {
     internal var webView: WebView? = null
     internal var currentVideoId: String? = null
+    @Volatile var activeBarrierVideoId: String? = null
+    @Volatile var currentPositionSec: Float = 0f
+    @Volatile var currentPlayerState: Int = -1
+    var onVideoCuedCallback: ((String) -> Unit)? = null
+
+    private fun sanitizeId(raw: String): String =
+        raw.replace("'", "").replace("\\", "").replace("\n", "").trim()
 
     fun loadVideo(videoId: String, startSeconds: Float = 0f) {
-        if (videoId == currentVideoId) return
-        currentVideoId = videoId
-        webView?.evaluateJavascript("loadVideo('$videoId', $startSeconds);", null)
+        val cleanId = sanitizeId(videoId)
+        if (cleanId.isEmpty() || cleanId == currentVideoId || cleanId == activeBarrierVideoId) return
+        currentVideoId = cleanId
+        val safeSec = startSeconds.coerceAtLeast(0f)
+        webView?.evaluateJavascript("loadVideo('$cleanId', $safeSec);", null)
+    }
+
+    fun cueVideo(videoId: String, startSeconds: Float = 0f) {
+        val cleanId = sanitizeId(videoId)
+        if (cleanId.isEmpty()) return
+        activeBarrierVideoId = cleanId
+        currentVideoId = cleanId
+        val safeSec = startSeconds.coerceAtLeast(0f)
+        webView?.evaluateJavascript("cueVideoForBarrier('$cleanId', $safeSec);", null)
+    }
+
+    fun startScheduledPlay(
+        videoId: String,
+        startSeconds: Float = 0f,
+        volume: Int = 85,
+        isMuted: Boolean = false
+    ) {
+        val cleanId = sanitizeId(videoId)
+        if (cleanId.isEmpty()) return
+        activeBarrierVideoId = null
+        currentVideoId = cleanId
+        val safeSec = startSeconds.coerceAtLeast(0f)
+        val safeVol = volume.coerceIn(0, 100)
+        webView?.evaluateJavascript("startBarrierPlay('$cleanId', $safeSec, $safeVol, $isMuted);", null)
     }
 
     fun play() {
+        if (activeBarrierVideoId != null && activeBarrierVideoId == currentVideoId) return
         webView?.evaluateJavascript("playVideo();", null)
     }
 
@@ -79,7 +125,9 @@ class VideoPlayerController {
     }
 
     fun seekTo(seconds: Float) {
-        webView?.evaluateJavascript("seekTo($seconds);", null)
+        val safeSec = seconds.coerceAtLeast(0f)
+        currentPositionSec = safeSec
+        webView?.evaluateJavascript("seekTo($safeSec);", null)
     }
 
     fun seekTo(seconds: Int) {
@@ -87,7 +135,7 @@ class VideoPlayerController {
     }
 
     fun setVolume(volume: Int) {
-        webView?.evaluateJavascript("setVolume($volume);", null)
+        webView?.evaluateJavascript("setVolume(${volume.coerceIn(0, 100)});", null)
     }
 
     fun mute() {
@@ -96,6 +144,10 @@ class VideoPlayerController {
 
     fun unMute() {
         webView?.evaluateJavascript("unMute();", null)
+    }
+
+    fun setLegacyWsEnabled(enabled: Boolean) {
+        webView?.evaluateJavascript("setLegacyWsEnabled($enabled);", null)
     }
 
     fun release() {
@@ -114,22 +166,26 @@ fun NativeVideoPlayer(
     volume: Int = 85,
     isMuted: Boolean = false,
     initialPositionSeconds: Float = 0f,
+    useLegacySupabaseWs: Boolean = true,
     controller: VideoPlayerController,
     modifier: Modifier = Modifier,
     onEnded: () -> Unit = {},
     onDisplayConfig: (String) -> Unit = {}
 ) {
-    // React to video changes
+    // React to video changes (deferred when an active Ready-Barrier is pre-cueing this video)
     LaunchedEffect(videoId) {
-        if (videoId.isNotBlank()) {
+        if (videoId.isNotBlank() && controller.activeBarrierVideoId != videoId) {
             controller.loadVideo(videoId, initialPositionSeconds.coerceAtLeast(0f))
         }
     }
 
-    // Follow the server pause state (and force PLAY on every new track so the
-    // YouTube pause overlay never stays frozen after a skip / vote-to-skip)
+    // Follow the server pause state unless holding for Ready-Barrier release
     LaunchedEffect(isPaused, videoId) {
-        if (isPaused) controller.pause() else controller.play()
+        if (isPaused) {
+            controller.pause()
+        } else if (controller.activeBarrierVideoId != videoId) {
+            controller.play()
+        }
     }
 
     // React to mute
@@ -140,6 +196,11 @@ fun NativeVideoPlayer(
     // React to volume
     LaunchedEffect(volume) {
         controller.setVolume(volume)
+    }
+
+    // Toggle legacy Supabase WebSocket off immediately once LAN/Cloud sync is active
+    LaunchedEffect(useLegacySupabaseWs) {
+        controller.setLegacyWsEnabled(useLegacySupabaseWs)
     }
 
     AndroidView(
@@ -181,7 +242,14 @@ fun NativeVideoPlayer(
                     YouTubeBridge(
                         onEnded = onEnded,
                         getDeviceId = { deviceId },
-                        onDisplayConfig = onDisplayConfig
+                        onDisplayConfig = onDisplayConfig,
+                        onVideoCued = { cuedId ->
+                            controller.onVideoCuedCallback?.invoke(cuedId)
+                        },
+                        onTimeUpdate = { posSec, state ->
+                            controller.currentPositionSec = posSec
+                            controller.currentPlayerState = state
+                        }
                     ),
                     "AndroidBridge"
                 )
@@ -196,7 +264,8 @@ fun NativeVideoPlayer(
                     isPaused = isPaused,
                     volume = volume,
                     isMuted = isMuted,
-                    initialPositionSeconds = initialPositionSeconds.coerceAtLeast(0f)
+                    initialPositionSeconds = initialPositionSeconds.coerceAtLeast(0f),
+                    useLegacySupabaseWs = useLegacySupabaseWs
                 )
                 val originUrl = "https://poneleplay.netlify.app"
                 loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
@@ -215,7 +284,8 @@ private fun buildPlayerHtml(
     isPaused: Boolean,
     volume: Int,
     isMuted: Boolean,
-    initialPositionSeconds: Float = 0f
+    initialPositionSeconds: Float = 0f,
+    useLegacySupabaseWs: Boolean = true
 ): String {
     val autoPlayParam = if (isPaused) 0 else 1
     val startParam = initialPositionSeconds.toInt().coerceAtLeast(0)
@@ -262,6 +332,10 @@ private fun buildPlayerHtml(
             var localTrackLock = { id: null, until: 0 };
             var originalVolume = currentVolume > 0 ? currentVolume : 85;
             var hasSyncedFirstFrame = false;
+            var isBarrierHolding = false;
+            var barrierCuedNotified = false;
+            var legacyWsEnabled = ${if (useLegacySupabaseWs) "true" else "false"};
+            var lastTimePushAt = 0;
             var latestMasterTargetSec = ${initialPositionSeconds};
             var latestMasterSentAt = Date.now();
             var lastAppliedSeekSeq = 0;
@@ -304,13 +378,94 @@ private fun buildPlayerHtml(
             var lastLoadAt = 0;
             setInterval(function() {
               try {
-                if (desiredPaused || isEndedSent || !currentVideoId) return;
+                if (desiredPaused || isBarrierHolding || isEndedSent || !currentVideoId) return;
                 if (Date.now() - lastLoadAt < 2500) return;
                 if (currentTvState === 2 || currentTvState === 5 || currentTvState === -1) {
                   playVideo();
                 }
               } catch(_) {}
             }, 2500);
+
+            function cueVideoForBarrier(id, startSec) {
+              if (!id) return;
+              var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
+              isBarrierHolding = true;
+              barrierCuedNotified = false;
+              desiredPaused = true;
+              isEndedSent = false;
+              isPreloadSent = false;
+              isFadingOut = false;
+              hasSyncedFirstFrame = false;
+              currentVideoId = id;
+              currentTvTime = sec;
+              currentTvState = -1;
+              lastLoadAt = Date.now();
+              lastSyncSeekAt = Date.now() + 1200;
+
+              sendCommand('pauseVideo', []);
+              sendCommand('mute', []);
+              sendCommand('setVolume', [0]);
+              sendCommand('cueVideoById', [{ videoId: id, startSeconds: sec }]);
+            }
+
+            function startBarrierPlay(id, startSec, vol, muted) {
+              var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
+              var targetVol = (typeof vol === 'number' && vol >= 0) ? vol : (originalVolume > 0 ? originalVolume : 85);
+              isBarrierHolding = false;
+              desiredPaused = false;
+              currentMuted = Boolean(muted);
+              currentVolume = currentMuted ? 0 : targetVol;
+              if (!currentMuted) originalVolume = targetVol;
+              lastLoadAt = Date.now();
+              lastSyncSeekAt = Date.now() + 900;
+
+              if (id && id !== currentVideoId) {
+                currentVideoId = id;
+                isEndedSent = false;
+                isPreloadSent = false;
+                isFadingOut = false;
+                hasSyncedFirstFrame = false;
+                currentTvTime = sec;
+                sendCommand('loadVideoById', [{ videoId: id, startSeconds: sec }]);
+              } else if (sec > 0.25 && Math.abs((currentTvTime || 0) - sec) > 0.35) {
+                currentTvTime = sec;
+                sendCommand('seekTo', [sec, true]);
+              }
+
+              sendCommand('playVideo', []);
+              if (currentMuted) {
+                sendCommand('mute', []);
+                sendCommand('setVolume', [0]);
+              } else {
+                sendCommand('unMute', []);
+                sendCommand('setVolume', [targetVol]);
+              }
+            }
+
+            function reportBridgeTime(forcePush) {
+              try {
+                var now = Date.now();
+                if (!forcePush && now - lastTimePushAt < 250) return;
+                lastTimePushAt = now;
+                if (window.AndroidBridge && window.AndroidBridge.onTimeUpdate) {
+                  window.AndroidBridge.onTimeUpdate(Number(currentTvTime) || 0, Number(currentTvState));
+                }
+              } catch(_) {}
+            }
+
+            function handleBarrierState(state) {
+              if (!isBarrierHolding) return;
+              if (state === 1 || state === 2 || state === 5) {
+                sendCommand('pauseVideo', []);
+                sendCommand('mute', []);
+                if (!barrierCuedNotified) {
+                  barrierCuedNotified = true;
+                  if (window.AndroidBridge && window.AndroidBridge.onVideoCued) {
+                    window.AndroidBridge.onVideoCued(currentVideoId);
+                  }
+                }
+              }
+            }
 
             function playVideo() {
               desiredPaused = false;
@@ -402,9 +557,9 @@ private fun buildPlayerHtml(
                 return;
               }
 
-              // If already playing/loading this exact video, never reload/restart it!
+              // If already playing/loading this exact video or waiting in barrier, never reload/restart it!
               if (currentVideoId === id) {
-                if (sec > 0) seekTo(sec);
+                if (!isBarrierHolding && sec > 0) seekTo(sec);
                 return;
               }
 
@@ -466,10 +621,15 @@ private fun buildPlayerHtml(
                     currentDuration = data.info.duration;
                   }
                   if (typeof data.info.playerState === 'number') {
+                    var prevState = currentTvState;
                     currentTvState = data.info.playerState;
-                    if (data.info.playerState === 1 && !desiredPaused) {
+                    reportBridgeTime(prevState !== currentTvState);
+                    handleBarrierState(currentTvState);
+                    if (data.info.playerState === 1 && !desiredPaused && !isBarrierHolding) {
                       notifyFirstFramePlaying();
                     }
+                  } else if (typeof data.info.currentTime === 'number') {
+                    reportBridgeTime(false);
                   }
 
                   // Preload next track 10-15s before end & crossfade audio
@@ -506,6 +666,8 @@ private fun buildPlayerHtml(
 
                 if (data.event === 'onStateChange') {
                   currentTvState = data.info;
+                  reportBridgeTime(true);
+                  handleBarrierState(data.info);
                   if (data.info === 0 && !isEndedSent) { // ENDED
                     isEndedSent = true;
                     if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
@@ -513,7 +675,7 @@ private fun buildPlayerHtml(
                     }
                   } else if (data.info === 1) { // PLAYING
                     isEndedSent = false;
-                    if (desiredPaused) {
+                    if (desiredPaused || isBarrierHolding) {
                       sendCommand('pauseVideo', []);
                     } else {
                       notifyFirstFramePlaying();
@@ -552,6 +714,8 @@ private fun buildPlayerHtml(
                     },
                     'onStateChange': function(e) {
                       currentTvState = e.data;
+                      reportBridgeTime(true);
+                      handleBarrierState(e.data);
                       if (e.data === 0 && !isEndedSent) {
                         isEndedSent = true;
                         if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
@@ -559,7 +723,7 @@ private fun buildPlayerHtml(
                         }
                       } else if (e.data === 1) {
                         isEndedSent = false;
-                        if (desiredPaused) {
+                        if (desiredPaused || isBarrierHolding) {
                           sendCommand('pauseVideo', []);
                         } else {
                           notifyFirstFramePlaying();
@@ -582,7 +746,7 @@ private fun buildPlayerHtml(
             var hbInterval = null;
 
             function connectRealtimeWs() {
-              if (!venueSlug || typeof WebSocket === 'undefined') return;
+              if (!venueSlug || !legacyWsEnabled || typeof WebSocket === 'undefined') return;
               try {
                 if (ws) {
                   try { ws.close(); } catch(_) {}
@@ -789,8 +953,23 @@ private fun buildPlayerHtml(
               } catch(_) {}
             }
 
-            // Start WebSocket Realtime immediately
-            connectRealtimeWs();
+            function setLegacyWsEnabled(enabled) {
+              legacyWsEnabled = Boolean(enabled);
+              if (!legacyWsEnabled) {
+                clearInterval(hbInterval);
+                if (ws) {
+                  try { ws.close(); } catch(_) {}
+                  ws = null;
+                }
+              } else if (!ws || ws.readyState === WebSocket.CLOSED) {
+                connectRealtimeWs();
+              }
+            }
+
+            // Start legacy Supabase WS only after a short grace window if LAN/Cloud WS is not active
+            setTimeout(function() {
+              if (legacyWsEnabled) connectRealtimeWs();
+            }, 2500);
           </script>
         </body>
         </html>

@@ -5,6 +5,8 @@ import Image from "next/image";
 import { Music2, SkipForward } from "lucide-react";
 import type { QueueItemView } from "@/lib/api/contracts";
 import type { PartySkipVoteState } from "@/lib/domain/party";
+import { acquireSyncClient, releaseSyncClient } from "@/lib/sync/client";
+import { computeTargetPositionSec, type PlaybackAnchor } from "@/lib/sync/protocol";
 
 interface NowPlayingCardProps {
   item: QueueItemView | null;
@@ -50,6 +52,43 @@ export function NowPlayingCard({
   useEffect(() => {
     if (!slug) return;
     let active = true;
+    const syncClient = acquireSyncClient({ slug, role: "client" });
+
+    const applyAnchor = (anchor: PlaybackAnchor) => {
+      if (!active) return;
+      const pos = computeTargetPositionSec(anchor, syncClient.estimatedServerMs());
+      setElapsed(Math.floor(pos));
+      if (anchor.track?.durationSeconds && anchor.track.durationSeconds > 0) {
+        setVideoDuration(Math.floor(anchor.track.durationSeconds));
+      }
+      setIsPaused(anchor.isPaused);
+      setIsLiveSynced(true);
+    };
+
+    if (syncClient.hasTargetsConfigured()) {
+      const latest = syncClient.getLatestSnapshot();
+      if (latest?.anchor) applyAnchor(latest.anchor);
+
+      const unsubAnchor = syncClient.on("sync:anchor", ({ anchor }) => {
+        applyAnchor(anchor);
+      });
+      const unsubGo = syncClient.on("sync:go", ({ anchor }) => {
+        applyAnchor(anchor);
+      });
+      const unsubSnap = syncClient.on("room:snapshot", ({ snapshot }) => {
+        applyAnchor(snapshot.anchor);
+      });
+
+      return () => {
+        active = false;
+        unsubAnchor();
+        unsubGo();
+        unsubSnap();
+        releaseSyncClient(syncClient);
+      };
+    }
+
+    releaseSyncClient(syncClient);
     let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
 
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {

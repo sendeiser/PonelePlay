@@ -23,12 +23,15 @@ export interface PanelAudioEngineProps {
   onTrackEnded: () => void;
   onProgress?: (currentTime: number, duration: number | null) => void;
   onAudioBlockedChange?: (isBlocked: boolean) => void;
+  onTrackBuffered?: (videoId: string) => void;
 }
 
 export interface PanelAudioEngineRef {
   seekTo: (seconds: number) => void;
   unlockAudio: () => void;
   releaseStartHold: () => void;
+  holdUntilSynced: (maxWaitMs?: number) => void;
+  scheduleStartAt: (delayMs: number, startSec?: number) => void;
   isUnlocked: boolean;
 }
 
@@ -42,6 +45,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       onTrackEnded,
       onProgress,
       onAudioBlockedChange,
+      onTrackBuffered,
     },
     ref,
   ) {
@@ -66,6 +70,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     onTrackEndedRef.current = onTrackEnded;
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
+    const onTrackBufferedRef = useRef(onTrackBuffered);
+    onTrackBufferedRef.current = onTrackBuffered;
     const lastReportedTimeRef = useRef<number>(0);
     const trackLoadedAtRef = useRef<number>(0);
     const seekLockUntilRef = useRef<number>(0);
@@ -384,6 +390,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                 }
               },
               onStateChange: (event) => {
+                // event.data: 5=CUED, 2=PAUSED, 1=PLAYING, 0=ENDED
+                if (event.data === 5 || event.data === 2 || event.data === 1) {
+                  onTrackBufferedRef.current?.(currentVideoIdRef.current);
+                }
                 // event.data === 0 is YT.PlayerState.ENDED
                 // Ignore spurious ENDED events that occur within 6s of loading a track
                 // (caused by stopVideo or YouTube releasing the previous video)
@@ -532,30 +542,103 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       };
     }, []);
 
+    const startAtPosition = useCallback((startSec: number) => {
+      startHoldUntilRef.current = 0;
+      const targetSec = Math.max(0, startSec);
+      lastReportedTimeRef.current = targetSec;
+
+      if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
+        try {
+          html5AudioRef.current.currentTime = targetSec;
+          html5AudioRef.current.muted = isMutedRef.current;
+          html5AudioRef.current.volume = isMutedRef.current ? 0 : volumeRef.current / 100;
+          if (!isPausedRef.current) {
+            void html5AudioRef.current.play().catch(() => {});
+          }
+        } catch {}
+        return;
+      }
+
+      if (playerRef.current) {
+        try {
+          playerRef.current.seekTo(targetSec, true);
+          if (isMutedRef.current) {
+            playerRef.current.mute();
+          } else {
+            playerRef.current.unMute();
+            playerRef.current.setVolume(volumeRef.current);
+          }
+          if (!isPausedRef.current) {
+            playerRef.current.playVideo();
+          }
+        } catch {}
+      } else {
+        sendIframeCommand("seekTo", [targetSec, true]);
+        if (!isPausedRef.current) {
+          sendIframeCommand("playVideo");
+        }
+      }
+    }, [sendIframeCommand]);
+
     const releaseStartHold = useCallback(() => {
       if (startHoldTimerRef.current) {
         clearTimeout(startHoldTimerRef.current);
         startHoldTimerRef.current = null;
       }
       if (startHoldUntilRef.current > Date.now()) {
-        startHoldUntilRef.current = 0;
+        startAtPosition(0);
+      }
+    }, [startAtPosition]);
+
+    const holdUntilSynced = useCallback(
+      (maxWaitMs = 2400) => {
+        if (startHoldTimerRef.current) {
+          clearTimeout(startHoldTimerRef.current);
+          startHoldTimerRef.current = null;
+        }
+        startHoldUntilRef.current = Date.now() + Math.max(250, maxWaitMs);
         lastReportedTimeRef.current = 0;
+
+        if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
+          try {
+            html5AudioRef.current.pause();
+            html5AudioRef.current.currentTime = 0;
+          } catch {}
+          return;
+        }
+
         if (playerRef.current) {
           try {
+            playerRef.current.pauseVideo();
             playerRef.current.seekTo(0, true);
-            if (isMutedRef.current) {
-              playerRef.current.mute();
-            } else {
-              playerRef.current.unMute();
-              playerRef.current.setVolume(volumeRef.current);
-            }
-            if (!isPausedRef.current) {
-              playerRef.current.playVideo();
-            }
           } catch {}
+        } else {
+          sendIframeCommand("pauseVideo");
         }
-      }
-    }, []);
+      },
+      [sendIframeCommand],
+    );
+
+    const scheduleStartAt = useCallback(
+      (delayMs: number, startSec = 0) => {
+        if (startHoldTimerRef.current) {
+          clearTimeout(startHoldTimerRef.current);
+          startHoldTimerRef.current = null;
+        }
+        const safeDelay = Math.max(0, Math.round(delayMs));
+        if (safeDelay <= 12) {
+          startAtPosition(startSec);
+          return;
+        }
+
+        startHoldUntilRef.current = Date.now() + safeDelay;
+        startHoldTimerRef.current = setTimeout(() => {
+          startHoldTimerRef.current = null;
+          startAtPosition(startSec);
+        }, safeDelay);
+      },
+      [startAtPosition],
+    );
 
     // Expose imperative handle for seeking and unlocking
     useImperativeHandle(ref, () => ({
@@ -579,6 +662,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       },
       unlockAudio,
       releaseStartHold,
+      holdUntilSynced,
+      scheduleStartAt,
       isUnlocked: isUnlockedRef.current,
     }));
 

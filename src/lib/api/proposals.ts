@@ -1,6 +1,7 @@
 import { createBrowserSupabase } from "./supabase/browser";
 import { parseYoutubeVideoId, youtubeDedupeKey } from "@/lib/domain/youtube";
 import { demoSearchCatalog } from "@/lib/demo-data";
+import { triggerRoomSyncRefresh } from "@/lib/sync/client";
 
 export interface SearchResult {
   videoId: string;
@@ -241,6 +242,10 @@ export async function proposeTrack(
 
   if (res.error) {
     throw new Error(res.error);
+  }
+
+  if (input.slug) {
+    triggerRoomSyncRefresh(input.slug);
   }
 
   return {

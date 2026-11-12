@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,10 @@ export async function POST(req: NextRequest) {
 
     if (updateErr) {
       return NextResponse.json({ ok: false, error: updateErr.message }, { status: 500 });
+    }
+
+    if (targetSlug) {
+      void notifySyncRoom(targetSlug, { refreshFromOrigin: true });
     }
 
     return NextResponse.json({

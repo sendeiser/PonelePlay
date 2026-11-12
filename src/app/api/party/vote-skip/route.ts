@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 import type { PartySkipVoteState } from "@/lib/domain/party";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -259,6 +260,17 @@ export async function POST(req: NextRequest) {
             timestamp,
           });
     }
+
+    void notifySyncRoom(slug, {
+      partyEvent: {
+        type: "party_skip_vote_updated",
+        activeSkipVote: nextSkipState,
+        skipped: shouldSkip,
+        nextTrack: nextTrackPayload,
+        timestamp,
+      },
+      refreshFromOrigin: true,
+    });
 
     return NextResponse.json({
       ok: true,

@@ -6,10 +6,13 @@ import type { NightState } from "@/lib/api/contracts";
 export interface NightStateSource {
   fetch: () => Promise<NightState>;
   subscribe: (onChange: () => void) => () => void;
+  isPushConnected?: () => boolean;
+  onTransportChange?: (cb: (connected: boolean) => void) => () => void;
 }
 
 export interface UseNightStateOptions {
   pollMs?: number;
+  connectedPollMs?: number;
   debounceMs?: number;
 }
 
@@ -17,12 +20,16 @@ export function useNightState(
   source: NightStateSource,
   options?: UseNightStateOptions,
 ) {
-  const pollMs = options?.pollMs ?? 10_000;
+  const pollMs = options?.pollMs ?? 15_000;
+  const connectedPollMs = options?.connectedPollMs ?? Math.max(pollMs, 45_000);
   const debounceMs = options?.debounceMs ?? 350;
 
   const [state, setState] = useState<NightState | null>(null);
   const [loading, setLoading] = useState(true);
   const [offline, setOffline] = useState(false);
+  const [pushConnected, setPushConnected] = useState<boolean>(
+    () => source.isPushConnected?.() ?? false,
+  );
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -54,9 +61,14 @@ export function useNightState(
       debouncedFetch();
     });
 
+    const unsubTransport = source.onTransportChange?.((connected) => {
+      setPushConnected(connected);
+    });
+
+    const effectivePollMs = pushConnected ? connectedPollMs : pollMs;
     const interval = setInterval(() => {
       void doFetch();
-    }, pollMs);
+    }, effectivePollMs);
 
     const onQueueUpdated = () => {
       void doFetch();
@@ -67,6 +79,7 @@ export function useNightState(
 
     return () => {
       unsub();
+      unsubTransport?.();
       clearInterval(interval);
       if (typeof window !== "undefined") {
         window.removeEventListener("poneleplay:queue-updated", onQueueUpdated);
@@ -75,7 +88,7 @@ export function useNightState(
         clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [doFetch, debouncedFetch, pollMs, source]);
+  }, [connectedPollMs, doFetch, debouncedFetch, pollMs, pushConnected, source]);
 
   const refresh = useCallback(async () => {
     await doFetch();

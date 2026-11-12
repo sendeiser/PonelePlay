@@ -3,6 +3,7 @@ import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { resolveEffectiveQueueThreshold, sanitizeDedication } from "@/lib/domain/party";
 import { youtubeDedupeKey } from "@/lib/domain/youtube";
 import { loadVenuePartyConfigFromDb, type PartyItemMeta } from "@/lib/api/party-server";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -185,6 +186,8 @@ export async function POST(req: NextRequest) {
         is_active: false,
       });
     }
+
+    void notifySyncRoom(slug, { refreshFromOrigin: true });
 
     return NextResponse.json({
       ok: true,

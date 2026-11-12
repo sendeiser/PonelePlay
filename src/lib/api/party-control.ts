@@ -6,6 +6,7 @@ import {
   type PartySkipVoteState,
 } from "@/lib/domain/party";
 import type { QueueItemView } from "./contracts";
+import { findActiveSyncClient } from "@/lib/sync/client";
 
 export type PartyRealtimeEventType =
   | "party_config_updated"
@@ -143,9 +144,17 @@ async function broadcastPartyEvent(
   data: Record<string, unknown> = {},
 ): Promise<void> {
   try {
+    const payload = buildPartyBroadcastPayload(type, data);
+    const activeSync = findActiveSyncClient(slug);
+    if (activeSync) {
+      activeSync.sendPartyEvent(payload.payload);
+      if (type === "party_config_updated") {
+        activeSync.requestRefresh();
+      }
+    }
+
     const supabase = createBrowserSupabase();
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
-    const payload = buildPartyBroadcastPayload(type, data);
 
     const sendToTopic = (topicName: string) => {
       const existing = channels.find(

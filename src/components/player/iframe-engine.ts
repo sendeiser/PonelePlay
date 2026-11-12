@@ -9,17 +9,22 @@ export interface IframePlaybackEngine extends PlaybackEngine {
   attach(): () => void;
   /** Called when the <iframe> fires onLoad. */
   handshake(): void;
+  /** Cue track silently at startSeconds without starting playback (used by Ready-Barrier). */
+  cue(track: PlayerTrack, startSeconds?: number): Promise<void>;
+  /** Subscribe to track cued/buffered readiness for Ready-Barrier coordination. */
+  onCued(cb: (videoId: string) => void): () => void;
   /** True once YouTube's JS bridge (YT.Player or infoDelivery) is actively reporting. */
   hasLiveTime(): boolean;
   getCurrentTime(): number;
   getDuration(): number;
   /** Build the initial embed URL for a track. */
-  buildEmbedUrl(videoId: string, startSeconds?: number): string;
+  buildEmbedUrl(videoId: string, startSeconds?: number, autoplay?: boolean): string;
 }
 
 const YT_ENDED = 0;
 const YT_PLAYING = 1;
 const YT_PAUSED = 2;
+const YT_CUED = 5;
 
 export function resolveVideoId(track?: PlayerTrack | null): string {
   const raw = track?.youtubeVideoId?.trim() || "";
@@ -34,6 +39,7 @@ export function createIframeEngine(
 ): IframePlaybackEngine {
   let endedCallbacks: Array<() => void> = [];
   let errorCallbacks: Array<(reason: string) => void> = [];
+  let cuedCallbacks: Array<(videoId: string) => void> = [];
 
   let ytPlayer: YTPlayerInstance | null = null;
   let ytReady = false;
@@ -42,6 +48,7 @@ export function createIframeEngine(
   let capturedWidgetId: number | string = 1;
 
   let currentVideoId = "";
+  let cuedNotifiedVideoId = "";
   let currentTime = 0;
   let lastTimeUpdateAt = 0;
   let duration = 0;
@@ -54,7 +61,7 @@ export function createIframeEngine(
   let desiredMuted: boolean | null = true;
   let desiredPlaying = true;
 
-  function buildEmbedUrl(videoId: string, startSeconds = 0): string {
+  function buildEmbedUrl(videoId: string, startSeconds = 0, autoplay = true): string {
     const cleanId = parseYoutubeVideoId(videoId) || videoId || "T_FkEw27XJ0";
     if (!currentVideoId) {
       currentVideoId = cleanId;
@@ -63,7 +70,7 @@ export function createIframeEngine(
       typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : "";
     const startParam = startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : "";
     const originParam = origin ? `&origin=${origin}&widget_referrer=${origin}` : "";
-    return `https://www.youtube.com/embed/${cleanId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${startParam}${originParam}`;
+    return `https://www.youtube.com/embed/${cleanId}?autoplay=${autoplay ? 1 : 0}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${startParam}${originParam}`;
   }
 
   function post(func: string, args: unknown[] = []) {
@@ -137,6 +144,15 @@ export function createIframeEngine(
   }
 
   function handlePlayerState(state: number) {
+    if (
+      (state === YT_CUED || state === YT_PAUSED || state === YT_PLAYING) &&
+      currentVideoId &&
+      cuedNotifiedVideoId !== currentVideoId
+    ) {
+      cuedNotifiedVideoId = currentVideoId;
+      cuedCallbacks.forEach((cb) => cb(currentVideoId));
+    }
+
     if (state === YT_PLAYING) {
       desiredPlaying = true;
       if (lastTimeUpdateAt === 0) {
@@ -307,6 +323,7 @@ export function createIframeEngine(
       }
 
       currentVideoId = nextVideoId;
+      cuedNotifiedVideoId = "";
       currentTime = 0;
       lastTimeUpdateAt = 0;
       duration = track.durationSeconds ?? 0;
@@ -335,6 +352,50 @@ export function createIframeEngine(
         }
 
         const targetSrc = buildEmbedUrl(nextVideoId, 0);
+        if (!iframe.src || !iframe.src.includes(nextVideoId)) {
+          boundIframe = null;
+          iframe.src = targetSrc;
+        }
+      }
+    },
+
+    async cue(track: PlayerTrack, startSeconds = 0): Promise<void> {
+      const nextVideoId = resolveVideoId(track);
+      const startSec = Math.max(0, startSeconds);
+      currentVideoId = nextVideoId;
+      cuedNotifiedVideoId = "";
+      currentTime = startSec;
+      lastTimeUpdateAt = 0;
+      duration = track.durationSeconds ?? 0;
+      lastPlayerState = null;
+      hasPlayedCurrentVideo = false;
+      pendingSeekSeconds = startSec > 0 ? startSec : null;
+      seekLockUntil = Date.now() + 1800;
+      desiredPlaying = false;
+
+      if (ytReady && ytPlayer) {
+        try {
+          const cueFn = (ytPlayer as unknown as {
+            cueVideoById?: (arg: { videoId: string; startSeconds?: number } | string) => void;
+          }).cueVideoById;
+          if (typeof cueFn === "function") {
+            cueFn.call(ytPlayer, { videoId: nextVideoId, startSeconds: startSec });
+          } else {
+            ytPlayer.loadVideoById(nextVideoId);
+            ytPlayer.pauseVideo();
+            if (startSec > 0) ytPlayer.seekTo(startSec, true);
+          }
+          return;
+        } catch {}
+      }
+
+      const iframe = getIframe();
+      if (iframe) {
+        if (hasLiveBridge && iframe.src && iframe.src.includes("youtube.com/embed")) {
+          post("cueVideoById", [{ videoId: nextVideoId, startSeconds: startSec }]);
+          return;
+        }
+        const targetSrc = buildEmbedUrl(nextVideoId, startSec, false);
         if (!iframe.src || !iframe.src.includes(nextVideoId)) {
           boundIframe = null;
           iframe.src = targetSrc;
@@ -510,6 +571,13 @@ export function createIframeEngine(
       errorCallbacks.push(cb);
       return () => {
         errorCallbacks = errorCallbacks.filter((fn) => fn !== cb);
+      };
+    },
+
+    onCued(cb: (videoId: string) => void): () => void {
+      cuedCallbacks.push(cb);
+      return () => {
+        cuedCallbacks = cuedCallbacks.filter((fn) => fn !== cb);
       };
     },
   };

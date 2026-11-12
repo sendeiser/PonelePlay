@@ -45,7 +45,14 @@ import app.poneleplay.tv.data.TvProposal
 import app.poneleplay.tv.data.TvRoulette
 import app.poneleplay.tv.data.TvSkipVote
 import app.poneleplay.tv.data.TvTrack
+import app.poneleplay.tv.sync.SyncAnchorData
+import app.poneleplay.tv.sync.SyncClockEstimator
+import app.poneleplay.tv.sync.SyncStatusState
+import app.poneleplay.tv.sync.SyncTransportMode
 import app.poneleplay.tv.util.QrGenerator
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlin.math.abs
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -145,6 +152,10 @@ fun TvScreen(
     themeName: String = "neon",
     scaleName: String = "normal",
     localIsMuted: Boolean = false,
+    useLegacySupabaseWs: Boolean = true,
+    syncStatus: SyncStatusState? = null,
+    liveAnchor: SyncAnchorData? = null,
+    estimatedServerMs: (() -> Long)? = null,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit,
     onDisplayConfig: (String) -> Unit = {},
@@ -226,6 +237,55 @@ fun TvScreen(
 
     val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
 
+    // Compute live initial position when joining a playing room mid-track using synced clock offset
+    val computedInitialSec = remember(currentVideoId, liveAnchor?.seq, feed.playback.positionSeconds) {
+        val anchor = liveAnchor
+        if (anchor != null && estimatedServerMs != null && anchor.track?.youtubeVideoId == currentVideoId) {
+            SyncClockEstimator.computeExpectedPositionSec(anchor, estimatedServerMs()).toFloat()
+        } else {
+            feed.playback.positionSeconds.coerceAtLeast(0f)
+        }
+    }
+
+    // Continuous 1s clock-locked drift guard when connected to LAN or Cloud WS
+    var lastDriftCorrectionAt by remember { mutableStateOf(0L) }
+    var lastDriftTrackStartAt by remember(currentVideoId) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(currentVideoId, liveAnchor, feed.playback.isPaused, syncStatus?.connected) {
+        val estClock = estimatedServerMs ?: return@LaunchedEffect
+        val anchor = liveAnchor ?: return@LaunchedEffect
+        if (syncStatus?.connected != true) return@LaunchedEffect
+
+        while (isActive) {
+            delay(1000L)
+            if (videoController.activeBarrierVideoId == currentVideoId) continue
+            if (anchor.isPaused || feed.playback.isPaused) continue
+            if (anchor.track?.youtubeVideoId != currentVideoId) continue
+            if (videoController.currentPlayerState != 1) continue
+
+            val nowLocal = System.currentTimeMillis()
+            val expectedSec = SyncClockEstimator.computeExpectedPositionSec(anchor, estClock())
+            val durationLimit = (feed.nowPlaying?.durationSeconds ?: 0).takeIf { it > 0 }?.toDouble()
+            if (durationLimit != null && expectedSec > durationLimit - 1.5) continue
+
+            val currentPos = videoController.currentPositionSec.toDouble()
+            val isEarlyWindow = expectedSec < 6.0 || (nowLocal - lastDriftTrackStartAt < 6500L)
+            val cooldownMs = if (isEarlyWindow) 1200L else 2800L
+            if (nowLocal - lastDriftCorrectionAt < cooldownMs) continue
+
+            if (
+                SyncClockEstimator.shouldCorrectDrift(
+                    currentVideoSec = currentPos,
+                    expectedSec = expectedSec,
+                    isPaused = false,
+                    isEarlyWindow = isEarlyWindow
+                ) && abs(currentPos - expectedSec) < 25.0
+            ) {
+                lastDriftCorrectionAt = nowLocal
+                videoController.seekTo(expectedSec.toFloat())
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -239,7 +299,8 @@ fun TvScreen(
             isPaused = feed.playback.isPaused,
             volume = effectiveVolume,
             isMuted = effectiveMuted,
-            initialPositionSeconds = feed.playback.positionSeconds.coerceAtLeast(0f),
+            initialPositionSeconds = computedInitialSec,
+            useLegacySupabaseWs = useLegacySupabaseWs,
             controller = videoController,
             onEnded = onVideoEnded,
             onDisplayConfig = onDisplayConfig,
@@ -260,7 +321,8 @@ fun TvScreen(
                     showQueue = showQueue,
                     showProposals = showProposals,
                     theme = theme,
-                    scaleFactor = scaleFactor
+                    scaleFactor = scaleFactor,
+                    syncStatus = syncStatus
                 )
             }
             TvScreenMode.CLEAN -> {
@@ -271,7 +333,8 @@ fun TvScreen(
                     showQueue = false,
                     showProposals = false,
                     theme = theme,
-                    scaleFactor = scaleFactor
+                    scaleFactor = scaleFactor,
+                    syncStatus = syncStatus
                 )
             }
             TvScreenMode.PLAYLIST -> {
@@ -349,7 +412,8 @@ private fun TvModeVideoOverlays(
     showQueue: Boolean = true,
     showProposals: Boolean = true,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
-    scaleFactor: Float = 1.0f
+    scaleFactor: Float = 1.0f,
+    syncStatus: SyncStatusState? = null
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val maxFloatingItems = ((maxHeight.value - 205f) / (38f * scaleFactor)).toInt().coerceAtLeast(4)
@@ -659,6 +723,26 @@ private fun TvModeVideoOverlays(
                         fontSize = (10.5f * scaleFactor).sp,
                         fontWeight = FontWeight.SemiBold
                     )
+                    if (syncStatus?.connected == true) {
+                        val rttText = syncStatus.rttMs?.let { " ${it}ms" } ?: ""
+                        val syncLabel = if (syncStatus.transport == SyncTransportMode.LAN) {
+                            "⚡ LAN$rttText"
+                        } else {
+                            "☁ Sync$rttText"
+                        }
+                        val syncColor = if (syncStatus.transport == SyncTransportMode.LAN) {
+                            Color(0xFF22D3EE)
+                        } else {
+                            Color(0xFF818CF8)
+                        }
+                        Text(
+                            text = syncLabel,
+                            color = syncColor,
+                            fontSize = (9f * scaleFactor).sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }

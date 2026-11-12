@@ -1,5 +1,6 @@
 import { createBrowserSupabase } from "./supabase/browser";
 import type { PlayerTrack } from "./player";
+import { findActiveSyncClient } from "@/lib/sync/client";
 
 export interface PlaybackState {
   ok: boolean;
@@ -103,8 +104,24 @@ export async function sendPlaybackCommand(
     }
   }
 
-  // 3. Broadcast via realtime channel for sub-30ms instant TV reaction
+const recentSyncCommandCache = new Map<string, number>();
+
+  // 3. Push over LAN/Cloud WebSocket Sync if active, else fallback to Supabase broadcast
   try {
+    const activeSync = findActiveSyncClient(slug);
+    if (activeSync) {
+      const sig = `${slug}:${command}:${JSON.stringify(payload || {})}`;
+      const now = Date.now();
+      const lastSent = recentSyncCommandCache.get(sig) ?? 0;
+      if (now - lastSent > 350) {
+        recentSyncCommandCache.set(sig, now);
+        activeSync.sendCommand(command, payload, {
+          useBarrier:
+            command === "play_now" || command === "skip" || command === "play_playlist",
+        });
+      }
+    }
+
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
     const existing = channels.find(
       (c) =>

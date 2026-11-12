@@ -3,6 +3,8 @@ import { nightStateSchema, type NightState } from "./contracts";
 import type { NightStateSource } from "@/hooks/use-night-state";
 import { partitionQueueAndProposals } from "@/lib/domain/queue";
 import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
+import type { SyncRole } from "@/lib/sync/protocol";
+import { acquireSyncClient, releaseSyncClient } from "@/lib/sync/client";
 
 export async function fetchNightState(slug: string): Promise<NightState> {
   const supabase = createBrowserSupabase();
@@ -96,10 +98,76 @@ export async function fetchNightState(slug: string): Promise<NightState> {
   return parsed;
 }
 
-export function createNightStateSource(slug: string): NightStateSource {
+export function createNightStateSource(
+  slug: string,
+  role: SyncRole = "client",
+): NightStateSource {
+  let activeClient: ReturnType<typeof acquireSyncClient> | null = null;
+  let lastNotifiedRevision: number | null = null;
+
   return {
     fetch: () => fetchNightState(slug),
+    isPushConnected: () => Boolean(activeClient?.isConnected()),
+    onTransportChange: (cb: (connected: boolean) => void) => {
+      const probe = acquireSyncClient({ slug, role });
+      if (!probe.hasTargetsConfigured()) {
+        releaseSyncClient(probe);
+        cb(false);
+        return () => {};
+      }
+      const unsub = probe.onStatus((status) => cb(status.connected));
+      return () => {
+        unsub();
+        releaseSyncClient(probe);
+      };
+    },
     subscribe: (onChange: () => void) => {
+      const syncClient = acquireSyncClient({ slug, role });
+      activeClient = syncClient;
+
+      if (syncClient.hasTargetsConfigured()) {
+        const unsubSnapshot = syncClient.on("room:snapshot", ({ snapshot }) => {
+          if (lastNotifiedRevision === null) {
+            lastNotifiedRevision = snapshot.revision;
+            if (snapshot.revision > 0) {
+              onChange();
+            }
+            return;
+          }
+          if (snapshot.revision !== lastNotifiedRevision) {
+            lastNotifiedRevision = snapshot.revision;
+            onChange();
+          }
+        });
+
+        const unsubParty = syncClient.on("party:event", ({ payload }) => {
+          const type = typeof payload?.type === "string" ? payload.type : "";
+          if (
+            type === "party_config_updated" ||
+            type === "party_skip_vote_updated" ||
+            type === "party_skip_vote_passed" ||
+            type === "party_roulette_spin" ||
+            type === "party_duel_start" ||
+            type === "live_dedication"
+          ) {
+            onChange();
+          }
+        });
+
+        return () => {
+          unsubSnapshot();
+          unsubParty();
+          releaseSyncClient(syncClient);
+          if (activeClient === syncClient) {
+            activeClient = null;
+          }
+        };
+      }
+
+      releaseSyncClient(syncClient);
+      activeClient = null;
+
+      // Offline/legacy fallback: subscribe to Supabase Postgres changes only when no WS sync engine is configured
       const supabase = createBrowserSupabase();
       const instanceId =
         typeof crypto !== "undefined" && crypto.randomUUID

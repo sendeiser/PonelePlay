@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import {
   resolveActiveSkipVoteForTrack,
-  resolveEffectiveQueueThreshold,
   type PartyConfig,
 } from "@/lib/domain/party";
 import { normalizePartyConfigPatch } from "@/lib/api/party-control";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import {
+  getCachedPartyConfig,
+  notifySyncRoom,
+  setCachedPartyConfig,
+} from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -17,19 +21,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "slug_required" }, { status: 400 });
     }
 
+    const forceFresh = req.nextUrl.searchParams.get("fresh") === "1";
+    if (!forceFresh) {
+      const cached = getCachedPartyConfig<Record<string, unknown>>(slug);
+      if (cached) {
+        return NextResponse.json(cached);
+      }
+    }
+
     const admin = createAdminSupabase();
     const { venueId, partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, slug);
-
-    // Self-heal any guest proposals inserted by legacy RPC with vote_count = 0 so they start at 1 vote in pre-queue
-    if (venueId) {
-      await admin
-        .from("queue_items")
-        .update({ vote_count: 1 })
-        .eq("venue_id", venueId)
-        .eq("status", "queued")
-        .eq("vote_count", 0)
-        .not("proposed_by_participant_id", "is", null);
-    }
 
     const now = Date.now();
     const cleanedConfig = { ...partyConfig };
@@ -73,11 +74,13 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const payload = {
       ok: true,
       partyConfig: cleanedConfig,
       itemMeta,
-    });
+    };
+    setCachedPartyConfig(slug, payload);
+    return NextResponse.json(payload);
   } catch (err: unknown) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "server_error" },
@@ -196,6 +199,15 @@ export async function POST(req: NextRequest) {
     } catch {
       // Ignore if columns not yet migrated
     }
+
+    void notifySyncRoom(slug, {
+      partyEvent: {
+        type: "party_config_updated",
+        partyConfig: nextConfig,
+        timestamp: Date.now(),
+      },
+      refreshFromOrigin: true,
+    });
 
     return NextResponse.json({
       ok: true,

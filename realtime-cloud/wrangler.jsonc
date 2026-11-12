@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "poneleplay-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-05-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SYNC_ROOMS",
+        "class_name": "PoneleSyncRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["PoneleSyncRoom"]
+    }
+  ],
+  "vars": {
+    "NEXT_APP_ORIGIN": "https://poneleplay.netlify.app"
+  }
+}
+

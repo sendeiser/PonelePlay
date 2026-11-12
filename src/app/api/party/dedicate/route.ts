@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { sanitizeDedication } from "@/lib/domain/party";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export async function POST(req: NextRequest) {
   try {
@@ -215,6 +216,16 @@ export async function POST(req: NextRequest) {
       });
       await admin.removeChannel(channel);
     }
+
+    void notifySyncRoom(slug, {
+      partyEvent: {
+        type: "live_dedication",
+        guestName: cleanGuestName,
+        dedication: cleanDedication,
+        timestamp,
+      },
+      refreshFromOrigin: true,
+    });
 
     return NextResponse.json({
       ok: true,

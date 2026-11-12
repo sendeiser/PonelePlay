@@ -11,8 +11,8 @@ android {
     applicationId = "app.poneleplay.tv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 4
-    versionName = "2.8.0"
+    versionCode = 5
+    versionName = "2.9.0"
   }
 
   buildTypes {
@@ -65,6 +65,8 @@ dependencies {
 
   // QR Code generator
   implementation("com.google.zxing:core:3.5.3")
+  // Native WebSocket sync client (LAN Hub + Cloud failover)
+  implementation("com.squareup.okhttp3:okhttp:4.12.0")
   // Tooling
   debugImplementation(libs.androidx.compose.ui.tooling)
   // Instrumented tests

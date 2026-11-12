@@ -3,6 +3,7 @@ import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 import { normalizePartyConfigPatch } from "@/lib/api/party-control";
 import type { PartyConfig } from "@/lib/domain/party";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug");
@@ -200,6 +201,17 @@ export async function POST(req: NextRequest) {
         });
       }
     }
+
+    void notifySyncRoom(body.slug, {
+      partyEvent: savedPartyConfig
+        ? {
+            type: "party_config_updated",
+            partyConfig: savedPartyConfig,
+            timestamp: Date.now(),
+          }
+        : null,
+      refreshFromOrigin: true,
+    });
 
     return NextResponse.json({
       ok: true,

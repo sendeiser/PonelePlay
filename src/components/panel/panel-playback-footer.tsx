@@ -54,6 +54,13 @@ import {
 import { ManualPlaybackModal } from "./manual-playback-modal";
 import { TvDevicesManagerModal } from "./tv-devices-manager-modal";
 import { PanelAudioEngine, type PanelAudioEngineRef } from "./panel-audio-engine";
+import {
+  acquireSyncClient,
+  releaseSyncClient,
+  type PoneleSyncClient,
+  type SyncStatusState,
+} from "@/lib/sync/client";
+import type { PlaybackAnchor, SyncTrack } from "@/lib/sync/protocol";
 
 interface PanelPlaybackFooterProps {
   slug: string;
@@ -101,6 +108,17 @@ export function PanelPlaybackFooter({
   const [pendingActionId, setPendingActionId] = useState<string | null>(null);
   const audioEngineRef = useRef<PanelAudioEngineRef>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const syncClientRef = useRef<PoneleSyncClient | null>(null);
+  const activeBarrierIdRef = useRef<string | null>(null);
+  const activeBarrierVideoIdRef = useRef<string | null>(null);
+  const startBarrierTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatusState>({
+    transport: "offline",
+    connected: false,
+    rttMs: null,
+    offsetMs: 0,
+    presence: null,
+  });
   const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
   currentTrackRef.current = currentTrack;
   const lastProgressBroadcastRef = useRef<number>(0);
@@ -108,8 +126,11 @@ export function PanelPlaybackFooter({
   const hasPreloadedRef = useRef(false);
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
-  const nightSource = useMemo(() => createNightStateSource(slug), [slug]);
-  const { state: nightState, loading: nightLoading, refresh: refreshNightState } = useNightState(nightSource);
+  const nightSource = useMemo(() => createNightStateSource(slug, "master"), [slug]);
+  const { state: nightState, loading: nightLoading, refresh: refreshNightState } = useNightState(
+    nightSource,
+    { pollMs: 25_000, connectedPollMs: 45_000 },
+  );
 
   // Load venue fallback tracks so cabina and TV always have music playing
   useEffect(() => {
@@ -509,155 +530,277 @@ export function PanelPlaybackFooter({
       window.removeEventListener("poneleplay:playback-command", onLocalPlaybackCommand);
   }, [slug, setLocalTrack, refreshNightState]);
 
-  // 2. Realtime listener
+  // 2. Unified LAN / Cloud WebSocket Sync (with Supabase fallback when unconfigured)
   useEffect(() => {
     let active = true;
     let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+    const syncClient = acquireSyncClient({ slug, role: "master" });
 
-    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+    const toPlayerTrack = (t: SyncTrack): PlayerTrack => ({
+      itemId: t.itemId,
+      trackId: t.trackId,
+      title: t.title,
+      artist: t.artist,
+      source: t.source || "youtube",
+      durationSeconds: t.durationSeconds ?? 210,
+      youtubeVideoId: t.youtubeVideoId || undefined,
+      thumbnailUrl: t.thumbnailUrl ?? null,
+      voteCount: t.voteCount ?? 0,
+      guestName: t.guestName ?? null,
+      dedication: t.dedication ?? null,
+      isKaraoke: Boolean(t.isKaraoke),
+    });
+
+    const applyIncomingAnchor = (anchor: PlaybackAnchor) => {
       if (!active) return;
-      const supabase = createBrowserSupabase();
-
-      const existing = supabase.getChannels().find(
-        (c) =>
-          c.topic === `realtime:playback-control:${slug}` ||
-          c.topic === `playback-control:${slug}`,
-      );
-      if (existing) {
-        void supabase.removeChannel(existing);
+      if (anchor.seq > 0) {
+        if (anchor.seq < lastCommandSeqRef.current) return;
+        lastCommandSeqRef.current = anchor.seq;
       }
+      setIsPaused(anchor.isPaused);
+      setVolume(anchor.volume);
+      setIsMuted(anchor.cabinaMuted);
+      setTvMuted(anchor.tvMuted);
+      setKaraokeMode(anchor.karaokeMode);
+      if (anchor.track) {
+        applyExternalTrack(toPlayerTrack(anchor.track));
+      }
+    };
 
-      channel = supabase
-        .channel(`playback-control:${slug}`)
-        .on(
-          "broadcast",
-          { event: "playback_command" },
-          (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
-            if (!active) return;
-            const cmd = msg.payload?.command;
-            const p = msg.payload?.payload || {};
+    const unsubStatus = syncClient.onStatus((st) => {
+      if (active) setSyncStatus(st);
+    });
 
-            if (cmd === "pause") setIsPaused(true);
-            else if (cmd === "resume") setIsPaused(false);
-            else if (cmd === "toggle_pause") setIsPaused((prev) => !prev);
-            else if (cmd === "set_volume") {
-              setVolume(Number(p.volume ?? 85));
-              setIsMuted(false);
-            } else if (cmd === "mute") setIsMuted(true);
-            else if (cmd === "unmute") setIsMuted(false);
-            else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
-            else if (cmd === "set_tv_mute") setTvMuted(Boolean(p.tvMuted));
-            else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
-            else if (cmd === "seek" && typeof p.seconds === "number") {
-              setElapsed(Math.floor(p.seconds));
-            } else if (cmd === "play_now" && p.track) {
-              // Explicit play command from another operator: authoritative
-              const incoming = p.track as PlayerTrack;
-              const cur = currentTrackRef.current;
-              if (cur && trackAudioKey(cur) === trackAudioKey(incoming)) {
-                setIsPaused(false);
-                return;
-              }
-              lastLiveKeyRef.current = trackAudioKey(incoming);
-              setLocalTrack(incoming);
-              setIsPaused(false);
-              setElapsed(0);
-              setVideoDuration(null);
-            }
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "party_event" },
-          (msg: { payload?: Record<string, unknown> }) => {
-            if (!active || !msg.payload) return;
-            const p = msg.payload;
-            if (p.type === "party_skip_vote_updated" && p.skipped) {
-              const next = p.nextTrack as PlayerTrack | null | undefined;
-              if (next && (next.youtubeVideoId || next.itemId)) {
-                // The server already advanced the queue: just follow it (never skip twice)
-                const nextKey = trackAudioKey(next);
+    let unsubSnap: (() => void) | null = null;
+    let unsubAnchor: (() => void) | null = null;
+    let unsubPreload: (() => void) | null = null;
+    let unsubGo: (() => void) | null = null;
+    let unsubParty: (() => void) | null = null;
+
+    if (syncClient.hasTargetsConfigured()) {
+      syncClientRef.current = syncClient;
+
+      const latest = syncClient.getLatestSnapshot();
+      if (latest?.anchor) applyIncomingAnchor(latest.anchor);
+
+      unsubSnap = syncClient.on("room:snapshot", ({ snapshot }) => {
+        applyIncomingAnchor(snapshot.anchor);
+      });
+
+      unsubAnchor = syncClient.on("sync:anchor", ({ anchor, forceSeek }) => {
+        applyIncomingAnchor(anchor);
+        if (forceSeek) {
+          setElapsed(Math.floor(anchor.anchorPositionSec));
+        }
+      });
+
+      unsubPreload = syncClient.on("sync:preload", ({ barrierId, track, startPositionSec }) => {
+        if (!active) return;
+        const incoming = toPlayerTrack(track);
+        activeBarrierIdRef.current = barrierId;
+        activeBarrierVideoIdRef.current = track.youtubeVideoId ?? null;
+        lastLiveKeyRef.current = trackAudioKey(incoming);
+        setLocalTrack(incoming);
+        setIsPaused(false);
+        setElapsed(Math.floor(startPositionSec));
+        setVideoDuration(track.durationSeconds ?? null);
+        audioEngineRef.current?.holdUntilSynced(2200);
+        // Send master readiness after iframe cue settle or immediately for cached/local audio
+        setTimeout(() => {
+          if (active && activeBarrierIdRef.current === barrierId) {
+            syncClient.sendReady(barrierId);
+          }
+        }, 140);
+      });
+
+      unsubGo = syncClient.on("sync:go", ({ barrierId, startPositionSec, startAtServerMs, anchor }) => {
+        if (!active) return;
+        if (activeBarrierIdRef.current === barrierId) {
+          activeBarrierIdRef.current = null;
+        }
+        applyIncomingAnchor(anchor);
+        if (startBarrierTimerRef.current) {
+          clearTimeout(startBarrierTimerRef.current);
+          startBarrierTimerRef.current = null;
+        }
+        const delayMs = syncClient.msUntilServerTime(startAtServerMs);
+        audioEngineRef.current?.scheduleStartAt(delayMs, startPositionSec);
+      });
+
+      unsubParty = syncClient.on("party:event", ({ payload }) => {
+        if (!active || !payload) return;
+        if (payload.type === "party_skip_vote_updated" && payload.skipped) {
+          const next = payload.nextTrack as PlayerTrack | null | undefined;
+          if (next && (next.youtubeVideoId || next.itemId)) {
+            const nextKey = trackAudioKey(next);
+            const cur = currentTrackRef.current;
+            if (cur && trackAudioKey(cur) === nextKey) return;
+            lastLiveKeyRef.current = nextKey;
+            setLocalTrack(next);
+            setIsPaused(false);
+            setElapsed(0);
+            setVideoDuration(null);
+            showToast("⏭️ La sala votó cambiar la canción");
+          } else {
+            void handleSkipNextRef.current();
+          }
+        }
+      });
+    } else {
+      releaseSyncClient(syncClient);
+      syncClientRef.current = null;
+
+      void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+        if (!active) return;
+        const supabase = createBrowserSupabase();
+
+        const existing = supabase.getChannels().find(
+          (c) =>
+            c.topic === `realtime:playback-control:${slug}` ||
+            c.topic === `playback-control:${slug}`,
+        );
+        if (existing) {
+          void supabase.removeChannel(existing);
+        }
+
+        channel = supabase
+          .channel(`playback-control:${slug}`)
+          .on(
+            "broadcast",
+            { event: "playback_command" },
+            (msg: { payload?: { command?: string; payload?: Record<string, unknown> } }) => {
+              if (!active) return;
+              const cmd = msg.payload?.command;
+              const p = msg.payload?.payload || {};
+
+              if (cmd === "pause") setIsPaused(true);
+              else if (cmd === "resume") setIsPaused(false);
+              else if (cmd === "toggle_pause") setIsPaused((prev) => !prev);
+              else if (cmd === "set_volume") {
+                setVolume(Number(p.volume ?? 85));
+                setIsMuted(false);
+              } else if (cmd === "mute") setIsMuted(true);
+              else if (cmd === "unmute") setIsMuted(false);
+              else if (cmd === "toggle_mute") setIsMuted((prev) => !prev);
+              else if (cmd === "set_tv_mute") setTvMuted(Boolean(p.tvMuted));
+              else if (cmd === "set_karaoke_mode") setKaraokeMode(Boolean(p.enabled));
+              else if (cmd === "seek" && typeof p.seconds === "number") {
+                setElapsed(Math.floor(p.seconds));
+              } else if (cmd === "play_now" && p.track) {
+                const incoming = p.track as PlayerTrack;
                 const cur = currentTrackRef.current;
-                if (cur && trackAudioKey(cur) === nextKey) return;
-                lastLiveKeyRef.current = nextKey;
-                setLocalTrack(next);
+                if (cur && trackAudioKey(cur) === trackAudioKey(incoming)) {
+                  setIsPaused(false);
+                  return;
+                }
+                lastLiveKeyRef.current = trackAudioKey(incoming);
+                setLocalTrack(incoming);
                 setIsPaused(false);
                 setElapsed(0);
                 setVideoDuration(null);
-                showToast("⏭️ La sala votó cambiar la canción");
-              } else {
-                void handleSkipNextRef.current();
               }
-            }
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "tv_playback_progress" },
-          (msg: {
-            payload?: {
-              currentTime?: number;
-              duration?: number;
-              isPaused?: boolean;
-              trackId?: string;
-              isVideoFullscreen?: boolean;
-              isFromAdminAudio?: boolean;
-            };
-          }) => {
-            if (!active || !msg.payload) return;
-            // The Cabina is the MASTER audio authority.
-            // Under NO circumstance should loopback echo or external TV progress overwrite
-            // Cabina's local elapsed slider or pause state!
-            if (msg.payload.isFromAdminAudio) return;
-            if (currentTrackRef.current) return;
+            },
+          )
+          .on(
+            "broadcast",
+            { event: "party_event" },
+            (msg: { payload?: Record<string, unknown> }) => {
+              if (!active || !msg.payload) return;
+              const p = msg.payload;
+              if (p.type === "party_skip_vote_updated" && p.skipped) {
+                const next = p.nextTrack as PlayerTrack | null | undefined;
+                if (next && (next.youtubeVideoId || next.itemId)) {
+                  const nextKey = trackAudioKey(next);
+                  const cur = currentTrackRef.current;
+                  if (cur && trackAudioKey(cur) === nextKey) return;
+                  lastLiveKeyRef.current = nextKey;
+                  setLocalTrack(next);
+                  setIsPaused(false);
+                  setElapsed(0);
+                  setVideoDuration(null);
+                  showToast("⏭️ La sala votó cambiar la canción");
+                } else {
+                  void handleSkipNextRef.current();
+                }
+              }
+            },
+          )
+          .on(
+            "broadcast",
+            { event: "tv_playback_progress" },
+            (msg: {
+              payload?: {
+                currentTime?: number;
+                duration?: number;
+                isPaused?: boolean;
+                trackId?: string;
+                isVideoFullscreen?: boolean;
+                isFromAdminAudio?: boolean;
+              };
+            }) => {
+              if (!active || !msg.payload) return;
+              if (msg.payload.isFromAdminAudio) return;
+              if (currentTrackRef.current) return;
 
-            const { currentTime, duration: d, isPaused: p } = msg.payload;
-            if (typeof currentTime === "number" && !isNaN(currentTime)) {
-              setElapsed(Math.floor(currentTime));
-            }
-            if (typeof d === "number" && !isNaN(d) && d > 0) {
-              setVideoDuration(Math.floor(d));
-            }
-            if (typeof p === "boolean") {
-              setIsPaused(p);
-            }
-          },
-        )
-        .on(
-          "broadcast",
-          { event: "tv_ready" },
-          () => {
-            if (!active) return;
-            // TV finished buffering the new video: release Cabina start-hold immediately
-            // so Cabina and TV start playing at 0:00 in lockstep!
-            audioEngineRef.current?.releaseStartHold();
-          },
-        )
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "venue_playback_state" },
-          (payload: { new?: { is_paused?: boolean; volume?: number; is_muted?: boolean; karaoke_mode?: boolean; current_track?: PlayerTrack; command_seq?: number } }) => {
-            if (!active || !payload.new) return;
-            const st = payload.new;
-            // Drop out-of-order (stale) database events
-            const seq = Number(st.command_seq ?? 0);
-            if (seq > 0) {
-              if (seq < lastCommandSeqRef.current) return;
-              lastCommandSeqRef.current = seq;
-            }
-            if (typeof st.is_paused === "boolean") setIsPaused(st.is_paused);
-            if (typeof st.volume === "number") setVolume(st.volume);
-            if (typeof st.is_muted === "boolean") setIsMuted(st.is_muted);
-            if (typeof st.karaoke_mode === "boolean") setKaraokeMode(st.karaoke_mode);
-            if (st.current_track) applyExternalTrack(st.current_track);
-          },
-        )
-        .subscribe();
-      channelRef.current = channel;
-    });
+              const { currentTime, duration: d, isPaused: p } = msg.payload;
+              if (typeof currentTime === "number" && !isNaN(currentTime)) {
+                setElapsed(Math.floor(currentTime));
+              }
+              if (typeof d === "number" && !isNaN(d) && d > 0) {
+                setVideoDuration(Math.floor(d));
+              }
+              if (typeof p === "boolean") {
+                setIsPaused(p);
+              }
+            },
+          )
+          .on(
+            "broadcast",
+            { event: "tv_ready" },
+            () => {
+              if (!active) return;
+              audioEngineRef.current?.releaseStartHold();
+            },
+          )
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "venue_playback_state" },
+            (payload: { new?: { is_paused?: boolean; volume?: number; is_muted?: boolean; karaoke_mode?: boolean; current_track?: PlayerTrack; command_seq?: number } }) => {
+              if (!active || !payload.new) return;
+              const st = payload.new;
+              const seq = Number(st.command_seq ?? 0);
+              if (seq > 0) {
+                if (seq < lastCommandSeqRef.current) return;
+                lastCommandSeqRef.current = seq;
+              }
+              if (typeof st.is_paused === "boolean") setIsPaused(st.is_paused);
+              if (typeof st.volume === "number") setVolume(st.volume);
+              if (typeof st.is_muted === "boolean") setIsMuted(st.is_muted);
+              if (typeof st.karaoke_mode === "boolean") setKaraokeMode(st.karaoke_mode);
+              if (st.current_track) applyExternalTrack(st.current_track);
+            },
+          )
+          .subscribe();
+        channelRef.current = channel;
+      });
+    }
 
     return () => {
       active = false;
+      unsubStatus();
+      unsubSnap?.();
+      unsubAnchor?.();
+      unsubPreload?.();
+      unsubGo?.();
+      unsubParty?.();
+      if (startBarrierTimerRef.current) {
+        clearTimeout(startBarrierTimerRef.current);
+        startBarrierTimerRef.current = null;
+      }
+      if (syncClientRef.current) {
+        releaseSyncClient(syncClientRef.current);
+        syncClientRef.current = null;
+      }
       channelRef.current = null;
       if (channel) {
         void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
@@ -666,9 +809,16 @@ export function PanelPlaybackFooter({
         });
       }
     };
-  }, [slug, applyExternalTrack]);
+  }, [slug, applyExternalTrack, setLocalTrack]);
 
   const broadcastControl = useCallback((command: string, payload: Record<string, unknown> = {}) => {
+    if (syncClientRef.current?.isConnected()) {
+      syncClientRef.current.sendCommand(command, payload, {
+        useBarrier:
+          command === "play_now" || command === "skip" || command === "play_playlist",
+      });
+      return;
+    }
     if (channelRef.current) {
       void channelRef.current.send({
         type: "broadcast",
@@ -1303,10 +1453,22 @@ export function PanelPlaybackFooter({
             ) : (
               <div
                 className="hidden 2xl:flex h-8 shrink-0 items-center gap-1.5 bg-th-emerald-soft border border-th-emerald/30 text-th-emerald px-2.5 rounded-xl text-[11px] font-semibold whitespace-nowrap"
-                title="Sonido principal del salón activo desde esta cabina"
+                title={
+                  syncStatus.transport === "lan"
+                    ? `Sincronización LAN ultrarrápida (${syncStatus.rttMs ?? "<2"}ms)`
+                    : syncStatus.transport === "cloud"
+                      ? `Sincronización Cloud Edge (${syncStatus.rttMs ?? "--"}ms)`
+                      : "Sonido principal del salón activo desde esta cabina"
+                }
               >
                 <span className="size-2 rounded-full bg-th-emerald animate-pulse shrink-0" />
-                <span>Cabina ON</span>
+                <span>
+                  {syncStatus.transport === "lan"
+                    ? `LAN${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                    : syncStatus.transport === "cloud"
+                      ? `Sync${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : " OK"}`
+                      : "Cabina ON"}
+                </span>
               </div>
             )}
 
@@ -1417,7 +1579,31 @@ export function PanelPlaybackFooter({
           }
 
           const now = Date.now();
-          if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 1000) {
+          if (syncClientRef.current?.isConnected() && currentTrack && now - lastProgressBroadcastRef.current >= 2500) {
+            lastProgressBroadcastRef.current = now;
+            syncClientRef.current.sendProgress({
+              currentTime: curr,
+              duration: dur ?? currentTrack.durationSeconds ?? 210,
+              isPaused,
+              tvMuted,
+              volume,
+              isFromAdminAudio: true,
+              track: {
+                itemId: currentTrack.itemId,
+                trackId: currentTrack.trackId,
+                title: currentTrack.title,
+                artist: currentTrack.artist,
+                source: currentTrack.source === "upload" || currentTrack.source === "spotify" ? currentTrack.source : "youtube",
+                durationSeconds: dur ?? currentTrack.durationSeconds ?? 210,
+                youtubeVideoId: currentTrack.youtubeVideoId ?? null,
+                thumbnailUrl: currentTrack.thumbnailUrl ?? null,
+                voteCount: currentTrack.voteCount,
+                guestName: currentTrack.guestName ?? null,
+                dedication: currentTrack.dedication ?? null,
+                isKaraoke: currentTrack.isKaraoke ?? false,
+              },
+            });
+          } else if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 1500) {
             lastProgressBroadcastRef.current = now;
             void channelRef.current.send({
               type: "broadcast",
@@ -1435,6 +1621,15 @@ export function PanelPlaybackFooter({
                 sentAt: now,
               },
             });
+          }
+        }}
+        onTrackBuffered={(videoId) => {
+          if (
+            activeBarrierIdRef.current &&
+            syncClientRef.current?.isConnected() &&
+            (!activeBarrierVideoIdRef.current || activeBarrierVideoIdRef.current === videoId)
+          ) {
+            syncClientRef.current.sendReady(activeBarrierIdRef.current);
           }
         }}
         onAudioBlockedChange={(blocked) => setIsAudioBlocked(blocked)}

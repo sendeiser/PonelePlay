@@ -3,7 +3,11 @@ package app.poneleplay.tv.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.poneleplay.tv.TVButton
+import app.poneleplay.tv.sync.SyncStatusState
+import app.poneleplay.tv.sync.SyncTransportMode
 
 @Composable
 fun TvSettingsDialog(
@@ -23,9 +29,13 @@ fun TvSettingsDialog(
     currentSlug: String,
     currentMode: TvScreenMode,
     isMuted: Boolean,
-    currentVersionName: String = "2.6.0",
+    currentVersionName: String = "2.9.0",
+    syncStatus: SyncStatusState = SyncStatusState(),
+    manualLanHost: String = "",
     onToggleMode: () -> Unit,
     onToggleMute: () -> Unit,
+    onSaveManualLanHost: (String) -> Unit = {},
+    onForceReconnectSync: () -> Unit = {},
     onUnpair: () -> Unit,
     onCheckUpdates: () -> Unit,
     onReload: () -> Unit,
@@ -35,6 +45,8 @@ fun TvSettingsDialog(
     if (!isOpen) return
 
     val firstFocusRequester = remember { FocusRequester() }
+    var showLanEditor by remember { mutableStateOf(false) }
+    var lanInput by remember(manualLanHost, isOpen) { mutableStateOf(manualLanHost) }
 
     LaunchedEffect(Unit) {
         kotlinx.coroutines.delay(100)
@@ -46,14 +58,16 @@ fun TvSettingsDialog(
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .width(540.dp)
+                .width(560.dp)
                 .background(Color(0xFF0F1424), RoundedCornerShape(20.dp))
                 .border(2.dp, Color(0xFF3B4970), RoundedCornerShape(20.dp))
-                .padding(28.dp)
+                .padding(24.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Header
                 Row(
@@ -139,7 +153,123 @@ fun TvSettingsDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                // Live LAN / Cloud Sync Status Box
+                val transportLabel = when (syncStatus.transport) {
+                    SyncTransportMode.LAN -> "⚡ LAN DIRECTO"
+                    SyncTransportMode.CLOUD -> "☁️ NUBE WEBSOCKET"
+                    SyncTransportMode.CONNECTING -> "🔄 CONECTANDO..."
+                    SyncTransportMode.OFFLINE -> "📡 HTTP FALLBACK"
+                }
+                val transportColor = when (syncStatus.transport) {
+                    SyncTransportMode.LAN -> Color(0xFF22D3EE)
+                    SyncTransportMode.CLOUD -> Color(0xFF34D399)
+                    SyncTransportMode.CONNECTING -> Color(0xFFFBBF24)
+                    SyncTransportMode.OFFLINE -> Color(0xFF94A3B8)
+                }
+                val rttLabel = syncStatus.rttMs?.let { " • ${it}ms" } ?: ""
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF141A2E), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFF263252), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "SINCRONIZACIÓN EN TIEMPO REAL:",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "$transportLabel$rttLabel",
+                                color = transportColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        val hostInfo = when {
+                            manualLanHost.isNotBlank() -> "IP manual Cabina: $manualLanHost"
+                            !syncStatus.discoveredLanHost.isNullOrBlank() -> "Auto mDNS: ${syncStatus.discoveredLanHost}"
+                            syncStatus.activeHostLabel.isNotBlank() -> syncStatus.activeHostLabel
+                            else -> "Auto mDNS activo (puerto 4321)"
+                        }
+                        Text(
+                            text = hostInfo,
+                            color = Color(0xFFCBD5E1),
+                            fontSize = 10.5.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                TVButton(
+                    text = if (showLanEditor) "🔽 Ocultar IP LAN de Cabina" else "🌐 Configurar IP LAN de Cabina (Opcional)",
+                    onClick = { showLanEditor = !showLanEditor },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (showLanEditor) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF101629), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFF2D3B63), RoundedCornerShape(12.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = lanInput,
+                            onValueChange = { lanInput = it },
+                            singleLine = true,
+                            label = { Text("IP de la PC Cabina (ej: 192.168.1.50)", fontSize = 11.sp) },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF22D3EE),
+                                unfocusedBorderColor = Color(0xFF3B4970),
+                                focusedLabelColor = Color(0xFF22D3EE),
+                                unfocusedLabelColor = Color(0xFF94A3B8)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            TVButton(
+                                text = "💾 Guardar IP",
+                                onClick = {
+                                    onSaveManualLanHost(lanInput.trim())
+                                    showLanEditor = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                isPrimary = true
+                            )
+                            TVButton(
+                                text = "Auto mDNS",
+                                onClick = {
+                                    lanInput = ""
+                                    onSaveManualLanHost("")
+                                    showLanEditor = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            TVButton(
+                                text = "⚡ Reconectar",
+                                onClick = onForceReconnectSync,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
 
                 // Unpair / PIN Linking Button
                 TVButton(

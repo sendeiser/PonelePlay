@@ -6,13 +6,13 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      versionCode: 4,
-      versionName: "2.8.0",
+      versionCode: 5,
+      versionName: "2.9.0",
       apkUrl: "https://poneleplay.netlify.app/tv.apk",
       releaseNotes:
-        "Sincronización 100% exacta desde el inicio (0:00) con pre-buffer Cabina/TV, respuesta inmediata al adelantar o atrasar (+10s/-10s/barra/reinicio) y mejoras de estabilidad.",
+        "Modo LAN ultra rápido (<2ms) con auto-descubrimiento en red local + failover automático en la nube, sincronización de reloj y reproducción exacta en 0:00 con Cabina.",
       mandatory: false,
-      publishedAt: "2026-11-06T20:30:00.000Z",
+      publishedAt: "2026-11-12T22:30:00.000Z",
     },
     {
       headers: {

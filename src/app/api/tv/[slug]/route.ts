@@ -6,6 +6,7 @@ import {
   resolveEffectiveQueueThreshold,
 } from "@/lib/domain/party";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
+import { getCachedTvFeed, setCachedTvFeed } from "@/lib/sync/server-notify";
 
 interface QueueItemFeed {
   id: string;
@@ -33,6 +34,23 @@ export async function GET(
     const { slug } = await params;
     if (!slug) {
       return NextResponse.json({ ok: false, error: "slug_required" }, { status: 400 });
+    }
+
+    const deviceIdParam =
+      req.nextUrl.searchParams.get("device_id") || req.headers.get("x-device-id") || "default";
+    const skipCache = req.nextUrl.searchParams.get("internalSync") === "1";
+    const cacheKey = `${slug}:${deviceIdParam}`;
+    if (!skipCache) {
+      const cached = getCachedTvFeed<Record<string, unknown>>(cacheKey);
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: {
+            "Cache-Control": "no-store, max-age=0",
+            "Access-Control-Allow-Origin": "*",
+            "X-Sync-Cache": "hit",
+          },
+        });
+      }
     }
 
     const admin = createAdminSupabase();
@@ -85,16 +103,6 @@ export async function GET(
       const n = Number(count ?? 0);
       return n >= 9999 ? 0 : Math.max(0, n);
     };
-
-    // Clean up any legacy 99999 vote counts and self-heal 0-vote guest proposals in DB
-    void admin.from("queue_items").update({ vote_count: 0 }).gte("vote_count", 9999);
-    void admin
-      .from("queue_items")
-      .update({ vote_count: 1 })
-      .eq("venue_id", venue.id)
-      .eq("status", "queued")
-      .eq("vote_count", 0)
-      .not("proposed_by_participant_id", "is", null);
 
     const host = req.headers.get("host") || "poneleplay.netlify.app";
     const proto = req.headers.get("x-forwarded-proto") || "https";
@@ -258,101 +266,109 @@ export async function GET(
       nowMs,
     );
 
-    return NextResponse.json(
-      {
-        ok: true,
-        venue: {
-          id: venue.id,
-          name: venue.name,
-          slug: venue.slug,
-          venueType: partyConfig.venueType,
-        },
-        partyConfig: {
-          ...partyConfig,
-          activeDuel,
-          activeRoulette,
-          activeSkipVote,
-        },
+    const responsePayload = {
+      ok: true,
+      venue: {
+        id: venue.id,
+        name: venue.name,
+        slug: venue.slug,
+        venueType: partyConfig.venueType,
+      },
+      partyConfig: {
+        ...partyConfig,
         activeDuel,
         activeRoulette,
         activeSkipVote,
-        isOpen: rawState.night ? (rawState.night as Record<string, unknown>).status === "open" : false,
-        playback: {
-          isPaused: isPausedFlag,
-          volume: Number(playState?.volume ?? 85),
-          isMuted: resolvedTvMuted,
-          tvMuted: resolvedTvMuted,
-          cabinaMuted: Boolean(playState?.is_muted),
-          karaokeMode: Boolean(playState?.karaoke_mode),
-          lastCommand: playState?.last_command ?? null,
-          commandSeq: playState?.command_seq ?? 0,
-          seekSeq,
-          positionSeconds: livePositionSeconds,
-          anchorPositionSeconds: anchorPos,
-          anchorTimestampMs: anchorMs,
-          serverTimeMs: nowMs,
-          displayConfig: {
-            ...displayConfig,
-            tvMuted: resolvedTvMuted,
-          },
-        },
-        liveDedication: isCurrentDedActive && currentDed?.dedication
-          ? {
-              guestName: currentDed.guestName ?? null,
-              message: currentDed.dedication,
-              style: partyConfig.dedicationStyle || "neon",
-              repeats: partyConfig.dedicationRepeats ?? 2,
-              timestamp: currentDed.timestamp ?? nowMs,
-            }
-          : null,
-        nowPlaying: effectiveNowPlaying
-          ? {
-              id: String(effectiveNowPlaying.itemId || effectiveNowPlaying.id || ""),
-              title: String(effectiveNowPlaying.title || "Sin título"),
-              artist: String(effectiveNowPlaying.artist || "Desconocido"),
-              youtubeVideoId: effectiveNowPlaying.youtubeVideoId ? String(effectiveNowPlaying.youtubeVideoId) : null,
-              thumbnailUrl: effectiveNowPlaying.thumbnailUrl ? String(effectiveNowPlaying.thumbnailUrl) : null,
-              durationSeconds: Number(effectiveNowPlaying.durationSeconds ?? 210),
-              voteCount: sanitizeVoteCount(effectiveNowPlaying.voteCount),
-              isKaraoke: nowMeta?.isKaraoke ?? false,
-              guestName: nowMeta?.guestName ?? null,
-              dedication: nowMeta?.dedication ?? null,
-            }
-          : null,
-        queue: activeQueue.map((item, idx) => {
-          const meta = resolveMeta(item as unknown as Record<string, unknown>);
-          return {
-            id: item.id,
-            title: item.title,
-            artist: item.artist,
-            youtubeVideoId: item.youtubeVideoId,
-            thumbnailUrl: item.thumbnailUrl,
-            durationSeconds: item.durationSeconds,
-            voteCount: sanitizeVoteCount(item.voteCount),
-            position: idx + 1,
-            isKaraoke: meta.isKaraoke,
-            guestName: meta.guestName,
-            dedication: meta.dedication,
-          };
-        }),
-        proposals: candidateProposals.map((item) => {
-          const meta = resolveMeta(item as unknown as Record<string, unknown>);
-          return {
-            id: item.id,
-            title: item.title,
-            artist: item.artist,
-            youtubeVideoId: item.youtubeVideoId,
-            thumbnailUrl: item.thumbnailUrl,
-            voteCount: sanitizeVoteCount(item.voteCount),
-            neededVotes: effectiveThreshold,
-            isKaraoke: meta.isKaraoke,
-            guestName: meta.guestName,
-            dedication: meta.dedication,
-          };
-        }),
-        clientUrl,
-        serverTime: new Date().toISOString(),
       },
+      activeDuel,
+      activeRoulette,
+      activeSkipVote,
+      isOpen: rawState.night ? (rawState.night as Record<string, unknown>).status === "open" : false,
+      playback: {
+        isPaused: isPausedFlag,
+        volume: Number(playState?.volume ?? 85),
+        isMuted: resolvedTvMuted,
+        tvMuted: resolvedTvMuted,
+        cabinaMuted: Boolean(playState?.is_muted),
+        karaokeMode: Boolean(playState?.karaoke_mode),
+        lastCommand: playState?.last_command ?? null,
+        commandSeq: playState?.command_seq ?? 0,
+        seekSeq,
+        positionSeconds: livePositionSeconds,
+        anchorPositionSeconds: anchorPos,
+        anchorTimestampMs: anchorMs,
+        serverTimeMs: nowMs,
+        displayConfig: {
+          ...displayConfig,
+          tvMuted: resolvedTvMuted,
+        },
+      },
+      liveDedication: isCurrentDedActive && currentDed?.dedication
+        ? {
+            guestName: currentDed.guestName ?? null,
+            message: currentDed.dedication,
+            style: partyConfig.dedicationStyle || "neon",
+            repeats: partyConfig.dedicationRepeats ?? 2,
+            timestamp: currentDed.timestamp ?? nowMs,
+          }
+        : null,
+      nowPlaying: effectiveNowPlaying
+        ? {
+            id: String(effectiveNowPlaying.itemId || effectiveNowPlaying.id || ""),
+            title: String(effectiveNowPlaying.title || "Sin título"),
+            artist: String(effectiveNowPlaying.artist || "Desconocido"),
+            youtubeVideoId: effectiveNowPlaying.youtubeVideoId ? String(effectiveNowPlaying.youtubeVideoId) : null,
+            thumbnailUrl: effectiveNowPlaying.thumbnailUrl ? String(effectiveNowPlaying.thumbnailUrl) : null,
+            durationSeconds: Number(effectiveNowPlaying.durationSeconds ?? 210),
+            voteCount: sanitizeVoteCount(effectiveNowPlaying.voteCount),
+            isKaraoke: nowMeta?.isKaraoke ?? false,
+            guestName: nowMeta?.guestName ?? null,
+            dedication: nowMeta?.dedication ?? null,
+          }
+        : null,
+      queue: activeQueue.map((item, idx) => {
+        const meta = resolveMeta(item as unknown as Record<string, unknown>);
+        return {
+          id: item.id,
+          title: item.title,
+          artist: item.artist,
+          youtubeVideoId: item.youtubeVideoId,
+          thumbnailUrl: item.thumbnailUrl,
+          durationSeconds: item.durationSeconds,
+          voteCount: sanitizeVoteCount(item.voteCount),
+          position: idx + 1,
+          isKaraoke: meta.isKaraoke,
+          guestName: meta.guestName,
+          dedication: meta.dedication,
+        };
+      }),
+      proposals: candidateProposals.map((item) => {
+        const meta = resolveMeta(item as unknown as Record<string, unknown>);
+        return {
+          id: item.id,
+          title: item.title,
+          artist: item.artist,
+          youtubeVideoId: item.youtubeVideoId,
+          thumbnailUrl: item.thumbnailUrl,
+          voteCount: sanitizeVoteCount(item.voteCount),
+          neededVotes: effectiveThreshold,
+          isKaraoke: meta.isKaraoke,
+          guestName: meta.guestName,
+          dedication: meta.dedication,
+        };
+      }),
+      clientUrl,
+      syncConfig: {
+        cloudWsUrl: (process.env.NEXT_PUBLIC_SYNC_WS_URL || "").trim().replace(/\/+$/, "") || null,
+        lanPort: Number(process.env.NEXT_PUBLIC_LAN_HUB_PORT || 4321) || 4321,
+      },
+      serverTime: new Date().toISOString(),
+    };
+
+    setCachedTvFeed(cacheKey, responsePayload);
+
+    return NextResponse.json(
+      responsePayload,
       {
         headers: {
           "Cache-Control": "no-store, max-age=0",

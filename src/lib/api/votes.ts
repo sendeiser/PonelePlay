@@ -1,4 +1,5 @@
 import { createBrowserSupabase } from "./supabase/browser";
+import { triggerRoomSyncRefresh } from "@/lib/sync/client";
 
 export type VoteError =
   | "no_credits"
@@ -36,6 +37,7 @@ export async function castVote(queueItemId: string, slug?: string): Promise<Vote
     } as never);
 
     if (!error && data && typeof data === "object" && (data as VoteResult).ok) {
+      if (slug) triggerRoomSyncRefresh(slug);
       return data as VoteResult;
     }
 

@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
+
+async function resolveVenueSlug(
+  admin: ReturnType<typeof createAdminSupabase>,
+  slug: string,
+  venueId: string | null | undefined,
+): Promise<string> {
+  if (slug) return slug;
+  if (!venueId) return "";
+  const { data } = await admin
+    .from("venues")
+    .select("slug")
+    .eq("id", venueId)
+    .maybeSingle();
+  return data?.slug || "";
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,17 +55,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, alreadyHandled: true });
     }
 
-    if (action === "boost" || action === "promote") {
-      let targetSlug = slug;
-      if (!targetSlug && item.venue_id) {
-        const { data: v } = await admin
-          .from("venues")
-          .select("slug")
-          .eq("id", item.venue_id)
-          .maybeSingle();
-        targetSlug = v?.slug || "";
-      }
+    const targetSlug = await resolveVenueSlug(admin, slug, item.venue_id);
 
+    if (action === "boost" || action === "promote") {
       const { partyConfig } = targetSlug
         ? await loadVenuePartyConfigFromDb(admin, targetSlug)
         : { partyConfig: { venueType: "party" as const, minVotesToQueue: 1 } };
@@ -99,6 +107,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: boostErr.message }, { status: 500 });
       }
 
+      if (targetSlug) {
+        void notifySyncRoom(targetSlug, { refreshFromOrigin: true });
+      }
+
       return NextResponse.json({
         ok: true,
         itemId,
@@ -121,6 +133,10 @@ export async function POST(req: NextRequest) {
 
     if (updateErr) {
       return NextResponse.json({ ok: false, error: updateErr.message }, { status: 500 });
+    }
+
+    if (targetSlug) {
+      void notifySyncRoom(targetSlug, { refreshFromOrigin: true });
     }
 
     return NextResponse.json({ ok: true, itemId, status: targetStatus });

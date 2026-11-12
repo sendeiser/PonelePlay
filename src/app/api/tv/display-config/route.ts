@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { DEFAULT_TV_DISPLAY_CONFIG, type TvDisplayConfig } from "@/lib/api/tv-pairing";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 interface StoredConfigs {
   global: TvDisplayConfig;
@@ -140,6 +141,16 @@ export async function POST(req: NextRequest) {
     } catch {
       // Non-blocking
     }
+
+    void notifySyncRoom(slug, {
+      partyEvent: {
+        type: "tv_display_config",
+        targetDeviceId: deviceId || "all",
+        config: appliedConfig,
+        timestamp: Date.now(),
+      },
+      refreshFromOrigin: true,
+    });
 
     return NextResponse.json({
       ok: true,

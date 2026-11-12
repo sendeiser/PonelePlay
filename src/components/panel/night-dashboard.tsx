@@ -50,7 +50,7 @@ function formatDuration(seconds: number | null): string {
 
 export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) {
   const searchParams = useSearchParams();
-  const source = useMemo(() => createNightStateSource(slug), [slug]);
+  const source = useMemo(() => createNightStateSource(slug, "master"), [slug]);
   const { state, loading, refresh } = useNightState(source);
 
   const [confirmClose, setConfirmClose] = useState(false);

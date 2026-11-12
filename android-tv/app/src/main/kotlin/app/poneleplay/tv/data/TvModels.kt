@@ -92,6 +92,11 @@ data class TvLiveDedication(
     val timestamp: Long = 0L
 )
 
+data class TvSyncConfig(
+    val cloudWsUrl: String? = null,
+    val lanPort: Int = 4321
+)
+
 data class TvFeed(
     val ok: Boolean,
     val venue: TvVenue,
@@ -105,7 +110,8 @@ data class TvFeed(
     val activeSkipVote: TvSkipVote? = null,
     val liveDedication: TvLiveDedication? = null,
     val clientUrl: String,
-    val serverTime: String
+    val serverTime: String,
+    val syncConfig: TvSyncConfig = TvSyncConfig()
 )
 
 data class TvPairingInfo(
@@ -318,6 +324,12 @@ object TvFeedParser {
             } else null
         } else null
 
+        val syncObj = root.optJSONObject("syncConfig")
+        val syncConfig = TvSyncConfig(
+            cloudWsUrl = syncObj?.let { optNullableString(it, "cloudWsUrl") },
+            lanPort = syncObj?.optInt("lanPort", 4321)?.takeIf { it > 0 } ?: 4321
+        )
+
         return TvFeed(
             ok = root.optBoolean("ok", true),
             venue = venue,
@@ -331,7 +343,8 @@ object TvFeedParser {
             activeSkipVote = activeSkipVote,
             liveDedication = liveDedication,
             clientUrl = root.optString("clientUrl", "https://poneleplay.netlify.app"),
-            serverTime = root.optString("serverTime", "")
+            serverTime = root.optString("serverTime", ""),
+            syncConfig = syncConfig
         )
     }
 }

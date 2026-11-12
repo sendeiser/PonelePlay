@@ -46,3 +46,4 @@ android-tv/.gradle/
 android-tv/app/build/
 android-tv/local.properties
 .vscode/
+.wrangler/

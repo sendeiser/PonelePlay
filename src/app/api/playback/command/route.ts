@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
+import { notifySyncRoom } from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -772,6 +773,10 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
+
+    void notifySyncRoom(slug, {
+      refreshFromOrigin: true,
+    });
 
     return NextResponse.json({
       ok: true,

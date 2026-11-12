@@ -107,7 +107,7 @@ export function TvStandbyScreen({
         .subscribe();
     });
 
-    // Fallback polling every 2.5s
+    // Fallback polling every 6s (Supabase Realtime broadcast triggers instant pairing)
     const timer = setInterval(async () => {
       if (!active || isPairedRef.current || !code) return;
       try {
@@ -119,7 +119,7 @@ export function TvStandbyScreen({
       } catch {
         // Non-blocking polling
       }
-    }, 2500);
+    }, 6000);
 
     return () => {
       active = false;

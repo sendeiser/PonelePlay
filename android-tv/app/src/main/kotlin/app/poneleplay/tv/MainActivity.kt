@@ -37,6 +37,16 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import app.poneleplay.tv.data.TvFeed
 import app.poneleplay.tv.data.TvFeedParser
+import app.poneleplay.tv.data.TvLiveDedication
+import app.poneleplay.tv.data.TvTrack
+import app.poneleplay.tv.sync.DiscoveredLanHub
+import app.poneleplay.tv.sync.LanDiscoveryManager
+import app.poneleplay.tv.sync.SyncAnchorData
+import app.poneleplay.tv.sync.SyncGoData
+import app.poneleplay.tv.sync.SyncPreloadData
+import app.poneleplay.tv.sync.SyncStatusState
+import app.poneleplay.tv.sync.TvSyncListener
+import app.poneleplay.tv.sync.TvSyncSocketClient
 import app.poneleplay.tv.ui.NativeVideoPlayer
 import app.poneleplay.tv.ui.TvPairingScreen
 import app.poneleplay.tv.ui.TvScreen
@@ -50,6 +60,7 @@ import app.poneleplay.tv.updater.AppUpdateInfo
 import app.poneleplay.tv.updater.TvAppUpdater
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -343,15 +354,15 @@ fun NativeTvApp(
                 pInfo.versionCode
             }
         } catch (_: Exception) {
-            4
+            5
         }
     }
 
     val currentVersionName = remember {
         try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.8.0"
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.9.0"
         } catch (_: Exception) {
-            "2.8.0"
+            "2.9.0"
         }
     }
 
@@ -428,6 +439,284 @@ fun NativeTvApp(
     var hasError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    var manualLanHost by remember { mutableStateOf(prefs.getString("lan_hub_host", "") ?: "") }
+    var cachedCloudWsUrl by remember { mutableStateOf(prefs.getString("cloud_sync_ws_url", "") ?: "") }
+    var cachedLanPort by remember { mutableStateOf(prefs.getInt("lan_hub_port", 4321).takeIf { it > 0 } ?: 4321) }
+    var syncStatus by remember { mutableStateOf(SyncStatusState()) }
+    var liveAnchor by remember { mutableStateOf<SyncAnchorData?>(null) }
+    var discoveredLanHub by remember { mutableStateOf<DiscoveredLanHub?>(null) }
+    var manualRefreshTick by remember { mutableStateOf(0) }
+
+    var lastAnchorSeq by remember { mutableStateOf(0L) }
+    var lastAnchorSeekSeq by remember { mutableStateOf(0L) }
+    var activeBarrierTimeoutJob by remember { mutableStateOf<Job?>(null) }
+    var activeScheduledPlayJob by remember { mutableStateOf<Job?>(null) }
+
+    val currentIsMuted by rememberUpdatedState(isMuted)
+    val currentSyncConnected by rememberUpdatedState(syncStatus.connected)
+
+    fun persistSyncConfig(cloudWsUrl: String?, lanPort: Int) {
+        val cleanCloud = cloudWsUrl?.trim()?.trimEnd('/').orEmpty()
+        val validPort = lanPort.takeIf { it > 0 } ?: 4321
+        if (cleanCloud.isNotEmpty() && cleanCloud != cachedCloudWsUrl) {
+            cachedCloudWsUrl = cleanCloud
+            prefs.edit().putString("cloud_sync_ws_url", cleanCloud).apply()
+        }
+        if (validPort != cachedLanPort) {
+            cachedLanPort = validPort
+            prefs.edit().putInt("lan_hub_port", validPort).apply()
+        }
+    }
+
+    val lanDiscovery = remember(context) { LanDiscoveryManager(context) }
+    val syncClient = remember {
+        var clientRef: TvSyncSocketClient? = null
+        val client = TvSyncSocketClient(object : TvSyncListener {
+            override fun onStatusChanged(status: SyncStatusState) {
+                syncStatus = status
+            }
+
+            override fun onTvFeedJson(tvFeedJson: String) {
+                try {
+                    val parsed = TvFeedParser.parse(tvFeedJson)
+                    feed = parsed
+                    hasError = false
+                    errorMessage = null
+                    isLoading = false
+                    persistSyncConfig(parsed.syncConfig.cloudWsUrl, parsed.syncConfig.lanPort)
+                    if (parsed.playback.displayConfigJson != null) {
+                        onDisplayConfig(parsed.playback.displayConfigJson)
+                    }
+                } catch (_: Exception) {}
+            }
+
+            override fun onDisplayConfig(configJson: String) {
+                onDisplayConfig(configJson)
+            }
+
+            override fun onAnchor(anchor: SyncAnchorData, forceSeek: Boolean) {
+                if (anchor.seq > 0L && anchor.seq < lastAnchorSeq && !forceSeek) return
+                if (anchor.seq > 0L) lastAnchorSeq = maxOf(lastAnchorSeq, anchor.seq)
+                liveAnchor = anchor
+
+                val effectiveMuted = currentIsMuted || anchor.tvMuted
+                if (effectiveMuted) {
+                    videoController.mute()
+                } else {
+                    videoController.unMute()
+                    videoController.setVolume(anchor.volume)
+                }
+
+                if (forceSeek || (anchor.seekSeq > 0L && anchor.seekSeq != lastAnchorSeekSeq)) {
+                    if (anchor.seekSeq > 0L) lastAnchorSeekSeq = anchor.seekSeq
+                    videoController.seekTo(anchor.anchorPositionSec.toFloat().coerceAtLeast(0f))
+                }
+
+                if (videoController.activeBarrierVideoId == null ||
+                    videoController.activeBarrierVideoId != anchor.track?.youtubeVideoId
+                ) {
+                    if (anchor.isPaused) {
+                        videoController.pause()
+                    } else {
+                        videoController.play()
+                    }
+                }
+
+                val existingFeed = feed
+                if (existingFeed != null) {
+                    val updatedTrack = anchor.track?.takeIf { !it.youtubeVideoId.isNullOrBlank() }?.let { t ->
+                        if (existingFeed.nowPlaying?.id == t.itemId &&
+                            existingFeed.nowPlaying.youtubeVideoId == t.youtubeVideoId
+                        ) {
+                            existingFeed.nowPlaying
+                        } else {
+                            TvTrack(
+                                id = t.itemId,
+                                title = t.title.ifBlank { existingFeed.nowPlaying?.title ?: "Reproduciendo" },
+                                artist = t.artist.ifBlank { existingFeed.nowPlaying?.artist ?: "" },
+                                youtubeVideoId = t.youtubeVideoId,
+                                thumbnailUrl = existingFeed.nowPlaying?.thumbnailUrl,
+                                durationSeconds = existingFeed.nowPlaying?.durationSeconds ?: 210,
+                                voteCount = existingFeed.nowPlaying?.voteCount ?: 0
+                            )
+                        }
+                    } ?: existingFeed.nowPlaying
+
+                    feed = existingFeed.copy(
+                        nowPlaying = updatedTrack,
+                        playback = existingFeed.playback.copy(
+                            isPaused = anchor.isPaused,
+                            volume = anchor.volume,
+                            tvMuted = anchor.tvMuted,
+                            cabinaMuted = anchor.cabinaMuted,
+                            karaokeMode = anchor.karaokeMode,
+                            lastCommand = anchor.lastCommand,
+                            commandSeq = maxOf(existingFeed.playback.commandSeq, anchor.seq),
+                            seekSeq = maxOf(existingFeed.playback.seekSeq, anchor.seekSeq),
+                            positionSeconds = anchor.anchorPositionSec.toFloat().coerceAtLeast(0f),
+                            anchorTimestampMs = anchor.anchorServerMs
+                        )
+                    )
+                }
+            }
+
+            override fun onPreload(preload: SyncPreloadData) {
+                val ytId = preload.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
+                activeBarrierTimeoutJob?.cancel()
+                activeScheduledPlayJob?.cancel()
+
+                feed?.let { existingFeed ->
+                    feed = existingFeed.copy(
+                        nowPlaying = TvTrack(
+                            id = preload.track.itemId,
+                            title = preload.track.title.ifBlank { "Cargando..." },
+                            artist = preload.track.artist,
+                            youtubeVideoId = ytId,
+                            thumbnailUrl = null,
+                            durationSeconds = 210,
+                            voteCount = 0
+                        )
+                    )
+                }
+
+                var readySent = false
+                fun sendReadyOnce() {
+                    if (readySent) return
+                    readySent = true
+                    clientRef?.sendReady(preload.barrierId)
+                }
+
+                videoController.onVideoCuedCallback = { cuedId ->
+                    if (cuedId == ytId) {
+                        sendReadyOnce()
+                    }
+                }
+                videoController.cueVideo(ytId, preload.startPositionSec.toFloat())
+
+                activeBarrierTimeoutJob = coroutineScope.launch {
+                    val msLeft = clientRef?.msUntilServerTime(preload.deadlineServerMs) ?: 450L
+                    delay(msLeft.coerceIn(180L, 480L))
+                    sendReadyOnce()
+                }
+            }
+
+            override fun onGo(go: SyncGoData) {
+                activeBarrierTimeoutJob?.cancel()
+                activeScheduledPlayJob?.cancel()
+
+                liveAnchor = go.anchor
+                if (go.anchor.seq > 0L) lastAnchorSeq = maxOf(lastAnchorSeq, go.anchor.seq)
+                if (go.anchor.seekSeq > 0L) lastAnchorSeekSeq = maxOf(lastAnchorSeekSeq, go.anchor.seekSeq)
+
+                val ytId = go.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
+                val waitMs = (clientRef?.msUntilServerTime(go.startAtServerMs) ?: 0L).coerceIn(0L, 900L)
+
+                activeScheduledPlayJob = coroutineScope.launch {
+                    if (waitMs > 0L) delay(waitMs)
+                    val effectiveMuted = currentIsMuted || go.anchor.tvMuted
+                    val effectiveVol = if (effectiveMuted) 0 else go.anchor.volume
+                    videoController.startScheduledPlay(
+                        videoId = ytId,
+                        startSeconds = go.startPositionSec.toFloat(),
+                        volume = effectiveVol,
+                        isMuted = effectiveMuted
+                    )
+                    feed?.let { existingFeed ->
+                        feed = existingFeed.copy(
+                            nowPlaying = TvTrack(
+                                id = go.track.itemId,
+                                title = go.track.title.ifBlank { existingFeed.nowPlaying?.title ?: "" },
+                                artist = go.track.artist.ifBlank { existingFeed.nowPlaying?.artist ?: "" },
+                                youtubeVideoId = ytId,
+                                thumbnailUrl = existingFeed.nowPlaying?.thumbnailUrl,
+                                durationSeconds = existingFeed.nowPlaying?.durationSeconds ?: 210,
+                                voteCount = existingFeed.nowPlaying?.voteCount ?: 0
+                            ),
+                            playback = existingFeed.playback.copy(
+                                isPaused = go.anchor.isPaused,
+                                volume = go.anchor.volume,
+                                tvMuted = go.anchor.tvMuted,
+                                cabinaMuted = go.anchor.cabinaMuted,
+                                karaokeMode = go.anchor.karaokeMode,
+                                commandSeq = maxOf(existingFeed.playback.commandSeq, go.anchor.seq),
+                                seekSeq = maxOf(existingFeed.playback.seekSeq, go.anchor.seekSeq),
+                                positionSeconds = go.startPositionSec.toFloat()
+                            )
+                        )
+                    }
+                }
+            }
+
+            override fun onPartyEvent(payloadJson: String) {
+                try {
+                    val p = org.json.JSONObject(payloadJson)
+                    val evType = p.optString("type", "")
+                    if (evType == "live_dedication") {
+                        val msg = p.optString("dedication", "").trim()
+                        if (msg.isNotEmpty()) {
+                            val guest = if (p.isNull("guestName")) null else p.optString("guestName", "").trim().takeIf { it.isNotEmpty() }
+                            feed = feed?.copy(
+                                liveDedication = TvLiveDedication(
+                                    guestName = guest,
+                                    message = msg,
+                                    style = p.optString("style", "neon"),
+                                    repeats = p.optInt("repeats", 2),
+                                    timestamp = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    } else if (evType == "party_skip_vote_passed") {
+                        feed = feed?.copy(activeSkipVote = null)
+                    }
+                } catch (_: Exception) {}
+            }
+        })
+        clientRef = client
+        client
+    }
+
+    LaunchedEffect(lanDiscovery, isPaired, venueSlug) {
+        if (!isPaired || venueSlug.isBlank()) {
+            discoveredLanHub = null
+            lanDiscovery.stop()
+            return@LaunchedEffect
+        }
+        lanDiscovery.start()
+        lanDiscovery.discoveredHub.collect { hub ->
+            discoveredLanHub = hub
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            activeBarrierTimeoutJob?.cancel()
+            activeScheduledPlayJob?.cancel()
+            lanDiscovery.stop()
+            syncClient.stop()
+        }
+    }
+
+    LaunchedEffect(isPaired, venueSlug, manualLanHost, discoveredLanHub, cachedLanPort, cachedCloudWsUrl) {
+        if (!isPaired || venueSlug.isBlank()) {
+            syncClient.stop()
+            return@LaunchedEffect
+        }
+        syncClient.configure(
+            slug = venueSlug,
+            deviceId = prefs.getString("tv_device_id", "") ?: "",
+            manualLanHost = manualLanHost.ifBlank { null },
+            discoveredLanHost = discoveredLanHub?.host,
+            discoveredLanPort = discoveredLanHub?.port ?: cachedLanPort,
+            defaultLanPort = cachedLanPort,
+            cloudWsBaseUrl = cachedCloudWsUrl.ifBlank { null }
+        )
+    }
+
+    val useLegacySupabaseWs = !syncStatus.connected &&
+        manualLanHost.isBlank() &&
+        discoveredLanHub == null &&
+        cachedCloudWsUrl.isBlank()
+
     // Intercept Back button
     BackHandler(enabled = true) {
         if (showSettings) {
@@ -437,8 +726,8 @@ fun NativeTvApp(
         }
     }
 
-    // Background Telemetry Poller: fetches /api/tv/[slug] when paired
-    LaunchedEffect(serverUrl, venueSlug, isPaired) {
+    // Background Telemetry Poller: fast only during bootstrap/fallback; slows to 60s when WS Sync is live
+    LaunchedEffect(serverUrl, venueSlug, isPaired, manualRefreshTick) {
         if (!isPaired || venueSlug.isBlank()) return@LaunchedEffect
 
         isLoading = feed == null
@@ -463,6 +752,7 @@ fun NativeTvApp(
                             hasError = false
                             errorMessage = null
                             isLoading = false
+                            persistSyncConfig(parsed.syncConfig.cloudWsUrl, parsed.syncConfig.lanPort)
                             if (parsed.playback.displayConfigJson != null) {
                                 onDisplayConfig(parsed.playback.displayConfigJson)
                             }
@@ -485,7 +775,12 @@ fun NativeTvApp(
                     }
                 }
             }
-            delay(1000)
+            val nextDelayMs = when {
+                currentSyncConnected -> 60_000L
+                feed == null -> 3_000L
+                else -> 8_000L
+            }
+            delay(nextDelayMs)
         }
     }
 
@@ -522,6 +817,10 @@ fun NativeTvApp(
                     themeName = themeName,
                     scaleName = scaleName,
                     localIsMuted = isMuted,
+                    useLegacySupabaseWs = useLegacySupabaseWs,
+                    syncStatus = syncStatus,
+                    liveAnchor = liveAnchor,
+                    estimatedServerMs = { syncClient.estimatedServerMs() },
                     videoController = videoController,
                     onVideoEnded = {
                         val endedVideoId = currentFeed.nowPlaying?.youtubeVideoId
@@ -615,8 +914,18 @@ fun NativeTvApp(
             currentMode = screenMode,
             isMuted = isMuted,
             currentVersionName = currentVersionName,
+            syncStatus = syncStatus,
+            manualLanHost = manualLanHost,
             onToggleMode = onToggleMode,
             onToggleMute = onToggleMute,
+            onSaveManualLanHost = { rawIp ->
+                val cleanIp = rawIp.trim()
+                manualLanHost = cleanIp
+                prefs.edit().putString("lan_hub_host", cleanIp).apply()
+            },
+            onForceReconnectSync = {
+                syncClient.forceReconnect()
+            },
             onUnpair = {
                 prefs.edit()
                     .putBoolean("is_tv_paired", false)
@@ -627,6 +936,7 @@ fun NativeTvApp(
                 venueSlug = ""
                 isPaired = false
                 feed = null
+                liveAnchor = null
                 onDismissSettings()
             },
             onCheckUpdates = {
@@ -636,6 +946,8 @@ fun NativeTvApp(
             onReload = {
                 feed = null
                 isLoading = true
+                manualRefreshTick++
+                syncClient.requestStateRefresh()
                 onDismissSettings()
             },
             onDismiss = onDismissSettings,

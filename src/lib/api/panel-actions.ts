@@ -1,5 +1,6 @@
 import { createBrowserSupabase } from "./supabase/browser";
 import { nightActionResponseSchema } from "./contracts";
+import { triggerRoomSyncRefresh } from "@/lib/sync/client";
 
 export async function openNight(token?: string): Promise<{ nightId: string }> {
   if (token) {
@@ -272,5 +273,9 @@ export async function resolveVotingRound(
     throw new Error(error.message);
   }
 
-  return data as ResolveRoundResult;
+  const parsed = data as ResolveRoundResult;
+  if (parsed?.resolved) {
+    triggerRoomSyncRefresh(slug);
+  }
+  return parsed;
 }

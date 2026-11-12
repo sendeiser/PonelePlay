@@ -163,13 +163,67 @@ export function ClientNight({ slug }: { slug: string }) {
     };
   }, [slug, state?.settings?.partyConfig]);
 
-  // Listen to Realtime party_event broadcasts from Cabina
+  // Listen to Realtime party_event broadcasts from Cabina / Sync Room
   useEffect(() => {
     let active = true;
+
+    const handlePartyPayload = (p: Record<string, unknown>) => {
+      if (!active || !p) return;
+      if (p.type === "party_config_updated" && p.partyConfig) {
+        setPartyConfig(p.partyConfig as PartyConfig);
+      } else if (p.type === "party_votes_reloaded") {
+        setGuestVotesUsed(0);
+        try {
+          localStorage.setItem(`${GUEST_VOTES_USED_KEY_PREFIX}${slug}`, "0");
+        } catch {
+          // Ignore
+        }
+        setToast({
+          message: "🔄 ¡El anfitrión recargó tus votos disponibles!",
+          tone: "ok",
+        });
+      } else if (p.type === "party_duel_start" && p.duel) {
+        setActiveDuel(p.duel as PartyDuelState);
+        setDuelVotedChoice(null);
+      } else if (p.type === "party_skip_vote_updated") {
+        if (p.skipped || !p.activeSkipVote) {
+          setActiveSkipVote(null);
+          setVotedSkipTrackId(null);
+        } else {
+          setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
+        }
+      } else if (p.type === "party_skip_vote_passed") {
+        setActiveSkipVote(null);
+        setVotedSkipTrackId(null);
+        setToast({
+          message: "⏭️ ¡La votación alcanzó los votos! Cambiando a la siguiente canción...",
+          tone: "ok",
+        });
+        void refresh();
+      }
+    };
+
+    let unsubWsParty: (() => void) | null = null;
+    let syncClientRef: import("@/lib/sync/client").PoneleSyncClient | null = null;
+    let wsTargetsConfigured = false;
+    void import("@/lib/sync/client").then(({ acquireSyncClient, releaseSyncClient }) => {
+      if (!active) return;
+      const sc = acquireSyncClient({ slug, role: "client" });
+      if (sc.hasTargetsConfigured()) {
+        wsTargetsConfigured = true;
+        syncClientRef = sc;
+        unsubWsParty = sc.on("party:event", ({ payload }) => {
+          handlePartyPayload(payload);
+        });
+      } else {
+        releaseSyncClient(sc);
+      }
+    });
+
     let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
 
     void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
-      if (!active) return;
+      if (!active || wsTargetsConfigured) return;
       try {
         const supabase = createBrowserSupabase();
         channel = supabase
@@ -179,39 +233,7 @@ export function ClientNight({ slug }: { slug: string }) {
             { event: "party_event" },
             (msg: { payload?: Record<string, unknown> }) => {
               if (!active || !msg.payload) return;
-              const p = msg.payload;
-              if (p.type === "party_config_updated" && p.partyConfig) {
-                setPartyConfig(p.partyConfig as PartyConfig);
-              } else if (p.type === "party_votes_reloaded") {
-                setGuestVotesUsed(0);
-                try {
-                  localStorage.setItem(`${GUEST_VOTES_USED_KEY_PREFIX}${slug}`, "0");
-                } catch {
-                  // Ignore
-                }
-                setToast({
-                  message: "🔄 ¡El anfitrión recargó tus votos disponibles!",
-                  tone: "ok",
-                });
-              } else if (p.type === "party_duel_start" && p.duel) {
-                setActiveDuel(p.duel as PartyDuelState);
-                setDuelVotedChoice(null);
-              } else if (p.type === "party_skip_vote_updated") {
-                if (p.skipped || !p.activeSkipVote) {
-                  setActiveSkipVote(null);
-                  setVotedSkipTrackId(null);
-                } else {
-                  setActiveSkipVote(p.activeSkipVote as PartySkipVoteState);
-                }
-              } else if (p.type === "party_skip_vote_passed") {
-                setActiveSkipVote(null);
-                setVotedSkipTrackId(null);
-                setToast({
-                  message: "⏭️ ¡La votación alcanzó los votos! Cambiando a la siguiente canción...",
-                  tone: "ok",
-                });
-                void refresh();
-              }
+              handlePartyPayload(msg.payload);
             },
           )
           .subscribe();
@@ -222,6 +244,13 @@ export function ClientNight({ slug }: { slug: string }) {
 
     return () => {
       active = false;
+      unsubWsParty?.();
+      if (syncClientRef) {
+        const sc = syncClientRef;
+        void import("@/lib/sync/client").then(({ releaseSyncClient }) => {
+          releaseSyncClient(sc);
+        });
+      }
       if (channel) {
         void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
           try {
@@ -233,7 +262,7 @@ export function ClientNight({ slug }: { slug: string }) {
         });
       }
     };
-  }, [slug]);
+  }, [slug, refresh]);
 
   // Auto-dismiss duel overlay after durationSeconds
   useEffect(() => {
