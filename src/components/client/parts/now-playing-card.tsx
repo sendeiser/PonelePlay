@@ -182,50 +182,47 @@ export function NowPlayingCard({
   const progressPercent = Math.min(100, Math.max(5, (elapsed / duration) * 100));
 
   return (
-    <section className="relative bg-gradient-to-b from-[#161C2E] to-[#121626] rounded-2xl border border-[#232B42] p-4 sm:p-5 shadow-2xl overflow-hidden glow-indigo">
-      {/* Ambient backdrop glow */}
-      <div className="absolute -top-16 -right-16 w-48 h-48 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-
+    <section className="card-panel relative rounded-2xl p-4 sm:p-5 overflow-hidden">
       {/* Header Row */}
-      <div className="flex items-center justify-between mb-3 relative z-10">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono text-[10px] font-bold tracking-widest flex items-center gap-1.5 glow-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="px-2 py-0.5 rounded-full bg-th-danger-soft text-th-danger border border-th-danger/30 font-mono text-[10px] font-bold tracking-widest flex items-center gap-1.5 whitespace-nowrap shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-th-danger animate-pulse" />
             ON AIR
           </span>
-          <span className="font-mono text-[11px] text-slate-400 uppercase tracking-wide">
+          <span className="font-mono text-[11px] text-th-muted uppercase tracking-wide whitespace-nowrap truncate">
             Sonando Ahora
           </span>
         </div>
 
         {/* Total Votes Pill Badge */}
-        <div className="flex items-center gap-1 bg-[#0D1220]/90 px-2.5 py-0.5 rounded-full border border-[#1E2538] shadow-sm">
-          <span className="material-symbols-outlined text-amber-400 text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+        <div className="flex items-center gap-1 bg-th-recessed px-2.5 py-0.5 rounded-full border border-th-border shrink-0">
+          <span className="material-symbols-outlined text-th-amber text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
             local_fire_department
           </span>
-          <span className="font-mono text-xs text-indigo-200 font-bold">
-            {(item.voteCount >= 9999 || item.voteCount === 0) ? "⭐ Selección Bar" : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
+          <span className="font-mono text-xs text-th-text font-bold tabular-nums whitespace-nowrap">
+            {(item.voteCount >= 9999 || item.voteCount === 0) ? "Selección Bar" : `${item.voteCount} ${item.voteCount === 1 ? "voto" : "votos"}`}
           </span>
         </div>
       </div>
 
       {/* Song Metadata and Sleeve Presentation */}
-      <div className="flex items-center gap-3.5 my-3 relative z-10">
+      <div className="flex items-center gap-3.5 my-3">
         {/* Vinyl & Cover Setup */}
         <div className="relative w-20 h-20 flex-shrink-0">
-          {/* Vinyl Record Grooves */}
-          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-[#0a0a0f] border border-slate-700/50 flex items-center justify-center rotate-vinyl shadow-md">
-            <div className="w-16 h-16 rounded-full border border-slate-800/90 flex items-center justify-center">
-              <div className="w-11 h-11 rounded-full border border-slate-800/60 flex items-center justify-center">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-violet-500 flex items-center justify-center shadow-sm">
-                  <div className="w-2 h-2 rounded-full bg-[#090D16]" />
+          {/* Vinyl Record Grooves (intentional dark disc) */}
+          <div className="absolute top-0 right-0 w-20 h-20 rounded-full bg-[#0f172a] border border-slate-700/60 flex items-center justify-center rotate-vinyl shadow-md">
+            <div className="w-16 h-16 rounded-full border border-slate-700/80 flex items-center justify-center">
+              <div className="w-11 h-11 rounded-full border border-slate-700/60 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full bg-th-accent flex items-center justify-center shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-slate-950" />
                 </div>
               </div>
             </div>
           </div>
 
           {/* Album Cover Front */}
-          <div className="absolute inset-y-0 left-0 w-16 h-20 rounded-xl overflow-hidden border border-white/10 shadow-xl bg-slate-900 z-10 flex items-center justify-center">
+          <div className="absolute inset-y-0 left-0 w-16 h-20 rounded-xl overflow-hidden border border-th-border-strong shadow-md bg-slate-900 z-10 flex items-center justify-center">
             {item.thumbnailUrl ? (
               <Image
                 src={item.thumbnailUrl}
@@ -236,7 +233,7 @@ export function NowPlayingCard({
                 unoptimized
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-indigo-900 to-slate-900 flex items-center justify-center text-indigo-300">
+              <div className="w-full h-full bg-th-accent-soft flex items-center justify-center text-th-accent">
                 <Music2 className="size-6" />
               </div>
             )}
@@ -245,30 +242,30 @@ export function NowPlayingCard({
 
         {/* Track Details */}
         <div className="flex-1 min-w-0 pr-1">
-          <h2 className="text-lg font-bold text-white truncate tracking-tight">
+          <h2 className="font-display text-lg font-bold text-th-text truncate tracking-tight">
             {item.title}
           </h2>
-          <p className="text-sm text-slate-300 truncate font-medium mt-0.5">
+          <p className="text-sm text-th-secondary truncate font-medium mt-0.5">
             {item.artist}
           </p>
           <div className="flex flex-wrap items-center gap-1.5 mt-2">
-            <span className="material-symbols-outlined text-indigo-400 text-[14px]">
+            <span className="material-symbols-outlined text-th-accent text-[14px]">
               table_restaurant
             </span>
-            <span className="font-mono text-[11px] text-slate-400 font-medium">
+            <span className="font-mono text-[11px] text-th-muted font-medium">
               Pedido por{" "}
-              <strong className="text-white font-semibold">
+              <strong className="text-th-text font-semibold">
                 {item.guestName ? `🎉 ${item.guestName}` : "Salón Principal"}
               </strong>
             </span>
             {item.isKaraoke && (
-              <span className="px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-200 border border-pink-400/40 font-mono text-[9px] uppercase font-bold">
+              <span className="px-1.5 py-0.5 rounded bg-th-accent-soft text-th-accent border border-th-accent/30 font-mono text-[9px] uppercase font-bold">
                 🎤 Karaoke
               </span>
             )}
           </div>
           {item.dedication && (
-            <p className="mt-1.5 text-[11px] text-fuchsia-200 bg-fuchsia-950/40 border border-fuchsia-500/30 rounded-lg px-2 py-1 truncate">
+            <p className="mt-1.5 text-[11px] text-th-accent bg-th-accent-soft border border-th-accent/25 rounded-lg px-2 py-1 truncate">
               💬 &ldquo;{item.dedication}&rdquo;
             </p>
           )}
@@ -276,16 +273,16 @@ export function NowPlayingCard({
       </div>
 
       {/* Progress Bar & Elapsed Time */}
-      <div className="space-y-1.5 mt-3 pt-2.5 border-t border-[#1E2538]/80 relative z-10">
-        <div className="w-full bg-[#0A0E1A] h-2 rounded-full overflow-hidden p-0.5 border border-[#1E2538]">
+      <div className="space-y-1.5 mt-3 pt-2.5 border-t border-th-border">
+        <div className="w-full bg-th-recessed h-2 rounded-full overflow-hidden p-0.5 border border-th-border">
           <div
-            className="bg-gradient-to-r from-indigo-500 via-indigo-400 to-violet-400 h-full rounded-full transition-all duration-300 shadow-[0_0_10px_rgba(99,102,241,0.6)]"
+            className="bg-th-accent h-full rounded-full transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
-        <div className="flex justify-between items-center font-mono text-xs text-slate-400">
+        <div className="flex justify-between items-center font-mono text-xs text-th-muted tabular-nums">
           <span>{formatDuration(elapsed)}</span>
-          <span className="flex items-center gap-1 text-indigo-400 font-semibold text-[11px]">
+          <span className="flex items-center gap-1 text-th-teal font-semibold text-[11px]">
             <span className="material-symbols-outlined text-[13px]">
               {isPaused ? "pause" : "graphic_eq"}
             </span>
@@ -296,7 +293,7 @@ export function NowPlayingCard({
 
         {/* Vote-to-Skip Live Section */}
         {skipVoteEnabled && onVoteSkip && (
-          <div className="pt-2.5 mt-2 border-t border-[#1E2538]/70">
+          <div className="pt-2.5 mt-2 border-t border-th-border">
             {(() => {
               const currentKey = item.trackId || item.id;
               const isMatchingSkip =
@@ -312,15 +309,15 @@ export function NowPlayingCard({
               const skipPct = Math.min(100, Math.round((votes / threshold) * 100));
 
               return (
-                <div className="rounded-xl bg-[#0D1220]/90 border border-rose-500/30 p-2.5 space-y-2">
+                <div className="rounded-xl bg-th-recessed border border-th-danger/30 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="block font-mono text-[11px] font-bold text-rose-200 truncate">
+                      <span className="block font-mono text-[11px] font-bold text-th-danger truncate">
                         {votes > 0
                           ? `🗳️ Votación para cambiar tema: ${votes}/${threshold}`
                           : "⏭️ ¿Querés cambiar la canción actual?"}
                       </span>
-                      <span className="block text-[10px] text-slate-400">
+                      <span className="block text-[10px] text-th-muted">
                         {votes > 0
                           ? `Con ${threshold} votos pasa automáticamente al siguiente tema`
                           : `Iniciá una votación en vivo (${threshold} votos para saltar)`}
@@ -332,8 +329,8 @@ export function NowPlayingCard({
                       onClick={onVoteSkip}
                       className={`shrink-0 px-3 py-1.5 rounded-lg font-mono text-[11px] font-extrabold flex items-center gap-1.5 transition-all active:scale-95 ${
                         hasVotedSkip
-                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default"
-                          : "bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white shadow-md shadow-rose-600/20"
+                          ? "bg-th-emerald-soft text-th-emerald border border-th-emerald/35 cursor-default"
+                          : "bg-th-danger hover:brightness-105 text-white shadow-xs"
                       }`}
                     >
                       <SkipForward className="size-3.5" />
@@ -347,9 +344,9 @@ export function NowPlayingCard({
                     </button>
                   </div>
                   {votes > 0 && (
-                    <div className="w-full h-1.5 rounded-full bg-[#161C2E] overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-th-card overflow-hidden border border-th-border">
                       <div
-                        className="h-full bg-gradient-to-r from-rose-500 to-amber-400 transition-all duration-300"
+                        className="h-full bg-th-danger transition-all duration-300"
                         style={{ width: `${skipPct}%` }}
                       />
                     </div>

@@ -180,22 +180,22 @@ export function YouTubeSearchModal({
     viewMode === "single" && singleVideoInfo ? [singleVideoInfo] : results;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-2xl rounded-2xl bg-[#141824] border border-[#232b42] p-6 shadow-2xl flex flex-col max-h-[88vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="relative w-full max-w-2xl rounded-2xl card-panel p-6 shadow-2xl flex flex-col max-h-[88vh]">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#232b42]">
+        <div className="flex items-center justify-between pb-4 border-b border-th-border">
           <div className="flex items-center gap-3">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-red-600 to-rose-700 flex items-center justify-center text-white shadow-md">
+            <div className="size-9 rounded-xl bg-rose-600 flex items-center justify-center text-white shadow-sm">
               <span className="material-symbols-outlined text-[20px]">smart_display</span>
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+              <h2 className="font-display text-base font-bold text-th-text tracking-tight flex flex-wrap items-center gap-2">
                 <span>Buscar y Agregar desde YouTube</span>
-                <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-300 border border-red-500/20 text-[10px] font-mono font-bold">
+                <span className="px-2 py-0.5 rounded-full bg-rose-500/12 text-rose-500 border border-rose-500/25 text-[10px] font-mono font-bold">
                   Videos & Playlists
                 </span>
               </h2>
-              <p className="font-mono text-[11px] text-slate-400">
+              <p className="font-mono text-[11px] text-th-muted">
                 Pegá links de videos individuales o listas de reproducción enteras
               </p>
             </div>
@@ -204,7 +204,7 @@ export function YouTubeSearchModal({
           <button
             type="button"
             onClick={onClose}
-            className="size-8 rounded-lg bg-[#1c2130] text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            className="size-8 rounded-lg bg-th-recessed border border-th-border text-th-muted hover:text-th-text hover:bg-th-card-hover flex items-center justify-center transition-colors"
           >
             <X className="size-4" />
           </button>
@@ -212,12 +212,12 @@ export function YouTubeSearchModal({
 
         {/* Destination Playlist Selector & Search input */}
         <div className="pt-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             {playlists.length > 0 ? (
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <label
                   htmlFor="target-playlist-select"
-                  className="font-mono text-xs text-slate-300 shrink-0"
+                  className="font-mono text-xs font-semibold text-th-secondary shrink-0"
                 >
                   Destino:
                 </label>
@@ -225,7 +225,7 @@ export function YouTubeSearchModal({
                   id="target-playlist-select"
                   value={selectedPlaylistId}
                   onChange={(e) => setSelectedPlaylistId(e.target.value)}
-                  className="flex-1 rounded-xl bg-[#0a0e17] border border-[#232b42] px-3 py-2 text-xs font-mono text-white focus:border-indigo-500 focus:outline-none truncate"
+                  className="ui-input !py-2 truncate flex-1"
                 >
                   {playlists.map((pl) => (
                     <option key={pl.id} value={pl.id}>
@@ -241,22 +241,22 @@ export function YouTubeSearchModal({
             <button
               type="button"
               onClick={() => setIsKaraoke((prev) => !prev)}
-              className={`px-3 py-2 rounded-xl font-mono text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0 ${
+              className={`px-3 py-2 rounded-xl font-mono text-xs font-semibold transition-all flex items-center gap-1.5 border shrink-0 ${
                 isKaraoke
-                  ? "bg-pink-600/30 text-pink-300 border-pink-500/60 shadow-md shadow-pink-500/20"
-                  : "bg-[#0a0e17] text-slate-400 border-[#232b42] hover:text-white"
+                  ? "bg-pink-600 text-white border-pink-600 shadow-sm"
+                  : "bg-th-recessed text-th-secondary border-th-border hover:text-th-text"
               }`}
             >
               <span className="material-symbols-outlined text-[15px]">
                 {isKaraoke ? "mic_external_on" : "mic"}
               </span>
-              <span>{isKaraoke ? "🎤 Filtro Karaoke (ON)" : "🎤 Karaoke"}</span>
+              <span>{isKaraoke ? "Filtro Karaoke (ON)" : "Karaoke"}</span>
             </button>
           </div>
 
           {/* Search Input with Paste & Clear Buttons */}
           <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-th-muted pointer-events-none" />
             <input
               id="yt-modal-search-input"
               type="text"
@@ -267,13 +267,13 @@ export function YouTubeSearchModal({
                   ? "Buscando karaoke más vistos o pegá link de playlist..."
                   : "Escribí artista, canción o pegá link de video / playlist..."
               }
-              className="w-full h-11 pl-10 pr-24 rounded-xl bg-[#0a0e17] border border-[#232b42] text-xs text-white placeholder:text-slate-500 font-mono focus:border-indigo-500 focus:outline-none"
+              className="ui-input !h-11 !pl-10 !pr-24"
               autoFocus
             />
 
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
               {searching && (
-                <Loader2 className="size-4 text-indigo-400 animate-spin mr-1" />
+                <Loader2 className="size-4 text-th-accent animate-spin mr-1" />
               )}
 
               {query ? (
@@ -286,7 +286,7 @@ export function YouTubeSearchModal({
                     setSingleVideoInfo(null);
                   }}
                   title="Limpiar búsqueda"
-                  className="size-7 rounded-lg text-slate-400 hover:text-white hover:bg-[#232b42] flex items-center justify-center transition-colors"
+                  className="size-7 rounded-lg text-th-muted hover:text-th-text hover:bg-th-card-hover flex items-center justify-center transition-colors"
                 >
                   <X className="size-4" />
                 </button>
@@ -295,9 +295,9 @@ export function YouTubeSearchModal({
                   type="button"
                   onClick={() => void handlePaste()}
                   title="Pegar link del portapapeles"
-                  className="px-2 py-1 rounded-lg bg-[#1c2130] hover:bg-indigo-600/40 text-slate-300 hover:text-white font-mono text-[11px] flex items-center gap-1 border border-[#2a324b] transition-all active:scale-95 shadow-sm"
+                  className="px-2.5 py-1 rounded-lg bg-th-recessed hover:bg-th-accent-soft text-th-secondary hover:text-th-accent font-mono text-[11px] font-semibold flex items-center gap-1 border border-th-border transition-all active:scale-95"
                 >
-                  <ClipboardPaste className="size-3.5 text-indigo-400" />
+                  <ClipboardPaste className="size-3.5 text-th-accent" />
                   <span>Pegar</span>
                 </button>
               )}
@@ -307,32 +307,32 @@ export function YouTubeSearchModal({
 
         {/* Feedback alert */}
         {feedback && (
-          <div className="mt-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-xs flex items-center gap-2 animate-fade-in">
-            <Check className="size-4 text-emerald-400 shrink-0" />
+          <div className="mt-3 p-2.5 rounded-xl bg-th-emerald-soft border border-th-emerald/30 text-th-emerald font-mono text-xs flex items-center gap-2 animate-fade-in">
+            <Check className="size-4 shrink-0" />
             <span>{feedback}</span>
           </div>
         )}
 
         {/* PLAYLIST DETECTED HERO BANNER */}
         {playlistInfo && (
-          <div className="mt-3 p-3.5 rounded-xl bg-gradient-to-r from-red-950/40 via-indigo-950/30 to-[#181b25] border border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="mt-3 p-3.5 rounded-xl bg-th-recessed border border-rose-500/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="size-11 rounded-xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0 shadow-inner">
+              <div className="size-11 rounded-xl bg-rose-500/15 border border-rose-500/35 flex items-center justify-center text-rose-500 shrink-0">
                 <ListMusic className="size-6" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-red-500/20 text-red-300 border border-red-500/30 font-bold uppercase">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/15 text-rose-500 border border-rose-500/30 font-bold uppercase">
                     Playlist Detectada
                   </span>
-                  <span className="text-[11px] font-mono text-slate-400">
+                  <span className="text-[11px] font-mono text-th-muted">
                     {playlistInfo.tracks.length} temas cargados
                   </span>
                 </div>
-                <h3 className="text-xs font-bold text-white truncate mt-0.5">
+                <h3 className="text-xs font-bold text-th-text truncate mt-0.5">
                   {playlistInfo.title}
                 </h3>
-                <p className="text-[10px] font-mono text-slate-400 truncate">
+                <p className="text-[10px] font-mono text-th-muted truncate">
                   Canal: {playlistInfo.author}
                 </p>
               </div>
@@ -342,7 +342,7 @@ export function YouTubeSearchModal({
               type="button"
               disabled={batchImporting}
               onClick={() => void handleImportEntirePlaylist()}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-indigo-600 hover:from-red-500 hover:to-indigo-500 text-white font-mono text-xs font-bold shadow-lg shadow-red-600/25 flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0"
+              className="px-3.5 py-2 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono text-xs font-semibold shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0"
             >
               {batchImporting ? (
                 <>
@@ -364,34 +364,34 @@ export function YouTubeSearchModal({
         {/* Selector between Playlist vs Single Video if both exist in the URL */}
         {playlistInfo && singleVideoInfo && (
           <div className="mt-2.5 flex items-center gap-2">
-            <span className="font-mono text-[11px] text-slate-400">Mostrar:</span>
+            <span className="font-mono text-[11px] text-th-muted">Mostrar:</span>
             <button
               type="button"
               onClick={() => setViewMode("playlist")}
               className={`px-2.5 py-1 rounded-lg font-mono text-[11px] transition-all border ${
                 viewMode === "playlist"
-                  ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/50 font-bold"
-                  : "bg-[#0a0e17] text-slate-400 border-[#232b42] hover:text-white"
+                  ? "bg-th-accent-soft text-th-accent border-th-accent/40 font-semibold"
+                  : "bg-th-recessed text-th-secondary border-th-border hover:text-th-text"
               }`}
             >
-              📂 Toda la lista ({playlistInfo.tracks.length})
+              Toda la lista ({playlistInfo.tracks.length})
             </button>
             <button
               type="button"
               onClick={() => setViewMode("single")}
               className={`px-2.5 py-1 rounded-lg font-mono text-[11px] transition-all border ${
                 viewMode === "single"
-                  ? "bg-indigo-600/30 text-indigo-300 border-indigo-500/50 font-bold"
-                  : "bg-[#0a0e17] text-slate-400 border-[#232b42] hover:text-white"
+                  ? "bg-th-accent-soft text-th-accent border-th-accent/40 font-semibold"
+                  : "bg-th-recessed text-th-secondary border-th-border hover:text-th-text"
               }`}
             >
-              ▶ Solo este video («{singleVideoInfo.title.slice(0, 20)}...»)
+              Solo este video («{singleVideoInfo.title.slice(0, 20)}...»)
             </button>
           </div>
         )}
 
         {/* Search Results List */}
-        <div className="mt-3 flex-1 overflow-y-auto space-y-2.5 pr-1">
+        <div className="mt-3 flex-1 min-h-0 ui-scroll-container space-y-2 pr-1">
           {displayedTracks.map((item) => {
             const isAdded = addedIds.has(item.videoId);
             const isSubmitting = addingId === item.videoId;
@@ -399,10 +399,10 @@ export function YouTubeSearchModal({
             return (
               <div
                 key={item.videoId}
-                className="p-3 rounded-xl bg-[#181b25] border border-[#232b42] flex items-center justify-between gap-3 hover:border-indigo-500/40 transition-colors"
+                className="p-3 rounded-xl bg-th-recessed border border-th-border flex items-center justify-between gap-3 hover:border-th-accent/40 transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="relative size-12 rounded-lg overflow-hidden bg-black shrink-0 border border-[#2a3148]">
+                  <div className="relative size-12 rounded-lg overflow-hidden bg-th-card shrink-0 border border-th-border">
                     {item.thumbnailUrl ? (
                       <Image
                         src={item.thumbnailUrl}
@@ -413,21 +413,21 @@ export function YouTubeSearchModal({
                         unoptimized
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500">
+                      <div className="w-full h-full flex items-center justify-center text-th-muted">
                         <Music2 className="size-5" />
                       </div>
                     )}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-xs font-bold text-white truncate leading-tight">
+                    <h4 className="text-xs font-bold text-th-text truncate leading-tight">
                       {item.title}
                     </h4>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                    <p className="text-[11px] text-th-secondary truncate mt-0.5">
                       {item.artist}
                     </p>
-                    <span className="font-mono text-[10px] text-indigo-300">
-                      ⏱ {item.duration}
+                    <span className="font-mono text-[10px] text-th-accent">
+                      {item.duration}
                     </span>
                   </div>
                 </div>
@@ -436,17 +436,17 @@ export function YouTubeSearchModal({
                   type="button"
                   disabled={isSubmitting || isAdded || batchImporting}
                   onClick={() => void handleAddSingle(item)}
-                  className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 ${
+                  className={`px-3 py-1.5 rounded-lg font-mono text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 ${
                     isAdded
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                      ? "bg-th-emerald-soft text-th-emerald border border-th-emerald/35"
+                      : "bg-th-accent hover:bg-th-accent-hover text-th-on-accent shadow-sm"
                   }`}
                 >
                   {isSubmitting ? (
                     <Loader2 className="size-3.5 animate-spin" />
                   ) : isAdded ? (
                     <>
-                      <Check className="size-3.5 text-emerald-400" />
+                      <Check className="size-3.5" />
                       <span>Agregada</span>
                     </>
                   ) : (
@@ -461,20 +461,20 @@ export function YouTubeSearchModal({
           })}
 
           {!searching && query.trim() && displayedTracks.length === 0 && (
-            <div className="py-12 text-center text-xs font-mono text-slate-500 space-y-1">
-              <span className="material-symbols-outlined text-3xl text-slate-600">search_off</span>
+            <div className="py-12 text-center text-xs font-mono text-th-muted space-y-1">
+              <span className="material-symbols-outlined text-3xl text-th-muted">search_off</span>
               <p>No se encontraron videos ni listas para «{query}».</p>
-              <p className="text-slate-600">Probá con el título o pegá el link directo de YouTube.</p>
+              <p className="text-th-muted/80">Probá con el título o pegá el link directo de YouTube.</p>
             </div>
           )}
 
           {!query.trim() && (
-            <div className="py-10 text-center text-xs font-mono text-slate-500 space-y-2">
-              <span className="material-symbols-outlined text-3xl text-slate-600 block mb-1">
+            <div className="py-10 text-center text-xs font-mono text-th-muted space-y-2">
+              <span className="material-symbols-outlined text-3xl text-th-muted block mb-1">
                 youtube_activity
               </span>
               <p>Buscá artistas o canciones para sumarlos a tus playlists del local.</p>
-              <p className="text-slate-600 text-[11px]">
+              <p className="text-th-muted/80 text-[11px]">
                 Tip: Podés copiar un link de Playlist en YouTube y hacer click en <strong>«Pegar»</strong> para importar toda la lista de una vez.
               </p>
             </div>

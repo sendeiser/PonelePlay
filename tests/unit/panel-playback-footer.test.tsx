@@ -206,7 +206,7 @@ describe("PanelPlaybackFooter with Expandable Queue Drawer", () => {
     });
 
     // Test boost vote on queued item
-    const subirBtn = screen.getByTitle(/subir de puesto/i);
+    const subirBtn = screen.getByTitle(/subir al tope de la cola/i);
     fireEvent.click(subirBtn);
     await waitFor(() => {
       expect(mockCastVote).toHaveBeenCalledWith("qi-1", "billar-aurora");

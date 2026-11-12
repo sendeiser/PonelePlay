@@ -43,30 +43,35 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="confirm-title"
       aria-describedby="confirm-desc"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-xs p-4"
       onClick={onCancel}
     >
       <div
-        className="bg-[#07211b] border border-amber/20 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
+        className="card-panel rounded-2xl p-6 max-w-md w-full"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="confirm-title" className="text-xl font-display text-cream mb-2">
+        <h2
+          id="confirm-title"
+          className="text-lg font-display font-bold text-th-text mb-2"
+        >
           {title}
         </h2>
-        <p id="confirm-desc" className="text-cream/80 mb-6">
+        <p id="confirm-desc" className="text-sm text-th-text-2 mb-6 leading-relaxed">
           {description}
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="flex gap-2.5 justify-end">
           <button
+            type="button"
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-amber/30 text-cream hover:bg-amber/10 transition-colors"
+            className="h-10 px-4 rounded-xl border border-th-border bg-th-recessed text-sm font-medium text-th-text hover:bg-th-hover transition-colors cursor-pointer"
           >
             Cancelar
           </button>
           <button
             ref={btnRef}
+            type="button"
             onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-amber text-[#041611] font-semibold hover:bg-amber/90 transition-colors"
+            className="h-10 px-4 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white text-sm font-semibold transition-colors cursor-pointer"
           >
             {confirmLabel}
           </button>

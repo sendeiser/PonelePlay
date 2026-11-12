@@ -13,6 +13,7 @@ import {
   Play,
   Plus,
   Radio,
+  Search,
   Trash2,
 } from "lucide-react";
 import {
@@ -58,6 +59,7 @@ export function PlaylistManager({
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const [hasInitializedExpanded, setHasInitializedExpanded] = useState(false);
   const [playlistTracks, setPlaylistTracks] = useState<Record<string, TrackRow[]>>({});
+  const [trackFilters, setTrackFilters] = useState<Record<string, string>>({});
   const [loadingTracks, setLoadingTracks] = useState<string | null>(null);
   const [busyActionId, setBusyActionId] = useState<string | null>(null);
 
@@ -287,18 +289,18 @@ export function PlaylistManager({
   return (
     <div className="space-y-6">
       {/* Top action header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#1E2333]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-th-border">
         <div>
-          <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-            <span className="material-symbols-outlined text-indigo-400">queue_music</span>
+          <h2 className="font-display text-base font-bold text-th-text tracking-tight flex items-center gap-2">
+            <span className="material-symbols-outlined text-th-accent">queue_music</span>
             Playlists Personalizadas del Local
           </h2>
-          <p className="font-mono text-xs text-slate-400">
+          <p className="text-xs text-th-muted mt-0.5">
             Creá listas temáticas y sumá canciones buscando directamente en YouTube.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
             onClick={() => {
@@ -306,7 +308,7 @@ export function PlaylistManager({
               setSearchTargetPlaylistId(firstOpen || playlists[0]?.id || null);
               setYtModalOpen(true);
             }}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-mono text-xs font-bold shadow-md shadow-red-600/30 transition-all active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-semibold shadow-sm transition-all active:scale-95"
           >
             <span className="material-symbols-outlined text-[18px]">smart_display</span>
             <span>Buscar en YouTube</span>
@@ -315,46 +317,46 @@ export function PlaylistManager({
           <button
             type="button"
             onClick={() => setNewModalOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold shadow-md shadow-indigo-600/30 transition-all active:scale-95"
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono text-xs font-semibold shadow-sm transition-all active:scale-95"
           >
             <Plus className="size-4" />
-            <span>+ Nueva Playlist</span>
+            <span>Nueva Playlist</span>
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 font-mono text-xs flex items-center gap-2">
-          <span className="material-symbols-outlined text-red-400 text-base">error</span>
+        <div className="p-3 rounded-xl bg-th-danger-soft border border-th-danger/30 text-th-danger font-mono text-xs flex items-center gap-2">
+          <span className="material-symbols-outlined text-base">error</span>
           <span>{error}</span>
         </div>
       )}
 
       {feedback && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-xs flex items-center gap-2">
-          <Check className="size-4 text-emerald-400" />
+        <div className="p-3 rounded-xl bg-th-emerald-soft border border-th-emerald/30 text-th-emerald font-mono text-xs flex items-center gap-2">
+          <Check className="size-4" />
           <span>{feedback}</span>
         </div>
       )}
 
       {/* Playlist Grid / Cards */}
       {loading && playlists.length === 0 ? (
-        <p className="text-center py-12 text-xs font-mono text-slate-500">
+        <p className="text-center py-12 text-xs font-mono text-th-muted">
           Cargando playlists...
         </p>
       ) : playlists.length === 0 ? (
-        <div className="py-16 text-center text-xs font-mono text-slate-500 space-y-3 card-panel rounded-2xl p-8">
-          <ListMusic className="size-12 text-slate-600 mx-auto" />
-          <p className="text-sm font-bold text-slate-300">
+        <div className="py-16 text-center text-xs space-y-3 card-panel rounded-2xl p-8">
+          <ListMusic className="size-12 text-th-muted mx-auto" />
+          <p className="font-display text-sm font-bold text-th-text">
             Aún no creaste ninguna playlist personalizada.
           </p>
-          <p className="text-slate-500 max-w-sm mx-auto">
-            Podés armar playlists como «Rock Nacional», «Cachengue», «Tardecita Chill» buscando videos en YouTube.
+          <p className="text-th-muted max-w-sm mx-auto">
+            Podés armar playlists como «Rock Nacional», «Cachengue» o «Tardecita Chill» buscando videos en YouTube.
           </p>
           <button
             type="button"
             onClick={() => setNewModalOpen(true)}
-            className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold"
+            className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono text-xs font-semibold shadow-sm"
           >
             <Plus className="size-4" />
             <span>Crear Primera Playlist</span>
@@ -364,300 +366,334 @@ export function PlaylistManager({
         <div className="space-y-4">
           {/* Accordion Controls Bar */}
           <div className="flex items-center justify-between pb-1 text-xs font-mono">
-          <span className="text-slate-400">
-            {playlists.length} {playlists.length === 1 ? "playlist creada" : "playlists creadas"}
-          </span>
-          <button
-            type="button"
-            onClick={anyExpanded ? collapseAll : expandAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#181d2c] hover:bg-[#222a3e] border border-[#232b42] text-slate-300 hover:text-white font-mono text-xs font-semibold transition-all active:scale-95 shadow-sm"
-            title={anyExpanded ? "Contraer todas las listas" : "Desplegar todas las listas"}
-          >
-            {anyExpanded ? (
-              <>
-                <ChevronDown className="size-3.5 text-indigo-400" />
-                <span>Contraer todas</span>
-              </>
-            ) : (
-              <>
-                <ChevronRight className="size-3.5 text-indigo-400" />
-                <span>Desplegar todas</span>
-              </>
-            )}
-          </button>
-        </div>
+            <span className="text-th-muted">
+              {playlists.length} {playlists.length === 1 ? "playlist creada" : "playlists creadas"}
+            </span>
+            <button
+              type="button"
+              onClick={anyExpanded ? collapseAll : expandAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-th-card hover:bg-th-card-hover border border-th-border text-th-secondary hover:text-th-text font-mono text-xs font-semibold transition-all active:scale-95 shadow-sm"
+              title={anyExpanded ? "Contraer todas las listas" : "Desplegar todas las listas"}
+            >
+              {anyExpanded ? (
+                <>
+                  <ChevronDown className="size-3.5 text-th-accent" />
+                  <span>Contraer todas</span>
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="size-3.5 text-th-accent" />
+                  <span>Desplegar todas</span>
+                </>
+              )}
+            </button>
+          </div>
 
-        <div className="grid grid-cols-1 gap-4">
-          {playlists.map((pl) => {
-            const isExpanded = Boolean(expandedMap[pl.id]);
-            const tracks = playlistTracks[pl.id] || [];
-            const isLoadingThis = loadingTracks === pl.id;
+          <div className="grid grid-cols-1 gap-4">
+            {playlists.map((pl) => {
+              const isExpanded = Boolean(expandedMap[pl.id]);
+              const tracks = playlistTracks[pl.id] || [];
+              const trackQuery = (trackFilters[pl.id] ?? "").trim().toLowerCase();
+              const visibleTracks = trackQuery
+                ? tracks.filter(
+                    (t) =>
+                      t.title.toLowerCase().includes(trackQuery) ||
+                      t.artist.toLowerCase().includes(trackQuery),
+                  )
+                : tracks;
+              const isLoadingThis = loadingTracks === pl.id;
 
-            return (
-              <div
-                key={pl.id}
-                className={`rounded-2xl border transition-all ${
-                  pl.isActive
-                    ? "bg-[#181d2c] border-indigo-500/50 shadow-lg shadow-indigo-600/15"
-                    : "bg-[#141824] border-[#232b42] hover:border-[#2d3752]"
-                }`}
-              >
-                {/* Playlist Header Row */}
-                <div className="p-4 flex flex-wrap items-center justify-between gap-4">
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(pl.id)}
-                    className="flex items-center gap-3 cursor-pointer select-none min-w-0 flex-1 text-left group"
-                    title={isExpanded ? "Contraer lista" : "Desplegar lista"}
-                  >
-                    <div className="size-10 rounded-xl bg-[#1c2234] border border-[#283250] flex items-center justify-center text-indigo-400 shrink-0">
-                      <ListMusic className="size-5" />
-                    </div>
+              return (
+                <div
+                  key={pl.id}
+                  className={`rounded-2xl border transition-all ${
+                    pl.isActive
+                      ? "bg-th-card border-th-accent/45 shadow-md"
+                      : "bg-th-card border-th-border hover:border-th-border-strong shadow-sm"
+                  }`}
+                >
+                  {/* Playlist Header Row */}
+                  <div className="p-4 flex flex-wrap items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(pl.id)}
+                      className="flex items-center gap-3 cursor-pointer select-none min-w-0 flex-1 text-left group"
+                      title={isExpanded ? "Contraer lista" : "Desplegar lista"}
+                    >
+                      <div className="size-10 rounded-xl bg-th-accent-soft border border-th-accent/25 flex items-center justify-center text-th-accent shrink-0">
+                        <ListMusic className="size-5" />
+                      </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-bold text-white truncate">
-                          {pl.name}
-                        </h3>
-                        {pl.isActive && (
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-bold flex items-center gap-1">
-                            <span className="size-1.5 rounded-full bg-emerald-400 animate-live-dot" />
-                            ACTIVA EN TV
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="font-display text-sm font-bold text-th-text truncate">
+                            {pl.name}
+                          </h3>
+                          {pl.isActive && (
+                            <span className="px-2 py-0.5 rounded-full bg-th-emerald-soft border border-th-emerald/30 text-th-emerald font-mono text-[10px] font-bold inline-flex items-center gap-1">
+                              <span className="size-1.5 rounded-full bg-th-emerald animate-live-dot" />
+                              ACTIVA EN TV
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-th-muted truncate mt-0.5">
+                          {pl.description || "Sin descripción"} ·{" "}
+                          <span className="font-mono font-medium text-th-secondary">
+                            {tracks.length > 0 ? tracks.length : (pl.trackCount ?? 0)} temas
                           </span>
+                        </p>
+                      </div>
+
+                      <div className="px-2.5 py-1.5 rounded-lg bg-th-recessed border border-th-border text-xs font-mono text-th-secondary flex items-center gap-1.5 shrink-0 group-hover:border-th-accent/40 group-hover:text-th-text transition-colors">
+                        <span>{isExpanded ? "Contraer" : "Ver temas"}</span>
+                        {isExpanded ? (
+                          <ChevronDown className="size-3.5 text-th-accent" />
+                        ) : (
+                          <ChevronRight className="size-3.5 text-th-accent" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {pl.description || "Sin descripción"} ·{" "}
-                        <span className="font-mono text-indigo-300">
-                          {tracks.length > 0 ? tracks.length : (pl.trackCount ?? 0)} temas
-                        </span>
-                      </p>
-                    </div>
-
-                    <div className="px-2.5 py-1 rounded-lg bg-[#181d2c] border border-[#232b42] text-xs font-mono text-slate-300 flex items-center gap-1.5 shrink-0 group-hover:border-indigo-500/40 transition-colors">
-                      <span>{isExpanded ? "Contraer" : "Ver temas"}</span>
-                      {isExpanded ? (
-                        <ChevronDown className="size-3.5 text-indigo-400" />
-                      ) : (
-                        <ChevronRight className="size-3.5 text-indigo-400" />
-                      )}
-                    </div>
-                  </button>
-
-                  {/* Actions for this playlist */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={busyActionId === `play-pl:${pl.id}`}
-                      onClick={() => void handlePlayPlaylist(pl)}
-                      className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 text-white font-mono text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 active:scale-95 transition-all"
-                      title="Reproducir esta playlist inmediatamente en la pantalla TV"
-                    >
-                      {busyActionId === `play-pl:${pl.id}` ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Play className="size-3.5 fill-white" />
-                      )}
-                      <span>Reproducir Playlist</span>
                     </button>
 
-                    <button
-                      type="button"
-                      disabled={busyActionId === `enqueue-pl:${pl.id}`}
-                      onClick={() => void handleEnqueuePlaylist(pl)}
-                      className="px-3 py-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] disabled:opacity-60 border border-[#2a3450] text-slate-300 hover:text-white font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                      title="Agregar todas las canciones a la cola en vivo de la noche"
-                    >
-                      {busyActionId === `enqueue-pl:${pl.id}` ? (
-                        <Loader2 className="size-3.5 text-indigo-400 animate-spin" />
-                      ) : (
-                        <ListPlus className="size-3.5 text-indigo-400" />
-                      )}
-                      <span>Encolar Todo</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openSearchForPlaylist(pl.id)}
-                      className="px-3 py-1.5 rounded-lg bg-[#1c2234] hover:bg-red-950/40 border border-[#2a3450] hover:border-red-500/30 text-slate-300 hover:text-red-300 font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                      title="Buscar videos en YouTube para esta playlist"
-                    >
-                      <Plus className="size-3.5 text-red-400" />
-                      <span>YouTube</span>
-                    </button>
-
-                    {!pl.isActive ? (
+                    {/* Actions for this playlist */}
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => void handleActivate(pl)}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 font-mono text-xs font-bold flex items-center gap-1.5 transition-all"
-                        title="Activar como música de fondo continua en la TV"
+                        disabled={busyActionId === `play-pl:${pl.id}`}
+                        onClick={() => void handlePlayPlaylist(pl)}
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-mono text-xs font-semibold flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                        title="Reproducir esta playlist inmediatamente en la pantalla TV"
                       >
-                        <Radio className="size-3.5 text-cyan-400" />
-                        <span>Activar de Fondo</span>
+                        {busyActionId === `play-pl:${pl.id}` ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Play className="size-3.5 fill-white" />
+                        )}
+                        <span>Reproducir</span>
                       </button>
-                    ) : (
-                      <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-bold flex items-center gap-1">
-                        <Check className="size-3.5" />
-                        <span>Activa en TV</span>
-                      </div>
-                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => void handleDeletePlaylist(pl.id, pl.name)}
-                      className="size-8 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-950/30 flex items-center justify-center transition-colors"
-                      title="Eliminar playlist"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                </div>
+                      <button
+                        type="button"
+                        disabled={busyActionId === `enqueue-pl:${pl.id}`}
+                        onClick={() => void handleEnqueuePlaylist(pl)}
+                        className="px-3 py-1.5 rounded-lg bg-th-recessed hover:bg-th-card-hover disabled:opacity-60 border border-th-border text-th-secondary hover:text-th-text font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Agregar todas las canciones a la cola en vivo de la noche"
+                      >
+                        {busyActionId === `enqueue-pl:${pl.id}` ? (
+                          <Loader2 className="size-3.5 text-th-accent animate-spin" />
+                        ) : (
+                          <ListPlus className="size-3.5 text-th-accent" />
+                        )}
+                        <span>Encolar Todo</span>
+                      </button>
 
-                {/* Expanded Tracks List */}
-                {isExpanded && (
-                  <div className="border-t border-[#1E2333] p-4 bg-[#0d101a]/80 rounded-b-2xl space-y-3">
-                    <div className="flex items-center justify-between text-xs font-mono text-slate-400 pb-2 border-b border-[#1E2333]/50">
-                      <span>Canciones en «{pl.name}»</span>
                       <button
                         type="button"
                         onClick={() => openSearchForPlaylist(pl.id)}
-                        className="text-cyan-400 hover:underline flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-lg bg-th-recessed hover:bg-rose-500/10 border border-th-border hover:border-rose-500/35 text-th-secondary hover:text-rose-500 font-mono text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                        title="Buscar videos en YouTube para esta playlist"
                       >
-                        <Plus className="size-3" />
-                        <span>Sumar canciones de YouTube</span>
+                        <Plus className="size-3.5 text-rose-500" />
+                        <span>YouTube</span>
                       </button>
-                    </div>
 
-                    {isLoadingThis ? (
-                      <div className="py-6 text-center text-xs font-mono text-slate-500">
-                        <Loader2 className="size-4 animate-spin inline-block mr-2" />
-                        Cargando canciones...
-                      </div>
-                    ) : tracks.length === 0 ? (
-                      <div className="py-8 text-center text-xs font-mono text-slate-500 space-y-2">
-                        <p>Esta playlist todavía no tiene canciones.</p>
+                      {!pl.isActive ? (
                         <button
                           type="button"
-                          onClick={() => openSearchForPlaylist(pl.id)}
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-mono text-xs font-bold"
+                          onClick={() => void handleActivate(pl)}
+                          className="px-3 py-1.5 rounded-lg bg-th-accent-soft hover:bg-th-accent text-th-accent hover:text-th-on-accent border border-th-accent/30 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
+                          title="Activar como música de fondo continua en la TV"
                         >
-                          Buscar videos en YouTube
+                          <Radio className="size-3.5" />
+                          <span>Activar Fondo</span>
                         </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {tracks.map((t, idx) => (
-                          <div
-                            key={t.id}
-                            className="p-2.5 rounded-xl bg-[#141824] border border-[#232b42] flex items-center justify-between gap-3 hover:border-[#2d3752]"
-                          >
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <span className="font-mono text-xs text-slate-500 w-5 text-center">
-                                #{idx + 1}
-                              </span>
+                      ) : (
+                        <div className="px-3 py-1.5 rounded-lg bg-th-emerald-soft border border-th-emerald/30 text-th-emerald font-mono text-xs font-semibold flex items-center gap-1">
+                          <Check className="size-3.5" />
+                          <span>Activa en TV</span>
+                        </div>
+                      )}
 
-                              <div className="relative size-10 rounded-lg overflow-hidden bg-black shrink-0 border border-[#283250]">
-                                {t.thumbnailUrl ? (
-                                  <Image
-                                    src={t.thumbnailUrl}
-                                    alt={t.title}
-                                    width={40}
-                                    height={40}
-                                    className="w-full h-full object-cover"
-                                    unoptimized
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-slate-500">
-                                    <Music2 className="size-4" />
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <h4 className="text-xs font-bold text-white truncate">
-                                  {t.title}
-                                </h4>
-                                <p className="text-[11px] text-slate-400 truncate">
-                                  {t.artist}
-                                </p>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs text-slate-400 mr-1">
-                                {formatDuration(t.durationSeconds)}
-                              </span>
-
-                              <button
-                                type="button"
-                                disabled={busyActionId === `play-trk:${t.id}`}
-                                onClick={() => void handlePlayTrackSingle(t)}
-                                className="p-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600 disabled:opacity-60 text-indigo-300 hover:text-white border border-indigo-500/30 transition-all flex items-center gap-1 font-mono text-[11px]"
-                                title="Reproducir este tema ahora en la TV"
-                              >
-                                {busyActionId === `play-trk:${t.id}` ? (
-                                  <Loader2 className="size-3 animate-spin" />
-                                ) : (
-                                  <Play className="size-3 fill-current" />
-                                )}
-                                <span className="hidden sm:inline">Reproducir</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                disabled={busyActionId === `enqueue-trk:${t.id}`}
-                                onClick={() => void handleEnqueueTrackSingle(t)}
-                                className="p-1.5 rounded-lg bg-[#1c2234] hover:bg-[#252c42] disabled:opacity-60 text-slate-300 hover:text-cyan-400 border border-[#2a3450] transition-colors flex items-center gap-1 font-mono text-[11px]"
-                                title="Poner como siguiente en la cola en vivo"
-                              >
-                                {busyActionId === `enqueue-trk:${t.id}` ? (
-                                  <Loader2 className="size-3 animate-spin text-cyan-400" />
-                                ) : (
-                                  <Plus className="size-3" />
-                                )}
-                                <span className="hidden sm:inline">Encolar</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => void handleRemoveTrack(pl.id, t.id)}
-                                className="text-slate-500 hover:text-rose-400 transition-colors p-1.5 ml-1"
-                                title="Quitar de playlist"
-                              >
-                                <Trash2 className="size-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => void handleDeletePlaylist(pl.id, pl.name)}
+                        className="size-8 rounded-lg text-th-muted hover:text-th-danger hover:bg-th-danger-soft flex items-center justify-center transition-colors"
+                        title="Eliminar playlist"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+
+                  {/* Expanded Tracks List with Bounded Internal Scroll */}
+                  {isExpanded && (
+                    <div className="border-t border-th-border p-4 bg-th-recessed/70 rounded-b-2xl space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-th-border">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-xs font-semibold text-th-secondary truncate">
+                            Canciones en «{pl.name}» ({visibleTracks.length}/{tracks.length})
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {tracks.length > 4 && (
+                            <div className="relative">
+                              <Search className="size-3.5 text-th-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                              <input
+                                type="search"
+                                value={trackFilters[pl.id] ?? ""}
+                                onChange={(e) =>
+                                  setTrackFilters((prev) => ({
+                                    ...prev,
+                                    [pl.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Filtrar lista..."
+                                className="ui-input !h-8 !py-1 !pl-8 !pr-2.5 w-44 text-[11px]"
+                              />
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => openSearchForPlaylist(pl.id)}
+                            className="text-th-accent hover:underline font-mono text-xs font-medium flex items-center gap-1"
+                          >
+                            <Plus className="size-3.5" />
+                            <span>Sumar de YouTube</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {isLoadingThis ? (
+                        <div className="py-6 text-center text-xs font-mono text-th-muted">
+                          <Loader2 className="size-4 animate-spin inline-block mr-2" />
+                          Cargando canciones...
+                        </div>
+                      ) : tracks.length === 0 ? (
+                        <div className="py-8 text-center text-xs font-mono text-th-muted space-y-2">
+                          <p>Esta playlist todavía no tiene canciones.</p>
+                          <button
+                            type="button"
+                            onClick={() => openSearchForPlaylist(pl.id)}
+                            className="px-3 py-1.5 rounded-lg bg-th-accent text-th-on-accent font-mono text-xs font-semibold"
+                          >
+                            Buscar videos en YouTube
+                          </button>
+                        </div>
+                      ) : visibleTracks.length === 0 ? (
+                        <p className="py-6 text-center text-xs font-mono text-th-muted">
+                          Ninguna canción coincide con &ldquo;{trackFilters[pl.id]}&rdquo;.
+                        </p>
+                      ) : (
+                        <div className="max-h-[420px] min-h-0 rounded-xl border border-th-border bg-th-card/60 p-2 space-y-1.5 ui-scroll-container">
+                          {visibleTracks.map((t, idx) => (
+                            <div
+                              key={t.id}
+                              className="p-2.5 rounded-xl bg-th-card border border-th-border/80 flex items-center justify-between gap-3 hover:border-th-border-strong transition-colors"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                <span className="font-mono text-xs text-th-muted w-6 text-center shrink-0">
+                                  #{idx + 1}
+                                </span>
+
+                                <div className="relative size-10 rounded-lg overflow-hidden bg-th-recessed shrink-0 border border-th-border">
+                                  {t.thumbnailUrl ? (
+                                    <Image
+                                      src={t.thumbnailUrl}
+                                      alt={t.title}
+                                      width={40}
+                                      height={40}
+                                      className="w-full h-full object-cover"
+                                      unoptimized
+                                    />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-th-muted">
+                                      <Music2 className="size-4" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="text-xs font-semibold text-th-text truncate">
+                                    {t.title}
+                                  </h4>
+                                  <p className="text-[11px] text-th-muted truncate">
+                                    {t.artist}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="font-mono text-xs text-th-muted mr-1 hidden sm:inline">
+                                  {formatDuration(t.durationSeconds)}
+                                </span>
+
+                                <button
+                                  type="button"
+                                  disabled={busyActionId === `play-trk:${t.id}`}
+                                  onClick={() => void handlePlayTrackSingle(t)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-th-accent-soft hover:bg-th-accent disabled:opacity-60 text-th-accent hover:text-th-on-accent border border-th-accent/25 transition-all flex items-center gap-1 font-mono text-[11px] font-medium"
+                                  title="Reproducir este tema ahora en la TV"
+                                >
+                                  {busyActionId === `play-trk:${t.id}` ? (
+                                    <Loader2 className="size-3 animate-spin" />
+                                  ) : (
+                                    <Play className="size-3 fill-current" />
+                                  )}
+                                  <span className="hidden sm:inline">Reproducir</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={busyActionId === `enqueue-trk:${t.id}`}
+                                  onClick={() => void handleEnqueueTrackSingle(t)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-th-recessed hover:bg-th-card-hover disabled:opacity-60 text-th-secondary hover:text-th-teal border border-th-border transition-colors flex items-center gap-1 font-mono text-[11px] font-medium"
+                                  title="Poner como siguiente en la cola en vivo"
+                                >
+                                  {busyActionId === `enqueue-trk:${t.id}` ? (
+                                    <Loader2 className="size-3 animate-spin text-th-teal" />
+                                  ) : (
+                                    <Plus className="size-3" />
+                                  )}
+                                  <span className="hidden sm:inline">Encolar</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => void handleRemoveTrack(pl.id, t.id)}
+                                  className="text-th-muted hover:text-th-danger hover:bg-th-danger-soft rounded-lg transition-colors p-1.5 ml-0.5"
+                                  title="Quitar de playlist"
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* New Playlist Modal */}
       {newModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl bg-[#141824] border border-[#232b42] p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl card-panel p-6 shadow-2xl">
+            <h3 className="font-display text-base font-bold text-th-text mb-1">
               Crear Nueva Playlist Personalizada
             </h3>
-            <p className="text-xs text-slate-400 mb-4 font-mono">
-              Definí un nombre para identificar la temática acústica del local.
+            <p className="text-xs text-th-muted mb-5">
+              Definí un nombre para identificar la temática musical del local.
             </p>
 
             <form onSubmit={handleCreatePlaylist} className="space-y-4">
               <div>
-                <label
-                  htmlFor="pl-name-input"
-                  className="block font-mono text-[11px] uppercase tracking-wider text-slate-400"
-                >
+                <label htmlFor="pl-name-input" className="ui-label">
                   Nombre de la playlist
                 </label>
                 <input
@@ -666,17 +702,14 @@ export function PlaylistManager({
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   placeholder="ej: Rock Nacional Clásico, Cachengue 2026..."
-                  className="mt-1.5 w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-3.5 py-2.5 text-xs font-mono text-white placeholder:text-slate-600 focus:border-indigo-400 focus:outline-none"
+                  className="ui-input mt-1.5"
                   required
                   autoFocus
                 />
               </div>
 
               <div>
-                <label
-                  htmlFor="pl-desc-input"
-                  className="block font-mono text-[11px] uppercase tracking-wider text-slate-400"
-                >
+                <label htmlFor="pl-desc-input" className="ui-label">
                   Descripción (Opcional)
                 </label>
                 <input
@@ -685,22 +718,22 @@ export function PlaylistManager({
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   placeholder="ej: Temas para los viernes después de las 23hs"
-                  className="mt-1.5 w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-3.5 py-2.5 text-xs font-mono text-white placeholder:text-slate-600 focus:border-indigo-400 focus:outline-none"
+                  className="ui-input mt-1.5"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[#1E2333]">
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-th-border">
                 <button
                   type="button"
                   onClick={() => setNewModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-[#181b25] text-slate-400 hover:text-white font-mono text-xs"
+                  className="px-4 py-2 rounded-xl bg-th-recessed border border-th-border text-th-secondary hover:text-th-text font-mono text-xs font-medium"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={creating || !newName.trim()}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono text-xs font-semibold disabled:opacity-50"
                 >
                   {creating ? "Creando..." : "Crear Playlist"}
                 </button>

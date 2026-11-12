@@ -1,18 +1,26 @@
 /* eslint-disable @next/next/no-page-custom-font */
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, Outfit, Space_Mono } from "next/font/google";
 import { PwaProvider } from "@/components/pwa-provider";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-jakarta",
+  variable: "--font-outfit",
   display: "swap",
 });
 
-const jetbrains = JetBrains_Mono({
+const dmSans = DM_Sans({
   subsets: ["latin"],
-  variable: "--font-jetbrains",
+  variable: "--font-dm-sans",
+  display: "swap",
+});
+
+const spaceMono = Space_Mono({
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
   display: "swap",
 });
 
@@ -43,13 +51,15 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#090D16",
-  colorScheme: "dark",
+  themeColor: "#0b0f17",
+  colorScheme: "dark light",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
   viewportFit: "cover",
 };
+
+const themeInitScript = `(function(){try{var k='poneleplay-theme';var s=localStorage.getItem(k);var t=(s==='light'||s==='dark')?s:(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');var r=document.documentElement;r.dataset.theme=t;r.style.colorScheme=t;if(t==='dark'){r.classList.add('dark');}else{r.classList.remove('dark');}}catch(e){}})();`;
 
 export default function RootLayout({
   children,
@@ -59,24 +69,22 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`dark ${plusJakarta.variable} ${jetbrains.variable}`}
+      data-theme="dark"
+      className={`dark ${outfit.variable} ${dmSans.variable} ${spaceMono.variable}`}
+      suppressHydrationWarning
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="PonelePlay" />
-        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap"
         />
       </head>
-      <body className="min-h-dvh bg-[#090D16] text-[#dfe2ef] font-sans antialiased selection:bg-[#8083ff] selection:text-[#0a0e17]">
-        <PwaProvider>{children}</PwaProvider>
+      <body className="min-h-dvh bg-th-canvas text-th-text font-sans antialiased selection:bg-th-accent selection:text-white">
+        <ThemeProvider>
+          <PwaProvider>{children}</PwaProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

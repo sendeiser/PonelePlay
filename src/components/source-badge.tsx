@@ -21,11 +21,11 @@ export function SourceBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-cream/10 bg-felt-950/50 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-cream/55",
+        "inline-flex items-center gap-1.5 rounded-full border border-th-border bg-th-recessed px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-th-text-2",
         className,
       )}
     >
-      <Icon className="size-3" aria-hidden="true" />
+      <Icon className="size-3 shrink-0" aria-hidden="true" />
       {label ? labelText : null}
     </span>
   );

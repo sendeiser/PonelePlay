@@ -38,19 +38,19 @@ export function CopyCodeButton({ code }: CopyCodeButtonProps) {
       onClick={handleCopy}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
         copied
-          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-          : "bg-[#1E2333]/80 hover:bg-[#252C40] text-neutral-300 hover:text-white border-[#2A3147]"
+          ? "bg-th-emerald-soft text-th-emerald border-th-emerald/40"
+          : "bg-th-card hover:bg-th-recessed text-th-secondary hover:text-th-text border-th-border"
       }`}
       aria-label="Copiar código Downloader"
     >
       {copied ? (
         <>
-          <Check className="size-3.5 text-emerald-400" />
+          <Check className="size-3.5 text-th-emerald" />
           <span>¡Copiado!</span>
         </>
       ) : (
         <>
-          <Copy className="size-3.5 text-neutral-400" />
+          <Copy className="size-3.5 text-th-muted" />
           <span>Copiar código</span>
         </>
       )}

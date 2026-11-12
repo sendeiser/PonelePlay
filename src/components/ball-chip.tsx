@@ -22,15 +22,15 @@ export function BallChip({
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 items-center justify-center font-mono font-bold select-none",
+        "relative inline-flex shrink-0 items-center justify-center font-mono font-bold tabular-nums select-none",
         sizeClasses,
         isFirst
-          ? "bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 text-white shadow-md shadow-indigo-600/35 border border-indigo-400/40"
+          ? "bg-th-accent text-white shadow-sm"
           : isSecond
-            ? "bg-[#1e2438] border border-[#3b476b] text-[#4cd7f6] shadow-sm"
+            ? "bg-th-teal-soft border border-th-teal/30 text-th-teal"
             : isThird
-              ? "bg-[#181f33] border border-[#2c3755] text-[#c0c1ff]"
-              : "bg-[#131722] border border-[#1e2333] text-slate-400",
+              ? "bg-th-accent-soft border border-th-accent/30 text-th-accent"
+              : "bg-th-recessed border border-th-border text-th-muted",
         className,
       )}
     >

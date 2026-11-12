@@ -6,6 +6,7 @@ import Link from "next/link";
 import { signUpOwner } from "@/lib/api/auth";
 import { DEFAULT_PARTY_CONFIG, DEFAULT_BAR_PARTY_CONFIG, type VenueType } from "@/lib/domain/party";
 import { saveStoredPartyConfig } from "@/lib/api/party-control";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -94,27 +95,30 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#090D16] p-4 sm:p-8">
-      <div className="bg-[#121622] border border-[#232b42] rounded-2xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative overflow-hidden text-white">
+    <main className="min-h-screen flex items-center justify-center bg-th-canvas tech-bg text-th-text p-4 sm:p-8">
+      <div className="card-panel rounded-2xl p-6 sm:p-8 max-w-lg w-full relative overflow-hidden">
         {/* Subtle Ambient Glow */}
         <div
-          className={`absolute -top-16 -right-16 size-48 rounded-full blur-3xl pointer-events-none ${
-            isParty ? "bg-pink-500/15" : "bg-indigo-500/10"
+          className={`absolute -top-16 -right-16 size-48 rounded-full blur-3xl pointer-events-none opacity-60 ${
+            isParty ? "bg-th-teal-soft" : "bg-th-accent-soft"
           }`}
         />
 
         {/* Header */}
         <div className="mb-5 relative z-10">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white uppercase mb-4 py-2 px-1 transition-colors min-h-[44px]"
-          >
-            <span className="material-symbols-outlined text-sm">arrow_back</span>
-            <span>Volver a PonelePlay</span>
-          </Link>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-th-text-2 hover:text-th-text uppercase py-2 px-1 transition-colors min-h-[44px]"
+            >
+              <span className="material-symbols-outlined text-sm">arrow_back</span>
+              <span>Volver a PonelePlay</span>
+            </Link>
+            <ThemeToggle variant="compact" />
+          </div>
           <div
             className={`flex items-center gap-2 font-mono text-xs font-semibold mb-1 ${
-              isParty ? "text-pink-400" : "text-indigo-400"
+              isParty ? "text-th-teal" : "text-th-accent"
             }`}
           >
             <span className="material-symbols-outlined text-base">
@@ -126,10 +130,10 @@ export default function SignupPage() {
                 : "REGISTRO DE NUEVO LOCAL COMERCIAL"}
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">
+          <h1 className="font-display text-2xl font-bold text-th-text tracking-tight">
             {isParty ? "Creá tu Fiesta o Cumpleaños" : "Registrá tu Bar"}
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-th-text-2 mt-1">
             {isParty
               ? "Todo desbloqueado para tus invitados: votaciones libres, duelos 1v1, ruleta en TV, karaoke y dedicatorias."
               : "Creá tu local y habilitá la rockola colaborativa con pantalla de TV y códigos QR."}
@@ -138,24 +142,23 @@ export default function SignupPage() {
 
         {/* Selector de Tipo: Bar vs Fiesta */}
         <div className="mb-5 relative z-10">
-          <span className="block text-[11px] font-mono text-slate-300 mb-2 uppercase font-semibold">
+          <span className="ui-label font-mono uppercase">
             ¿Para qué vas a usar PonelePlay?
           </span>
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={() => setVenueType("bar")}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 !isParty
-                  ? "bg-indigo-600/20 border-indigo-500 text-white shadow-md shadow-indigo-500/10"
-                  : "bg-[#0a0e17] border-[#232b42] text-slate-400 hover:text-white"
+                  ? "bg-th-accent-soft border-th-accent text-th-text ring-1 ring-th-accent/30"
+                  : "bg-th-recessed border-th-border text-th-text-2 hover:text-th-text hover:border-th-border-strong"
               }`}
             >
-              <div className="flex items-center gap-2 font-bold text-xs">
-                <span className="text-base">🍻</span>
+              <div className="flex items-center gap-2 font-bold text-xs text-th-text">
                 <span>Bar / Billar</span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+              <p className="text-[11px] text-th-text-2 mt-1 leading-snug">
                 Con tickets QR de consumición, mozos y moderación comercial.
               </p>
             </button>
@@ -163,17 +166,16 @@ export default function SignupPage() {
             <button
               type="button"
               onClick={() => setVenueType("party")}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                 isParty
-                  ? "bg-gradient-to-br from-pink-600/25 to-purple-600/25 border-pink-500 text-white shadow-md shadow-pink-500/15"
-                  : "bg-[#0a0e17] border-[#232b42] text-slate-400 hover:text-white"
+                  ? "bg-th-teal-soft border-th-teal text-th-text ring-1 ring-th-teal/30"
+                  : "bg-th-recessed border-th-border text-th-text-2 hover:text-th-text hover:border-th-border-strong"
               }`}
             >
-              <div className="flex items-center gap-2 font-bold text-xs">
-                <span className="text-base">🎉</span>
+              <div className="flex items-center gap-2 font-bold text-xs text-th-text">
                 <span>Fiesta / Cumple</span>
               </div>
-              <p className="text-[10px] text-slate-300 mt-1 leading-snug">
+              <p className="text-[11px] text-th-text-2 mt-1 leading-snug">
                 ¡Todo desbloqueado! Votos libres, duelos 1v1, ruleta y dedicatorias.
               </p>
             </button>
@@ -181,8 +183,8 @@ export default function SignupPage() {
         </div>
 
         {error && (
-          <div className="mb-5 rounded-xl bg-red-950/60 border border-red-500/40 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
-            <span className="material-symbols-outlined text-base text-red-400 shrink-0">error</span>
+          <div className="mb-5 rounded-xl bg-th-danger-soft border border-th-danger/30 p-3 text-xs text-th-danger flex items-center gap-2 font-mono">
+            <span className="material-symbols-outlined text-base text-th-danger shrink-0">error</span>
             <span>{error}</span>
           </div>
         )}
@@ -190,7 +192,7 @@ export default function SignupPage() {
         <form onSubmit={handleSubmit} className="space-y-4 relative z-10">
           {/* Email */}
           <div>
-            <label htmlFor="email" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
+            <label htmlFor="email" className="ui-label font-mono uppercase">
               {isParty ? "Tu Email (Anfitrión / Organizador)" : "Email del Administrador"}
             </label>
             <input
@@ -199,7 +201,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
-              className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+              className="ui-input h-11 font-mono text-xs"
               placeholder={isParty ? "tuemail@ejemplo.com" : "dueño@tubar.com"}
               autoComplete="email"
               required
@@ -208,7 +210,7 @@ export default function SignupPage() {
 
           {/* Venue Name */}
           <div>
-            <label htmlFor="venue" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
+            <label htmlFor="venue" className="ui-label font-mono uppercase">
               {isParty
                 ? "Nombre de la Fiesta, Joda o Cumpleaños"
                 : "Nombre del Bar o Salón"}
@@ -224,30 +226,30 @@ export default function SignupPage() {
                 }
               }}
               disabled={loading}
-              className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
-              placeholder={isParty ? "Ej: Cumple de Tincho 🎉" : "Ej: Billar Aurora"}
+              className="ui-input h-11 font-mono text-xs"
+              placeholder={isParty ? "Ej: Cumple de Tincho" : "Ej: Billar Aurora"}
               required
             />
           </div>
 
           {/* Live Slug Preview & Customizer */}
-          <div className="p-3 rounded-xl bg-[#0a0e17] border border-[#1E2333] space-y-1.5">
+          <div className="p-3 rounded-xl bg-th-recessed border border-th-border space-y-1.5">
             <div className="flex items-center justify-between text-[11px] font-mono">
-              <span className="text-slate-400">
+              <span className="text-th-text-2">
                 {isParty ? "Enlace QR para tus invitados:" : "Enlace web de tu bar:"}
               </span>
               <button
                 type="button"
                 onClick={() => setIsEditingSlug(!isEditingSlug)}
-                className="text-indigo-400 hover:text-indigo-300 underline text-[10px]"
+                className="text-th-accent hover:underline text-[11px] font-medium cursor-pointer"
               >
                 {isEditingSlug ? "Usar automático" : "Personalizar URL"}
               </button>
             </div>
 
             {isEditingSlug ? (
-              <div className="flex items-center gap-1 font-mono text-xs">
-                <span className="text-slate-500">/p/</span>
+              <div className="flex items-center gap-1.5 font-mono text-xs">
+                <span className="text-th-muted">/p/</span>
                 <input
                   type="text"
                   value={customSlug}
@@ -260,12 +262,12 @@ export default function SignupPage() {
                     )
                   }
                   placeholder={isParty ? "cumple-tincho" : "mi-bar-favorito"}
-                  className="flex-1 bg-[#141824] border border-[#232b42] rounded-lg px-2.5 py-1 text-cyan-300 font-mono text-xs focus:outline-none focus:border-indigo-400"
+                  className="ui-input h-8 px-2.5 text-th-teal font-mono text-xs"
                 />
               </div>
             ) : (
-              <div className="font-mono text-xs text-cyan-300 break-all select-all flex items-center gap-1">
-                <span className="text-slate-500">poneleplay.app/p/</span>
+              <div className="font-mono text-xs text-th-teal break-all select-all flex items-center gap-1">
+                <span className="text-th-muted">poneleplay.app/p/</span>
                 <span className="font-bold">{activeSlug}</span>
               </div>
             )}
@@ -273,7 +275,7 @@ export default function SignupPage() {
 
           {/* Password with Eye Toggle */}
           <div>
-            <label htmlFor="password" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
+            <label htmlFor="password" className="ui-label font-mono uppercase">
               Contraseña
             </label>
             <div className="relative">
@@ -283,7 +285,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
-                className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 pr-11 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                className="ui-input h-11 pr-11 font-mono text-xs"
                 placeholder="Mínimo 6 caracteres"
                 autoComplete="new-password"
                 required
@@ -293,7 +295,7 @@ export default function SignupPage() {
                 onClick={() => setShowPassword(!showPassword)}
                 tabIndex={-1}
                 aria-label={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-th-muted hover:text-th-text p-1 transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-lg">
                   {showPassword ? "visibility_off" : "visibility"}
@@ -304,7 +306,7 @@ export default function SignupPage() {
 
           {/* Confirm Password with Eye Toggle */}
           <div>
-            <label htmlFor="confirmPassword" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
+            <label htmlFor="confirmPassword" className="ui-label font-mono uppercase">
               Confirmar Contraseña
             </label>
             <div className="relative">
@@ -314,7 +316,7 @@ export default function SignupPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={loading}
-                className="w-full rounded-xl bg-[#0a0e17] border border-[#232b42] px-4 py-3 pr-11 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                className="ui-input h-11 pr-11 font-mono text-xs"
                 placeholder="Repetí tu contraseña"
                 autoComplete="new-password"
                 required
@@ -324,7 +326,7 @@ export default function SignupPage() {
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 tabIndex={-1}
                 aria-label={showConfirmPassword ? "Ocultar confirmación" : "Ver confirmación"}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-th-muted hover:text-th-text p-1 transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-lg">
                   {showConfirmPassword ? "visibility_off" : "visibility"}
@@ -332,7 +334,7 @@ export default function SignupPage() {
               </button>
             </div>
             {password && confirmPassword && password !== confirmPassword && (
-              <span className="text-[11px] font-mono text-red-400 mt-1 block">
+              <span className="text-[11px] font-mono text-th-danger mt-1 block">
                 Las contraseñas no coinciden
               </span>
             )}
@@ -343,11 +345,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full text-white font-mono font-bold text-xs rounded-xl py-3.5 shadow-lg active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
-                isParty
-                  ? "bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 shadow-pink-600/30"
-                  : "bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 shadow-indigo-600/30"
-              }`}
+              className="w-full bg-th-accent hover:bg-th-accent-hover text-white font-semibold text-sm rounded-xl h-11 shadow-sm active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {loading ? (
                 <>
@@ -356,7 +354,7 @@ export default function SignupPage() {
                 </>
               ) : (
                 <span>
-                  {isParty ? "🎉 Crear Fiesta & Abrir Cabina" : "Crear Cuenta & Comenzar"}
+                  {isParty ? "Crear Fiesta & Abrir Cabina" : "Crear Cuenta & Comenzar"}
                 </span>
               )}
             </button>
@@ -364,9 +362,9 @@ export default function SignupPage() {
         </form>
 
         {/* Footer Link to Login */}
-        <p className="mt-6 text-center text-xs text-slate-400 font-mono">
+        <p className="mt-6 text-center text-xs text-th-muted font-mono">
           ¿Ya tenés una cuenta registrada?{" "}
-          <Link href="/login" className="text-indigo-400 hover:text-indigo-300 font-semibold underline ml-1">
+          <Link href="/login" className="text-th-accent hover:underline font-semibold ml-1">
             Iniciar sesión
           </Link>
         </p>

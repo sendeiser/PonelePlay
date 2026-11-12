@@ -18,6 +18,7 @@ import {
 import { BallChip } from "@/components/ball-chip";
 import { BrandMark, Wordmark } from "@/components/brand";
 import { SourceBadge } from "@/components/source-badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TicketCode } from "@/components/ticket-code";
 import { cn } from "@/lib/cn";
 import {
@@ -152,12 +153,12 @@ export function ClientDemo({ slug }: { slug: string }) {
   const proposedTracks = queue.filter((track) => myProposals.has(track.id));
 
   return (
-    <div className="relative min-h-dvh overflow-x-hidden">
+    <div className="relative min-h-dvh overflow-x-hidden bg-th-canvas text-th-text">
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-y-0 left-0 z-0 hidden w-[calc((100vw-32rem)/2)] items-center justify-center xl:flex"
       >
-        <span className="rotate-180 font-mono text-[10px] uppercase tracking-[0.5em] text-cream/15 [writing-mode:vertical-rl]">
+        <span className="rotate-180 font-mono text-[10px] uppercase tracking-[0.5em] text-th-muted/50 [writing-mode:vertical-rl]">
           La música la pone la gente
         </span>
       </div>
@@ -165,33 +166,34 @@ export function ClientDemo({ slug }: { slug: string }) {
         aria-hidden="true"
         className="pointer-events-none fixed inset-y-0 right-0 z-0 hidden w-[calc((100vw-32rem)/2)] items-center justify-center xl:flex"
       >
-        <span className="font-mono text-[10px] uppercase tracking-[0.5em] text-cream/15 [writing-mode:vertical-rl]">
+        <span className="font-mono text-[10px] uppercase tracking-[0.5em] text-th-muted/50 [writing-mode:vertical-rl]">
           PonelePlay · {slug}
         </span>
       </div>
 
       <div className="relative z-10 mx-auto min-h-dvh w-full max-w-lg px-4 pb-28 pt-4">
-        <header className="sticky top-0 z-30 -mx-4 mb-5 border-b border-cream/10 bg-felt-950/85 px-4 py-3 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 -mx-4 mb-5 border-b border-th-border bg-th-shell/90 px-4 py-3 backdrop-blur-xl">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <BrandMark className="size-9" />
               <div className="min-w-0">
                 <Wordmark className="text-lg" />
-                <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-cream/40">
+                <p className="truncate font-mono text-[9px] uppercase tracking-[0.18em] text-th-muted">
                   {demoVenue.name}
                 </p>
               </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              <span className="hidden items-center gap-1.5 rounded-full border border-mint/25 bg-mint/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-mint sm:flex">
-                <span className="size-1.5 animate-pulse rounded-full bg-mint" />
+              <span className="hidden items-center gap-1.5 rounded-full border border-th-emerald/30 bg-th-emerald-soft px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-th-emerald sm:flex">
+                <span className="size-1.5 animate-pulse rounded-full bg-th-emerald" />
                 Noche abierta
               </span>
+              <ThemeToggle variant="compact" />
               <button
                 type="button"
                 onClick={openCodeSheet}
-                className="flex items-center gap-1.5 rounded-full bg-amber px-3 py-2 font-mono text-[11px] font-bold text-ink transition-transform active:scale-95"
+                className="flex items-center gap-1.5 rounded-full bg-th-accent hover:bg-th-accent-hover px-3 py-2 font-mono text-[11px] font-bold text-th-on-accent transition-transform active:scale-95 tabular-nums"
                 aria-label={`Tus votos: ${credits}. Canjear código`}
               >
                 <Ticket className="size-3.5" aria-hidden="true" />
@@ -210,18 +212,18 @@ export function ClientDemo({ slug }: { slug: string }) {
           >
             <NowPlayingCard />
 
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-amber/25 bg-amber/[0.06] px-4 py-3">
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-th-amber/30 bg-th-amber-soft px-4 py-3">
               <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-full bg-amber text-ink">
+                <span className="grid size-10 place-items-center rounded-full bg-th-amber text-slate-950">
                   <Ticket className="size-5" aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-amber/80">
+                  <p className="font-mono text-[9px] font-semibold uppercase tracking-[0.2em] text-th-amber">
                     Tus votos
                   </p>
-                  <p className="font-display text-xl font-bold leading-none">
+                  <p className="font-display text-xl font-bold leading-none text-th-text tabular-nums">
                     {credits}{" "}
-                    <span className="text-sm font-medium text-cream/55">
+                    <span className="text-sm font-medium text-th-secondary">
                       disponibles
                     </span>
                   </p>
@@ -230,7 +232,7 @@ export function ClientDemo({ slug }: { slug: string }) {
               <button
                 type="button"
                 onClick={openCodeSheet}
-                className="flex items-center gap-1 rounded-full border border-amber/30 bg-amber/10 px-3 py-2 text-xs font-semibold text-amber transition-colors hover:bg-amber hover:text-ink"
+                className="flex items-center gap-1 rounded-full border border-th-amber/40 bg-th-card px-3 py-2 text-xs font-semibold text-th-amber transition-colors hover:bg-th-amber hover:text-slate-950"
               >
                 Canjear
                 <ChevronRight className="size-3.5" aria-hidden="true" />
@@ -239,19 +241,19 @@ export function ClientDemo({ slug }: { slug: string }) {
 
             <div className="mt-7 flex items-end justify-between gap-3">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
+                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-th-muted">
                   La cola
                 </p>
-                <h2 className="font-display text-2xl font-bold tracking-tight">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-th-text">
                   Votá la próxima
                 </h2>
               </div>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-cream/35">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-th-muted tabular-nums">
                 {queue.length} temas
               </span>
             </div>
 
-            <motion.ol layout className="mt-3 space-y-2">
+            <motion.ol layout className="mt-3 space-y-2 max-h-[420px] pr-1 ui-scroll-container">
               <AnimatePresence initial={false}>
                 {queue.map((track, index) => (
                   <motion.li
@@ -273,7 +275,7 @@ export function ClientDemo({ slug }: { slug: string }) {
               </AnimatePresence>
             </motion.ol>
 
-            <p className="mt-5 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-cream/35">
+            <p className="mt-5 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-th-muted">
               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
               La cola se ordena por votos. Si hay empate, pasa primero la
               propuesta más antigua.
@@ -290,21 +292,21 @@ export function ClientDemo({ slug }: { slug: string }) {
           >
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
+                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-th-muted">
                   Sumá tu tema
                 </p>
-                <h1 className="font-display text-3xl font-extrabold tracking-tight">
+                <h1 className="font-display text-3xl font-extrabold tracking-tight text-th-text">
                   Poné tu canción
                 </h1>
               </div>
-              <span className="rounded-full border border-mint/25 bg-mint/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-mint">
+              <span className="rounded-full border border-th-emerald/30 bg-th-emerald-soft px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-th-emerald">
                 Gratis
               </span>
             </div>
 
-            <label className="mt-5 flex items-center gap-2 rounded-2xl border border-cream/10 bg-white/[0.03] px-4 py-3 focus-within:border-amber/50">
+            <label className="mt-5 flex items-center gap-2 rounded-2xl border border-th-border bg-th-card px-4 py-3 focus-within:border-th-accent shadow-xs">
               <Search
-                className="size-4 shrink-0 text-cream/35"
+                className="size-4 shrink-0 text-th-muted"
                 aria-hidden="true"
               />
               <span className="sr-only">Buscar en YouTube</span>
@@ -312,14 +314,14 @@ export function ClientDemo({ slug }: { slug: string }) {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Artista o canción..."
-                className="w-full bg-transparent text-sm text-cream outline-none placeholder:text-cream/30"
+                className="w-full bg-transparent text-sm text-th-text outline-none placeholder:text-th-muted"
                 autoComplete="off"
               />
               {query ? (
                 <button
                   type="button"
                   onClick={() => setQuery("")}
-                  className="grid size-6 place-items-center rounded-full bg-cream/10 text-cream/50"
+                  className="grid size-6 place-items-center rounded-full bg-th-recessed text-th-muted hover:text-th-text"
                   aria-label="Borrar búsqueda"
                 >
                   <X className="size-3.5" aria-hidden="true" />
@@ -333,7 +335,7 @@ export function ClientDemo({ slug }: { slug: string }) {
                   key={suggestion}
                   type="button"
                   onClick={() => setQuery(suggestion)}
-                  className="shrink-0 rounded-full border border-cream/10 bg-cream/5 px-3 py-1.5 text-[11px] text-cream/60 transition-colors hover:border-amber/40 hover:text-cream"
+                  className="shrink-0 rounded-full border border-th-border bg-th-card px-3 py-1.5 text-[11px] font-medium text-th-secondary transition-colors hover:border-th-accent hover:text-th-accent"
                 >
                   {suggestion}
                 </button>
@@ -341,15 +343,15 @@ export function ClientDemo({ slug }: { slug: string }) {
             </div>
 
             <div className="mt-6 flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream/40">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-th-muted">
                 Resultados de YouTube
               </p>
-              <span className="font-mono text-[9px] text-cream/30">
+              <span className="font-mono text-[9px] text-th-muted tabular-nums">
                 {results.length}
               </span>
             </div>
 
-            <ul className="mt-2 space-y-2">
+            <ul className="mt-2 space-y-2 max-h-[380px] pr-1 ui-scroll-container">
               {results.map((track) => {
                 const exists = queue.some(
                   (item) =>
@@ -359,19 +361,19 @@ export function ClientDemo({ slug }: { slug: string }) {
                 return (
                   <li
                     key={track.id}
-                    className="flex items-center gap-3 rounded-2xl border border-cream/10 bg-white/[0.025] p-2.5"
+                    className="flex items-center gap-3 rounded-2xl border border-th-border bg-th-card p-2.5 shadow-xs"
                   >
-                    <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-felt-700 to-felt-900">
+                    <div className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-xl bg-th-recessed border border-th-border">
                       <Music2
-                        className="size-5 text-cream/35"
+                        className="size-5 text-th-muted"
                         aria-hidden="true"
                       />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">
+                      <p className="truncate text-sm font-semibold text-th-text">
                         {track.title}
                       </p>
-                      <p className="truncate text-[11px] text-cream/45">
+                      <p className="truncate text-[11px] text-th-muted">
                         {track.artist} · {track.duration}
                       </p>
                     </div>
@@ -382,8 +384,8 @@ export function ClientDemo({ slug }: { slug: string }) {
                       className={cn(
                         "flex shrink-0 items-center gap-1 rounded-full px-3 py-2 text-[11px] font-bold transition-colors",
                         exists
-                          ? "cursor-default bg-cream/5 text-cream/35"
-                          : "bg-amber text-ink hover:bg-amber/90",
+                          ? "cursor-default bg-th-recessed text-th-muted"
+                          : "bg-th-accent text-th-on-accent hover:bg-th-accent-hover",
                       )}
                     >
                       {exists ? (
@@ -409,19 +411,19 @@ export function ClientDemo({ slug }: { slug: string }) {
             {results.length === 0 ? (
               <div className="mt-10 flex flex-col items-center text-center">
                 <Music2
-                  className="size-8 text-cream/25"
+                  className="size-8 text-th-muted"
                   aria-hidden="true"
                 />
-                <p className="mt-3 font-display text-lg font-bold">
+                <p className="mt-3 font-display text-lg font-bold text-th-text">
                   No encontramos ese tema
                 </p>
-                <p className="mt-1 max-w-xs text-xs text-cream/40">
+                <p className="mt-1 max-w-xs text-xs text-th-muted">
                   Probá con el nombre del artista o pegá el link del video.
                 </p>
               </div>
             ) : null}
 
-            <p className="mt-5 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-cream/35">
+            <p className="mt-5 flex items-start gap-2 px-1 text-[11px] leading-relaxed text-th-muted">
               <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
               Las propuestas entran directo a la cola. Máximo 3 por noche y una
               cada 30 segundos. No se repiten temas.
@@ -438,44 +440,44 @@ export function ClientDemo({ slug }: { slug: string }) {
           >
             <div className="flex items-end justify-between gap-3">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-cream/40">
+                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-th-muted">
                   Tu noche
                 </p>
-                <h1 className="font-display text-3xl font-extrabold tracking-tight">
+                <h1 className="font-display text-3xl font-extrabold tracking-tight text-th-text">
                   Mis votos
                 </h1>
               </div>
               <button
                 type="button"
                 onClick={openCodeSheet}
-                className="flex items-center gap-1.5 rounded-full bg-amber px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-ink"
+                className="flex items-center gap-1.5 rounded-full bg-th-accent hover:bg-th-accent-hover px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wider text-th-on-accent"
               >
                 <Ticket className="size-3.5" aria-hidden="true" />
                 Canjear
               </button>
             </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-2">
-              <div className="rounded-2xl border border-cream/10 bg-white/[0.025] p-4">
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cream/40">
+            <div className="mt-5 grid grid-cols-2 gap-2.5">
+              <div className="card-panel rounded-2xl p-4">
+                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-th-muted">
                   Votos disponibles
                 </p>
-                <p className="mt-2 font-display text-4xl font-extrabold text-amber">
+                <p className="mt-2 font-display text-4xl font-extrabold text-th-accent tabular-nums">
                   {credits}
                 </p>
               </div>
-              <div className="rounded-2xl border border-cream/10 bg-white/[0.025] p-4">
-                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-cream/40">
+              <div className="card-panel rounded-2xl p-4">
+                <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-th-muted">
                   Votos emitidos
                 </p>
-                <p className="mt-2 font-display text-4xl font-extrabold">
+                <p className="mt-2 font-display text-4xl font-extrabold text-th-text tabular-nums">
                   {spent}
                 </p>
               </div>
             </div>
 
             <section className="mt-7">
-              <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream/40">
+              <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-th-muted">
                 Temas que votaste
               </h2>
               {votedTracks.length ? (
@@ -483,35 +485,35 @@ export function ClientDemo({ slug }: { slug: string }) {
                   {votedTracks.map((track) => (
                     <li
                       key={track.id}
-                      className="flex items-center gap-3 rounded-xl border border-mint/15 bg-mint/[0.04] px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-xl border border-th-emerald/25 bg-th-emerald-soft px-3 py-2.5"
                     >
                       <Check
-                        className="size-4 shrink-0 text-mint"
+                        className="size-4 shrink-0 text-th-emerald"
                         aria-hidden="true"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">
+                        <p className="truncate text-sm font-semibold text-th-text">
                           {track.title}
                         </p>
-                        <p className="truncate text-[11px] text-cream/45">
+                        <p className="truncate text-[11px] text-th-muted">
                           {track.artist}
                         </p>
                       </div>
-                      <span className="font-mono text-[10px] text-mint">
+                      <span className="font-mono text-[10px] font-bold text-th-emerald">
                         {formatVotes(track.votes)}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="mt-2 text-xs text-cream/35">
+                <p className="mt-2 text-xs text-th-muted">
                   Todavía no votaste ningún tema.
                 </p>
               )}
             </section>
 
             <section className="mt-6">
-              <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream/40">
+              <h2 className="font-mono text-[10px] uppercase tracking-[0.2em] text-th-muted">
                 Temas que propusiste
               </h2>
               {proposedTracks.length ? (
@@ -519,17 +521,17 @@ export function ClientDemo({ slug }: { slug: string }) {
                   {proposedTracks.map((track) => (
                     <li
                       key={track.id}
-                      className="flex items-center gap-3 rounded-xl border border-cream/10 bg-white/[0.025] px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-xl border border-th-border bg-th-card px-3 py-2.5"
                     >
                       <Music2
-                        className="size-4 shrink-0 text-cream/35"
+                        className="size-4 shrink-0 text-th-muted"
                         aria-hidden="true"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">
+                        <p className="truncate text-sm font-semibold text-th-text">
                           {track.title}
                         </p>
-                        <p className="truncate text-[11px] text-cream/45">
+                        <p className="truncate text-[11px] text-th-muted">
                           {track.artist}
                         </p>
                       </div>
@@ -542,36 +544,36 @@ export function ClientDemo({ slug }: { slug: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="mt-2 text-xs text-cream/35">
+                <p className="mt-2 text-xs text-th-muted">
                   Todavía no propusiste ningún tema.
                 </p>
               )}
             </section>
 
             {!votedTracks.length && !proposedTracks.length ? (
-              <div className="mt-10 flex flex-col items-center rounded-3xl border border-dashed border-cream/15 px-6 py-10 text-center">
+              <div className="mt-10 flex flex-col items-center rounded-3xl border border-dashed border-th-border px-6 py-10 text-center">
                 <Disc3
-                  className="size-10 text-cream/25"
+                  className="size-10 text-th-muted"
                   aria-hidden="true"
                 />
-                <p className="mt-3 font-display text-xl font-bold">
+                <p className="mt-3 font-display text-xl font-bold text-th-text">
                   Todavía no moviste la aguja
                 </p>
-                <p className="mt-1 max-w-xs text-xs leading-relaxed text-cream/40">
+                <p className="mt-1 max-w-xs text-xs leading-relaxed text-th-muted">
                   Votá un tema de la cola o proponé el que quieras escuchar.
                 </p>
                 <div className="mt-5 flex gap-2">
                   <button
                     type="button"
                     onClick={() => setTab("cola")}
-                    className="rounded-full bg-amber px-4 py-2 text-xs font-bold text-ink"
+                    className="rounded-full bg-th-accent px-4 py-2 text-xs font-bold text-th-on-accent"
                   >
                     Ver la cola
                   </button>
                   <button
                     type="button"
                     onClick={() => setTab("buscar")}
-                    className="rounded-full border border-cream/15 px-4 py-2 text-xs font-semibold text-cream/70"
+                    className="rounded-full border border-th-border bg-th-card px-4 py-2 text-xs font-semibold text-th-secondary hover:text-th-text"
                   >
                     Proponer
                   </button>
@@ -602,20 +604,20 @@ export function ClientDemo({ slug }: { slug: string }) {
 
 function NowPlayingCard() {
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-cream/10 bg-felt-900 p-5">
+    <section className="card-panel relative overflow-hidden rounded-[2rem] p-5">
       <div
         aria-hidden="true"
-        className="absolute -right-12 -top-16 size-48 rounded-full border border-amber/20 bg-amber/[0.04]"
+        className="absolute -right-12 -top-16 size-48 rounded-full border border-th-accent/15 bg-th-accent-soft/40"
       />
       <div
         aria-hidden="true"
-        className="absolute -right-2 -top-6 size-24 rounded-full border border-amber/10"
+        className="absolute -right-2 -top-6 size-24 rounded-full border border-th-accent/10"
       />
 
       <div className="relative flex items-center justify-between">
-        <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.25em] text-amber">
-          <span className="flex size-4 items-center justify-center rounded-full bg-coral/15">
-            <span className="size-1.5 animate-pulse rounded-full bg-coral" />
+        <span className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-th-accent">
+          <span className="flex size-4 items-center justify-center rounded-full bg-th-danger-soft">
+            <span className="size-1.5 animate-pulse rounded-full bg-th-danger" />
           </span>
           Suena ahora
         </span>
@@ -625,29 +627,29 @@ function NowPlayingCard() {
       <div className="relative mt-4 flex items-center gap-4">
         <div className="relative size-24 shrink-0">
           <div
-            className="spin-slow absolute inset-0 rounded-full ring-1 ring-cream/10"
+            className="spin-slow absolute inset-0 rounded-full ring-1 ring-th-border-strong shadow-md"
             style={{
               background:
                 "repeating-radial-gradient(circle at center, #0b0b0b 0 2px, #1b1b1b 2px 4px)",
             }}
           >
-            <span className="absolute left-1/2 top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-amber font-display text-[10px] font-black text-ink">
+            <span className="absolute left-1/2 top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-th-accent font-display text-[10px] font-black text-th-on-accent">
               PP
             </span>
           </div>
-          <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-felt-950" />
+          <span className="absolute left-1/2 top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-slate-950" />
         </div>
 
         <div className="min-w-0">
-          <h1 className="font-display text-[2rem] font-extrabold leading-[0.92] tracking-[-0.03em]">
+          <h1 className="font-display text-[2rem] font-extrabold leading-[0.92] tracking-[-0.03em] text-th-text">
             {demoNowPlaying.title}
           </h1>
-          <p className="mt-1.5 text-sm text-cream/60">
+          <p className="mt-1.5 text-sm text-th-secondary">
             {demoNowPlaying.artist}
           </p>
           <div className="mt-3 flex items-center gap-2">
             <Equalizer />
-            <span className="text-[11px] text-cream/40">
+            <span className="text-[11px] text-th-muted">
               La eligió la gente
             </span>
           </div>
@@ -655,16 +657,16 @@ function NowPlayingCard() {
       </div>
 
       <div className="relative mt-5 flex items-center gap-3">
-        <span className="font-mono text-[10px] text-cream/40">
+        <span className="font-mono text-[10px] text-th-muted tabular-nums">
           {demoNowPlaying.elapsed}
         </span>
-        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream/10">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-th-recessed">
           <div
-            className="h-full rounded-full bg-amber"
+            className="h-full rounded-full bg-th-accent"
             style={{ width: `${demoNowPlaying.elapsedPct}%` }}
           />
         </div>
-        <span className="font-mono text-[10px] text-cream/40">
+        <span className="font-mono text-[10px] text-th-muted tabular-nums">
           {demoNowPlaying.duration}
         </span>
       </div>
@@ -686,28 +688,28 @@ function QueueRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-2xl border p-3 transition-colors",
+        "flex items-center gap-3 rounded-2xl border p-3 transition-colors shadow-xs",
         rank === 1
-          ? "border-amber/35 bg-amber/[0.07]"
-          : "border-cream/10 bg-white/[0.02]",
+          ? "border-th-accent/40 bg-th-accent-soft"
+          : "border-th-border bg-th-card",
       )}
     >
       <BallChip n={rank} />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <p className="truncate text-sm font-semibold">{track.title}</p>
+          <p className="truncate text-sm font-semibold text-th-text">{track.title}</p>
           {rank === 1 ? (
-            <span className="shrink-0 rounded-full bg-amber px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-ink">
+            <span className="shrink-0 rounded-full bg-th-accent px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider text-th-on-accent">
               próxima
             </span>
           ) : null}
         </div>
-        <p className="truncate text-[11px] text-cream/45">
+        <p className="truncate text-[11px] text-th-muted">
           {track.artist} · {track.duration}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2.5">
-        <span className="font-mono text-[11px] text-cream/50">
+        <span className="font-mono text-[11px] font-semibold text-th-secondary tabular-nums">
           {track.votes}
         </span>
         <button
@@ -719,8 +721,8 @@ function QueueRow({
           className={cn(
             "grid size-10 place-items-center rounded-full border transition-all active:scale-90",
             voted
-              ? "border-mint/30 bg-mint/10 text-mint"
-              : "border-amber/20 bg-amber text-ink hover:bg-amber/90",
+              ? "border-th-emerald/35 bg-th-emerald-soft text-th-emerald"
+              : "border-th-accent bg-th-accent text-th-on-accent hover:bg-th-accent-hover",
           )}
         >
           {voted ? (
@@ -740,7 +742,7 @@ function Equalizer() {
       {[0.55, 1, 0.4, 0.8, 0.6].map((scale, index) => (
         <span
           key={index}
-          className="eq-bar w-[3px] rounded-full bg-amber/80"
+          className="eq-bar w-[3px] rounded-full bg-th-accent"
           style={{
             height: `${Math.round(scale * 16)}px`,
             animationDelay: `${index * 120}ms`,
@@ -760,7 +762,7 @@ function BottomNav({
 }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40">
-      <div className="mx-auto w-full max-w-lg border-t border-cream/10 bg-felt-950/90 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
+      <div className="mx-auto w-full max-w-lg border-t border-th-border bg-th-shell/95 px-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
         <div className="grid grid-cols-3 gap-1">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
@@ -769,10 +771,10 @@ function BottomNav({
               onClick={() => onChange(id)}
               aria-current={tab === id ? "page" : undefined}
               className={cn(
-                "flex flex-col items-center gap-1 rounded-xl py-2 font-mono text-[9px] uppercase tracking-wider transition-colors",
+                "flex flex-col items-center gap-1 rounded-xl py-2 font-mono text-[9px] font-semibold uppercase tracking-wider transition-colors",
                 tab === id
-                  ? "bg-amber text-ink"
-                  : "text-cream/45 hover:text-cream/80",
+                  ? "bg-th-accent text-th-on-accent"
+                  : "text-th-muted hover:text-th-text",
               )}
             >
               <Icon className="size-4" aria-hidden="true" />
@@ -845,7 +847,7 @@ function RedeemSheet({
         type="button"
         aria-label="Cerrar"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-felt-950/80 backdrop-blur-sm"
+        className="absolute inset-0 cursor-default bg-black/65 backdrop-blur-sm"
       />
 
       <motion.div
@@ -853,16 +855,16 @@ function RedeemSheet({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={{ type: "spring", stiffness: 360, damping: 32 }}
-        className="relative w-full max-w-lg rounded-t-[2rem] border border-cream/10 bg-felt-800 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-[2rem]"
+        className="card-panel relative w-full max-w-lg rounded-t-[2rem] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-[2rem]"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-th-amber">
               Canjeá tus votos
             </p>
             <h2
               id="redeem-title"
-              className="mt-1 font-display text-2xl font-extrabold tracking-tight"
+              className="mt-1 font-display text-2xl font-extrabold tracking-tight text-th-text"
             >
               {success ? "Listo, tenés más votos" : "Pedí tu código en la barra"}
             </h2>
@@ -870,7 +872,7 @@ function RedeemSheet({
           <button
             type="button"
             onClick={onClose}
-            className="grid size-9 shrink-0 place-items-center rounded-full border border-cream/10 bg-cream/5 text-cream/60"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-th-border bg-th-recessed text-th-muted hover:text-th-text"
             aria-label="Cerrar"
           >
             <X className="size-4" aria-hidden="true" />
@@ -879,7 +881,7 @@ function RedeemSheet({
 
         {success ? (
           <div className="mt-5">
-            <div className="flex items-center gap-2 rounded-xl border border-mint/25 bg-mint/10 px-3 py-2 text-sm text-mint">
+            <div className="flex items-center gap-2 rounded-xl border border-th-emerald/30 bg-th-emerald-soft px-3 py-2 text-sm text-th-emerald font-medium">
               <BadgeCheck className="size-4" aria-hidden="true" />
               Código aceptado. Se sumaron {success.credits} votos.
             </div>
@@ -887,13 +889,13 @@ function RedeemSheet({
               code={success.code}
               credits={success.credits}
               venueName={venueName}
-              notchColor="#0b2c24"
+              notchColor="var(--bg-card)"
               className="mt-4"
             />
             <button
               type="button"
               onClick={onClose}
-              className="mt-4 w-full rounded-full bg-amber px-5 py-3 font-display text-sm font-bold text-ink transition-transform active:scale-[0.99]"
+              className="mt-4 w-full rounded-full bg-th-accent hover:bg-th-accent-hover px-5 py-3 font-display text-sm font-bold text-th-on-accent transition-transform active:scale-[0.99]"
             >
               Empezar a votar
             </button>
@@ -903,14 +905,14 @@ function RedeemSheet({
                 setSuccess(null);
                 setError(null);
               }}
-              className="mt-2 w-full rounded-full py-2 text-xs font-semibold text-cream/50"
+              className="mt-2 w-full rounded-full py-2 text-xs font-semibold text-th-muted hover:text-th-text"
             >
               Canjear otro código
             </button>
           </div>
         ) : (
           <>
-            <p className="mt-3 text-sm leading-relaxed text-cream/50">
+            <p className="mt-3 text-sm leading-relaxed text-th-secondary">
               Con cada consumición te damos un código de un uso. Los votos
               vencen cuando cierra la noche.
             </p>
@@ -918,7 +920,7 @@ function RedeemSheet({
             <form onSubmit={handleSubmit} className="mt-5">
               <label
                 htmlFor="vote-code"
-                className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream/40"
+                className="ui-label"
               >
                 Código de 8 caracteres
               </label>
@@ -935,7 +937,7 @@ function RedeemSheet({
                   setError(null);
                 }}
                 placeholder="MESAPLAY"
-                className="mt-2 w-full rounded-xl border border-cream/15 bg-felt-950/60 px-4 py-3 font-mono text-xl font-bold tracking-[0.3em] text-cream outline-none placeholder:text-cream/15 focus:border-amber/60"
+                className="ui-input mt-2 px-4 py-3 font-mono text-xl font-bold tracking-[0.3em] uppercase"
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -945,7 +947,7 @@ function RedeemSheet({
               {error ? (
                 <p
                   role="alert"
-                  className="mt-2 flex items-center gap-1.5 text-xs text-coral"
+                  className="mt-2 flex items-center gap-1.5 text-xs text-th-danger"
                 >
                   <Info className="size-3.5" aria-hidden="true" />
                   {error}
@@ -954,14 +956,14 @@ function RedeemSheet({
 
               <button
                 type="submit"
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-amber px-5 py-3 font-display text-sm font-bold text-ink transition-transform active:scale-[0.99]"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-th-accent hover:bg-th-accent-hover px-5 py-3 font-display text-sm font-bold text-th-on-accent transition-transform active:scale-[0.99]"
               >
                 <Ticket className="size-4" aria-hidden="true" />
                 Canjear código
               </button>
             </form>
 
-            <p className="mt-3 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-cream/25">
+            <p className="mt-3 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-th-muted">
               Demo: MESAPLAY
             </p>
           </>
@@ -985,21 +987,21 @@ function Toast({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             className={cn(
-              "flex max-w-sm items-center gap-2 rounded-full border px-4 py-2.5 text-center text-xs shadow-2xl",
+              "card-panel flex max-w-sm items-center gap-2 rounded-full border px-4 py-2.5 text-center text-xs text-th-text shadow-xl",
               toast.tone === "ok"
-                ? "border-mint/25 bg-felt-800 text-cream"
-                : "border-coral/30 bg-felt-800 text-cream",
+                ? "border-th-emerald/35"
+                : "border-th-danger/35",
             )}
             role="status"
           >
             {toast.tone === "ok" ? (
               <BadgeCheck
-                className="size-4 shrink-0 text-mint"
+                className="size-4 shrink-0 text-th-emerald"
                 aria-hidden="true"
               />
             ) : (
               <Info
-                className="size-4 shrink-0 text-coral"
+                className="size-4 shrink-0 text-th-danger"
                 aria-hidden="true"
               />
             )}

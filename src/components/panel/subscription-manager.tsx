@@ -218,58 +218,58 @@ export function SubscriptionManager({ slug }: { slug: string }) {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-[#1E2333]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-th-border">
         <div>
-          <div className="flex items-center gap-2 font-mono text-xs text-indigo-400 mb-1">
+          <div className="flex items-center gap-2 font-mono text-xs text-th-accent mb-1">
             <span>/panel/{slug}/suscripcion</span>
-            <span className="text-slate-600">/</span>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[11px] border border-emerald-500/30 font-bold">
+            <span className="text-th-muted">/</span>
+            <span className="px-2 py-0.5 rounded-full bg-th-emerald-soft text-th-emerald text-[11px] border border-th-emerald/25 font-bold">
               Suscripción Activa
             </span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
-            <Crown className="size-6 text-amber-400" />
+          <h1 className="font-display text-xl sm:text-2xl font-extrabold text-th-text tracking-tight flex items-center gap-2">
+            <Crown className="size-6 text-th-amber" />
             <span>Planes y Suscripciones · Bar & Modo Fiesta</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-th-muted mt-1">
             Administrá el plan de tu salón comercial o activá pases para fiestas, cumpleaños y eventos en vivo.
           </p>
         </div>
 
         {/* Category Switcher (Planes para Bar vs Planes para Fiestas) */}
-        <div className="flex p-1 rounded-xl bg-[#141824] border border-[#232b42] self-start">
+        <div className="flex p-1.5 rounded-xl bg-th-recessed border border-th-border self-start gap-1">
           <button
             type="button"
             onClick={() => setActiveTab("bar")}
-            className={`px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all flex items-center gap-1.5 ${
               activeTab === "bar"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white"
+                ? "bg-th-accent text-th-on-accent shadow-sm"
+                : "text-th-secondary hover:text-th-text"
             }`}
           >
-            <span>🍻 Planes para Bares</span>
+            <span>Planes para Bares</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("party")}
-            className={`px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+            className={`px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all flex items-center gap-1.5 ${
               activeTab === "party"
-                ? "bg-gradient-to-r from-fuchsia-600 to-amber-600 text-white shadow-md shadow-fuchsia-600/30"
-                : "text-slate-400 hover:text-white"
+                ? "bg-gradient-to-r from-fuchsia-600 to-amber-600 text-white shadow-sm"
+                : "text-th-secondary hover:text-th-text"
             }`}
           >
-            <span>🎉 Pases para Fiestas</span>
+            <span>Pases para Fiestas</span>
           </button>
         </div>
       </div>
 
       {feedback && (
-        <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/50 px-4 py-3 text-xs font-mono text-emerald-200 flex items-center justify-between">
+        <div className="rounded-xl border border-th-emerald/35 bg-th-emerald-soft px-4 py-3 text-xs font-mono text-th-emerald flex items-center justify-between">
           <span>{feedback}</span>
           <button
             type="button"
             onClick={() => setFeedback(null)}
-            className="text-emerald-300 hover:text-white"
+            className="text-th-emerald hover:opacity-75 font-bold"
           >
             ✕
           </button>
@@ -278,22 +278,22 @@ export function SubscriptionManager({ slug }: { slug: string }) {
 
       {/* Current Subscription Status Card */}
       {!loading && currentSub && (
-        <section className="rounded-2xl border border-indigo-500/35 bg-gradient-to-r from-[#151a2d] via-[#18152c] to-[#121826] p-5 shadow-lg flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <section className="rounded-2xl border border-th-accent/35 card-panel p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 font-mono text-[10px] font-bold uppercase text-emerald-300">
+              <span className="px-2.5 py-0.5 rounded-full bg-th-emerald-soft border border-th-emerald/30 font-mono text-[10px] font-bold uppercase text-th-emerald">
                 ● PLAN ACTUAL ACTIVO
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-white/10 font-mono text-[10px] text-slate-300">
-                Modalidad actual: {venueType === "party" ? "🎉 Fiesta" : "🍻 Bar"}
+              <span className="px-2.5 py-0.5 rounded-full bg-th-recessed border border-th-border font-mono text-[10px] text-th-secondary">
+                Modalidad actual: {venueType === "party" ? "Fiesta" : "Bar"}
               </span>
             </div>
-            <h2 className="text-lg font-black text-white">
+            <h2 className="font-display text-lg font-bold text-th-text">
               {currentSub.planName}
             </h2>
-            <p className="text-xs font-mono text-slate-300">
+            <p className="text-xs font-mono text-th-secondary">
               Vencimiento / Renovación:{" "}
-              <strong className="text-cyan-300">
+              <strong className="text-th-teal">
                 {new Date(currentSub.expiresAt).toLocaleDateString("es-AR", {
                   day: "2-digit",
                   month: "long",
@@ -305,9 +305,9 @@ export function SubscriptionManager({ slug }: { slug: string }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="px-4 py-2.5 rounded-xl bg-[#0b0f1a] border border-[#232b42] text-right font-mono">
-              <span className="block text-[10px] text-slate-400 uppercase">Abono activo</span>
-              <span className="text-base font-extrabold text-white">
+            <div className="px-4 py-2.5 rounded-xl bg-th-recessed border border-th-border text-right font-mono">
+              <span className="block text-[10px] text-th-muted uppercase">Abono activo</span>
+              <span className="text-base font-extrabold text-th-text">
                 ${currentSub.priceArs.toLocaleString("es-AR")} ARS
               </span>
             </div>
@@ -327,17 +327,17 @@ export function SubscriptionManager({ slug }: { slug: string }) {
               className={`relative rounded-2xl border p-6 flex flex-col justify-between transition-all ${
                 isCurrent
                   ? isPartyCard
-                    ? "bg-gradient-to-b from-[#231433] to-[#121624] border-fuchsia-400 shadow-xl shadow-fuchsia-600/15"
-                    : "bg-gradient-to-b from-[#171f38] to-[#121624] border-indigo-400 shadow-xl shadow-indigo-600/15"
-                  : "bg-[#141824] border-[#232b42] hover:border-[#344063]"
+                    ? "bg-th-card border-fuchsia-500 shadow-lg ring-1 ring-fuchsia-500/30"
+                    : "bg-th-card border-th-accent shadow-lg ring-1 ring-th-accent/30"
+                  : "bg-th-card border-th-border hover:border-th-border-strong shadow-sm"
               }`}
             >
               {plan.badge && (
                 <div
-                  className={`absolute -top-3 right-5 px-3 py-0.5 rounded-full font-mono text-[10px] font-black uppercase tracking-wider shadow-md ${
+                  className={`absolute -top-3 right-5 px-3 py-0.5 rounded-full font-mono text-[10px] font-bold uppercase tracking-wider shadow-sm ${
                     isPartyCard
-                      ? "bg-gradient-to-r from-fuchsia-500 to-amber-500 text-slate-950"
-                      : "bg-gradient-to-r from-indigo-500 to-cyan-400 text-slate-950"
+                      ? "bg-fuchsia-600 text-white"
+                      : "bg-th-accent text-th-on-accent"
                   }`}
                 >
                   {plan.badge}
@@ -346,35 +346,35 @@ export function SubscriptionManager({ slug }: { slug: string }) {
 
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-slate-400 font-bold">
-                    {isPartyCard ? "🎉 Modo Fiesta" : "🍻 Modo Bar"}
+                  <span className="font-mono text-[11px] uppercase tracking-wider text-th-muted font-bold">
+                    {isPartyCard ? "Modo Fiesta" : "Modo Bar"}
                   </span>
-                  <span className="inline-flex items-center gap-1 font-mono text-[11px] text-cyan-300 bg-cyan-500/10 border border-cyan-500/25 px-2 py-0.5 rounded-md">
+                  <span className="inline-flex items-center gap-1 font-mono text-[11px] text-th-teal bg-th-teal-soft border border-th-teal/25 px-2 py-0.5 rounded-md font-semibold">
                     <Tv className="size-3" />
                     <span>Hasta {plan.maxTvScreens} TVs</span>
                   </span>
                 </div>
 
-                <h3 className="text-lg font-black text-white">{plan.name}</h3>
-                <p className="text-xs text-slate-400 mt-1 min-h-[34px]">
+                <h3 className="font-display text-lg font-bold text-th-text">{plan.name}</h3>
+                <p className="text-xs text-th-muted mt-1 min-h-[34px]">
                   {plan.description}
                 </p>
 
-                <div className="my-5 pb-4 border-b border-[#232b42]">
-                  <span className="text-2xl sm:text-3xl font-black text-white font-mono">
+                <div className="my-5 pb-4 border-b border-th-border">
+                  <span className="font-display text-2xl sm:text-3xl font-extrabold text-th-text tabular-nums">
                     {plan.priceDisplay}
                   </span>
-                  <span className="block text-[11px] font-mono text-slate-400 mt-0.5">
+                  <span className="block text-[11px] font-mono text-th-muted mt-0.5">
                     {plan.billingLabel}
                   </span>
                 </div>
 
-                <ul className="space-y-2.5 text-xs text-slate-200 mb-6">
+                <ul className="space-y-2.5 text-xs text-th-secondary mb-6">
                   {plan.features.map((feat) => (
                     <li key={feat} className="flex items-start gap-2">
                       <Check
                         className={`size-4 shrink-0 mt-0.5 ${
-                          isPartyCard ? "text-fuchsia-400" : "text-emerald-400"
+                          isPartyCard ? "text-fuchsia-500" : "text-th-emerald"
                         }`}
                       />
                       <span>{feat}</span>
@@ -387,12 +387,12 @@ export function SubscriptionManager({ slug }: { slug: string }) {
                 type="button"
                 disabled={isCurrent || activatingId === plan.id}
                 onClick={() => void handleSelectPlan(plan)}
-                className={`w-full py-3 rounded-xl font-mono text-xs font-extrabold transition-all flex items-center justify-center gap-2 ${
+                className={`w-full py-3 rounded-xl font-mono text-xs font-semibold transition-all flex items-center justify-center gap-2 ${
                   isCurrent
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default"
+                    ? "bg-th-emerald-soft text-th-emerald border border-th-emerald/35 cursor-default"
                     : isPartyCard
-                    ? "bg-gradient-to-r from-fuchsia-600 to-amber-600 hover:from-fuchsia-500 hover:to-amber-500 text-white shadow-lg shadow-fuchsia-600/25 active:scale-95"
-                    : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/25 active:scale-95"
+                    ? "bg-gradient-to-r from-fuchsia-600 to-amber-600 hover:from-fuchsia-500 hover:to-amber-500 text-white shadow-sm active:scale-95"
+                    : "bg-th-accent hover:bg-th-accent-hover text-th-on-accent shadow-sm active:scale-95"
                 }`}
               >
                 {isCurrent ? (

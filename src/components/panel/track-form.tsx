@@ -106,64 +106,61 @@ export function TrackForm({ venueId, onAdded }: TrackFormProps) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-2xl border border-[#232b42] bg-[#141824] p-5 space-y-4"
+      className="rounded-2xl border border-th-border bg-th-recessed/50 p-5 space-y-4"
     >
-      <div className="flex items-center gap-2 border-b border-[#232b42] pb-3">
-        <Video className="size-4 text-rose-400" />
-        <h3 className="font-mono text-xs font-bold text-white uppercase tracking-wider">
+      <div className="flex items-center gap-2 border-b border-th-border pb-3">
+        <Video className="size-4 text-rose-500" />
+        <h3 className="font-mono text-xs font-bold text-th-text uppercase tracking-wider">
           Buscar o Pegar Link de YouTube
         </h3>
       </div>
 
       {error ? (
-        <p role="alert" className="text-xs font-mono text-rose-400">
+        <p role="alert" className="text-xs font-mono text-th-danger">
           {error}
         </p>
       ) : null}
 
       {/* Quick Search */}
       <div>
-        <label
-          htmlFor="yt-search-quick"
-          className="block font-mono text-[10px] uppercase tracking-wider text-slate-400 mb-1"
-        >
+        <label htmlFor="yt-search-quick" className="ui-label mb-1">
           Búsqueda rápida en YouTube
         </label>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-th-muted pointer-events-none" />
           <input
             id="yt-search-quick"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Buscar por artista o tema..."
-            className="w-full rounded-xl border border-[#232b42] bg-[#0a0e17] pl-8 pr-8 py-2 text-xs text-white placeholder:text-slate-600 font-mono focus:border-indigo-400 focus:outline-none"
+            className="ui-input !pl-9 !pr-8"
           />
           {searching && (
-            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-3.5 text-indigo-400 animate-spin" />
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-3.5 text-th-accent animate-spin" />
           )}
         </div>
 
         {/* Search Results Dropdown */}
         {searchResults.length > 0 && (
-          <div className="mt-2 max-h-48 overflow-y-auto rounded-xl bg-[#0a0e17] border border-[#232b42] divide-y divide-[#1e2436] shadow-xl">
+          <div className="mt-2 max-h-48 ui-scroll-container rounded-xl bg-th-card border border-th-border divide-y divide-th-border shadow-lg">
             {searchResults.map((item) => (
               <div
                 key={item.videoId}
                 onClick={() => handleSelectSearchResult(item)}
-                className="p-2 flex items-center justify-between gap-2 hover:bg-[#181d2c] cursor-pointer transition-colors"
+                className="p-2.5 flex items-center justify-between gap-2 hover:bg-th-card-hover cursor-pointer transition-colors"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs text-white font-bold truncate">
+                  <p className="text-xs text-th-text font-semibold truncate">
                     {item.title}
                   </p>
-                  <p className="text-[10px] text-slate-400 truncate">
+                  <p className="text-[10px] text-th-muted truncate">
                     {item.artist} · {item.duration}
                   </p>
                 </div>
                 <button
                   type="button"
-                  className="px-2 py-1 rounded-md bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600 hover:text-white font-mono text-[10px] shrink-0"
+                  className="px-2.5 py-1 rounded-lg bg-th-accent-soft text-th-accent hover:bg-th-accent hover:text-th-on-accent font-mono text-[10px] font-semibold shrink-0 transition-colors"
                 >
                   Seleccionar
                 </button>
@@ -174,10 +171,7 @@ export function TrackForm({ venueId, onAdded }: TrackFormProps) {
       </div>
 
       <div>
-        <label
-          htmlFor="yt-url"
-          className="block font-mono text-[10px] uppercase tracking-wider text-slate-400"
-        >
+        <label htmlFor="yt-url" className="ui-label">
           Link del video de YouTube
         </label>
         <input
@@ -186,17 +180,14 @@ export function TrackForm({ venueId, onAdded }: TrackFormProps) {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://www.youtube.com/watch?v=..."
-          className="mt-1 w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-3 py-2 text-xs text-white placeholder:text-slate-600 font-mono focus:border-indigo-400 focus:outline-none"
+          className="ui-input mt-1"
           required
         />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label
-            htmlFor="track-title"
-            className="block font-mono text-[10px] uppercase tracking-wider text-slate-400"
-          >
+          <label htmlFor="track-title" className="ui-label">
             Título de la canción
           </label>
           <input
@@ -205,16 +196,13 @@ export function TrackForm({ venueId, onAdded }: TrackFormProps) {
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="ej: De Música Ligera"
-            className="mt-1 w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-3 py-2 text-xs text-white placeholder:text-slate-600 font-mono focus:border-indigo-400 focus:outline-none"
+            className="ui-input mt-1"
             required
           />
         </div>
 
         <div>
-          <label
-            htmlFor="track-artist"
-            className="block font-mono text-[10px] uppercase tracking-wider text-slate-400"
-          >
+          <label htmlFor="track-artist" className="ui-label">
             Artista
           </label>
           <input
@@ -223,17 +211,17 @@ export function TrackForm({ venueId, onAdded }: TrackFormProps) {
             value={artist}
             onChange={(e) => setArtist(e.target.value)}
             placeholder="ej: Soda Stereo"
-            className="mt-1 w-full rounded-xl border border-[#232b42] bg-[#0a0e17] px-3 py-2 text-xs text-white placeholder:text-slate-600 font-mono focus:border-indigo-400 focus:outline-none"
+            className="ui-input mt-1"
           />
         </div>
       </div>
 
-      <label className="flex items-center gap-2 cursor-pointer font-mono text-xs text-slate-300">
+      <label className="flex items-center gap-2 cursor-pointer font-mono text-xs text-th-secondary">
         <input
           type="checkbox"
           checked={isExplicit}
           onChange={(e) => setIsExplicit(e.target.checked)}
-          className="size-4 rounded accent-indigo-600 bg-[#0a0e17] border border-[#232b42]"
+          className="size-4 rounded accent-blue-600 bg-th-recessed border border-th-border"
         />
         <span>Contenido explícito</span>
       </label>
@@ -241,7 +229,7 @@ export function TrackForm({ venueId, onAdded }: TrackFormProps) {
       <button
         type="submit"
         disabled={loading || !url.trim() || !title.trim()}
-        className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 py-2.5 font-mono text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 rounded-xl bg-th-accent hover:bg-th-accent-hover py-2.5 font-mono text-xs font-semibold text-th-on-accent shadow-sm transition-all disabled:opacity-50"
       >
         {loading ? (
           <>

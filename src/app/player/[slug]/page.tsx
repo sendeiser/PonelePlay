@@ -15,14 +15,16 @@ export default async function PlayerPage({
   const { slug } = await params;
 
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-screen items-center justify-center bg-[#07090e] font-mono text-xs text-indigo-300">
-          Cargando pantalla del salón...
-        </div>
-      }
-    >
-      <ClientPlayerScreen slug={slug} />
-    </Suspense>
+    <div data-theme="dark" className="dark min-h-screen bg-[#07090e] text-[#dfe2ef]">
+      <Suspense
+        fallback={
+          <div className="flex h-screen items-center justify-center bg-[#07090e] font-mono text-xs text-indigo-300">
+            Cargando pantalla del salón...
+          </div>
+        }
+      >
+        <ClientPlayerScreen slug={slug} />
+      </Suspense>
+    </div>
   );
 }

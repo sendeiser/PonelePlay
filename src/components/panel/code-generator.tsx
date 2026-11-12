@@ -77,32 +77,32 @@ export function CodeGenerator({
   return (
     <div className="space-y-6">
       {/* Top Operational Header Bar */}
-      <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-[#1E2333]">
+      <section className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-th-border">
         <div>
-          <div className="flex items-center gap-2 font-mono text-xs text-cyan-400 mb-1 font-semibold">
+          <div className="flex items-center gap-2 font-mono text-xs text-th-teal mb-1 font-semibold">
             <span className="material-symbols-outlined text-sm">confirmation_number</span>
             <span>TERMINAL EXPEDIDORA DE TICKETS JUKEBOX</span>
           </div>
-          <h1 className="text-xl font-bold text-white tracking-tight">
+          <h1 className="font-display text-xl font-bold text-th-text tracking-tight">
             Emisión de Códigos & Tickets Térmicos
           </h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-th-muted mt-0.5">
             Generación ultra-rápida de recargas de créditos para mesas, barra y billar.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-[#181b25] px-3 py-1.5 rounded-lg border border-[#232b42] text-xs font-mono">
-            <span className="material-symbols-outlined text-emerald-400 text-base">print</span>
-            <span className="text-slate-300">Impresora Térmica 80mm</span>
-            <span className="size-2 rounded-full bg-emerald-400" />
+          <div className="flex items-center gap-2 bg-th-recessed px-3 py-1.5 rounded-lg border border-th-border text-xs font-mono">
+            <span className="material-symbols-outlined text-th-emerald text-base">print</span>
+            <span className="text-th-secondary">Impresora Térmica 80mm</span>
+            <span className="size-2 rounded-full bg-th-emerald" />
           </div>
         </div>
       </section>
 
       {error && (
-        <div className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2">
-          <span className="material-symbols-outlined text-base text-red-400">error</span>
+        <div className="rounded-xl border border-th-danger/35 bg-th-danger-soft p-3 text-xs font-mono text-th-danger flex items-center gap-2">
+          <span className="material-symbols-outlined text-base">error</span>
           <span>{error}</span>
         </div>
       )}
@@ -112,13 +112,13 @@ export function CodeGenerator({
         {/* LEFT PANEL: CONTROLLER & PRESETS (7 Cols) */}
         <div className="lg:col-span-7 flex flex-col gap-5">
           {/* Card 1: Credit Pack Selector */}
-          <div className="bg-[#181b25] rounded-xl p-5 border border-[#232b42] shadow-md space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-bold text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-indigo-400 text-lg">toll</span>
+          <div className="card-panel rounded-2xl p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="text-sm font-display font-bold text-th-text flex items-center gap-2">
+                <span className="material-symbols-outlined text-th-accent text-lg">toll</span>
                 Seleccionar Paquete de Créditos
               </label>
-              <span className="font-mono text-[10px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/25">
+              <span className="font-mono text-[10px] font-semibold text-th-teal bg-th-teal-soft px-2.5 py-0.5 rounded-full border border-th-teal/25">
                 1 Crédito = 1 Voto
               </span>
             </div>
@@ -135,8 +135,8 @@ export function CodeGenerator({
                   }}
                   className={`flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border transition-all active:scale-95 ${
                     credits === amount && !customCredits
-                      ? "bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30 font-bold"
-                      : "bg-[#131722] text-slate-300 border-[#1E2333] hover:border-slate-600 hover:text-white"
+                      ? "bg-th-accent text-th-on-accent border-th-accent shadow-sm font-bold"
+                      : "bg-th-recessed text-th-secondary border-th-border hover:border-th-border-strong hover:text-th-text"
                   }`}
                 >
                   <span className="font-mono text-[10px] opacity-75">+{amount}</span>
@@ -149,11 +149,9 @@ export function CodeGenerator({
             </div>
 
             {/* Custom Amount & Table inputs */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <div>
-                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-                  Cantidad Manual
-                </label>
+                <label className="ui-label mb-1">Cantidad Manual</label>
                 <input
                   type="number"
                   min={1}
@@ -167,18 +165,16 @@ export function CodeGenerator({
                     }
                   }}
                   placeholder="Otro monto..."
-                  className="w-full h-10 px-3 rounded-lg bg-[#0a0e17] border border-[#232b42] text-white font-mono text-xs focus:outline-none focus:border-indigo-400"
+                  className="ui-input !h-10"
                 />
               </div>
 
               <div>
-                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1">
-                  Mesa / Destino
-                </label>
+                <label className="ui-label mb-1">Mesa / Destino</label>
                 <select
                   value={tableLabel}
                   onChange={(e) => setTableLabel(e.target.value)}
-                  className="w-full h-10 px-3 rounded-lg bg-[#0a0e17] border border-[#232b42] text-white font-mono text-xs focus:outline-none focus:border-indigo-400"
+                  className="ui-input !h-10"
                 >
                   <option value="Mesa General">Mesa General</option>
                   <option value="Barra Central">Barra Central</option>
@@ -199,7 +195,7 @@ export function CodeGenerator({
               type="button"
               disabled={loading || credits <= 0}
               onClick={handleGenerate}
-              className="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-sm tracking-tight shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full py-3.5 px-4 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono font-bold text-sm tracking-tight shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
                 <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -215,8 +211,8 @@ export function CodeGenerator({
         <div className="lg:col-span-5 flex flex-col items-center">
           {latestCode ? (
             <div className="w-full max-w-sm space-y-3">
-              {/* Thermal ticket */}
-              <div className="thermal-receipt rounded-2xl p-6 text-slate-900 border border-slate-300 shadow-2xl relative">
+              {/* Thermal ticket (Always white paper surface) */}
+              <div className="thermal-receipt rounded-2xl p-6 bg-white text-slate-900 border border-slate-300 shadow-lg relative">
                 {/* Top header */}
                 <div className="text-center pb-3 border-b border-dashed border-slate-400">
                   <h3 className="font-bold text-base uppercase tracking-tight text-slate-900">
@@ -238,7 +234,7 @@ export function CodeGenerator({
                   <div className="font-mono text-3xl font-extrabold tracking-[0.25em] text-slate-900 bg-slate-100 py-2 px-3 rounded-lg border border-slate-300">
                     {latestCode.code}
                   </div>
-                  <span className="font-mono text-xs font-bold text-indigo-700 block pt-1">
+                  <span className="font-mono text-xs font-bold text-blue-700 block pt-1">
                     +{latestCode.credits} CRÉDITOS PARA VOTAR
                   </span>
                 </div>
@@ -277,7 +273,7 @@ export function CodeGenerator({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-[#181b25] hover:bg-[#202534] text-white border border-[#232b42] font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-th-card hover:bg-th-card-hover text-th-text border border-th-border font-mono text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm">print</span>
                   <span>Imprimir</span>
@@ -285,7 +281,7 @@ export function CodeGenerator({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-[#181b25] hover:bg-[#202534] text-white border border-[#232b42] font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-th-card hover:bg-th-card-hover text-th-text border border-th-border font-mono text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                 >
                   <span className="material-symbols-outlined text-sm">content_copy</span>
                   <span>{copied ? "¡Copiado!" : "Copiar"}</span>
@@ -293,8 +289,8 @@ export function CodeGenerator({
               </div>
             </div>
           ) : (
-            <div className="w-full max-w-sm rounded-2xl border border-dashed border-[#232b42] p-10 text-center text-slate-500 font-mono text-xs space-y-2 bg-[#181b25]/40">
-              <span className="material-symbols-outlined text-slate-600 text-3xl">receipt</span>
+            <div className="w-full max-w-sm rounded-2xl border border-dashed border-th-border p-10 text-center text-th-muted font-mono text-xs space-y-2 bg-th-recessed/50">
+              <span className="material-symbols-outlined text-th-muted/70 text-3xl">receipt</span>
               <p>El ticket generado aparecerá aquí listo para imprimir o copiar.</p>
             </div>
           )}

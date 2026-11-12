@@ -84,7 +84,7 @@ export function RedeemSheet({
         type="button"
         aria-label="Cerrar"
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-felt-950/80 backdrop-blur-sm"
+        className="absolute inset-0 cursor-default bg-black/65 backdrop-blur-sm"
       />
 
       <motion.div
@@ -92,16 +92,16 @@ export function RedeemSheet({
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         transition={{ type: "spring", stiffness: 360, damping: 32 }}
-        className="relative w-full max-w-lg rounded-t-[2rem] border border-cream/10 bg-felt-800 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-[2rem]"
+        className="card-panel relative w-full max-w-lg rounded-t-[2rem] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:rounded-[2rem]"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-th-amber">
               Canjeá tus votos
             </p>
             <h2
               id="redeem-title"
-              className="mt-1 font-display text-2xl font-extrabold tracking-tight text-cream"
+              className="mt-1 font-display text-2xl font-extrabold tracking-tight text-th-text"
             >
               {success ? "Listo, tenés más votos" : "Ingresá tu código"}
             </h2>
@@ -109,7 +109,7 @@ export function RedeemSheet({
           <button
             type="button"
             onClick={onClose}
-            className="grid size-9 shrink-0 place-items-center rounded-full border border-cream/10 bg-cream/5 text-cream/60 hover:text-cream"
+            className="grid size-9 shrink-0 place-items-center rounded-full border border-th-border bg-th-recessed text-th-muted hover:text-th-text transition-colors"
             aria-label="Cerrar"
           >
             <X className="size-4" aria-hidden="true" />
@@ -118,8 +118,8 @@ export function RedeemSheet({
 
         {success ? (
           <div className="mt-5 space-y-4">
-            <div className="flex items-center gap-2 rounded-xl border border-mint/25 bg-mint/10 px-3 py-2 text-sm text-mint">
-              <BadgeCheck className="size-4" aria-hidden="true" />
+            <div className="flex items-center gap-2 rounded-xl border border-th-emerald/30 bg-th-emerald-soft px-3 py-2 text-sm text-th-emerald font-medium">
+              <BadgeCheck className="size-4 shrink-0" aria-hidden="true" />
               Código aceptado. Se sumaron {success.credits} votos.
             </div>
 
@@ -127,13 +127,13 @@ export function RedeemSheet({
               code={success.code}
               credits={success.credits}
               venueName={venueName}
-              notchColor="#0b2c24"
+              notchColor="var(--bg-card)"
             />
 
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-full bg-amber px-5 py-3 font-display text-sm font-bold text-ink transition-transform active:scale-[0.99]"
+              className="w-full rounded-full bg-th-accent hover:bg-th-accent-hover px-5 py-3 font-display text-sm font-bold text-th-on-accent transition-transform active:scale-[0.99]"
             >
               Empezar a votar
             </button>
@@ -144,21 +144,21 @@ export function RedeemSheet({
                 setSuccess(null);
                 setError(null);
               }}
-              className="w-full rounded-full py-2 text-xs font-semibold text-cream/50 hover:text-cream"
+              className="w-full rounded-full py-2 text-xs font-semibold text-th-muted hover:text-th-text"
             >
               Canjear otro código
             </button>
           </div>
         ) : (
           <>
-            <p className="mt-3 text-sm leading-relaxed text-cream/50">
+            <p className="mt-3 text-sm leading-relaxed text-th-secondary">
               Con cada consumición te damos un código de un uso. Los votos vencen cuando cierra la noche.
             </p>
 
             <form onSubmit={handleSubmit} className="mt-5">
               <label
                 htmlFor="vote-code"
-                className="font-mono text-[10px] uppercase tracking-[0.2em] text-cream/40"
+                className="ui-label"
               >
                 Código de 8 caracteres
               </label>
@@ -175,7 +175,7 @@ export function RedeemSheet({
                   setError(null);
                 }}
                 placeholder="ABCDEFGH"
-                className="mt-2 w-full rounded-xl border border-cream/15 bg-felt-950/60 px-4 py-3 font-mono text-xl font-bold tracking-[0.3em] text-cream outline-none placeholder:text-cream/15 focus:border-amber/60"
+                className="ui-input mt-2 px-4 py-3 font-mono text-xl font-bold tracking-[0.3em] uppercase"
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -185,7 +185,7 @@ export function RedeemSheet({
               {error ? (
                 <p
                   role="alert"
-                  className="mt-2 flex items-center gap-1.5 text-xs text-coral"
+                  className="mt-2 flex items-center gap-1.5 text-xs text-th-danger"
                 >
                   <Info className="size-3.5" aria-hidden="true" />
                   {error}
@@ -195,7 +195,7 @@ export function RedeemSheet({
               <button
                 type="submit"
                 disabled={loading || input.length !== 8}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-amber px-5 py-3 font-display text-sm font-bold text-ink transition-transform active:scale-[0.99] disabled:opacity-50"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-th-accent hover:bg-th-accent-hover px-5 py-3 font-display text-sm font-bold text-th-on-accent transition-transform active:scale-[0.99] disabled:opacity-50"
               >
                 <Ticket className="size-4" aria-hidden="true" />
                 {loading ? "Validando..." : "Canjear código"}

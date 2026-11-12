@@ -60,7 +60,7 @@ export function PairPlayerDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-xs"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -69,29 +69,29 @@ export function PairPlayerDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="pair-player-title"
-        className="relative w-full max-w-md rounded-2xl border border-cream/15 bg-felt-900 p-6 shadow-2xl"
+        className="relative w-full max-w-md card-panel rounded-2xl p-6"
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 text-cream/40 hover:text-cream"
+          className="absolute right-4 top-4 size-8 rounded-lg text-th-muted hover:text-th-text hover:bg-th-recessed flex items-center justify-center transition-colors cursor-pointer"
           aria-label="Cerrar"
         >
-          <X className="size-5" />
+          <X className="size-4" />
         </button>
 
         <div className="flex items-center gap-3">
-          <div className="grid size-10 place-items-center rounded-xl bg-amber/15 text-amber">
+          <div className="grid size-10 place-items-center rounded-xl bg-th-accent-soft text-th-accent">
             <Monitor className="size-5" />
           </div>
           <div>
             <h2
               id="pair-player-title"
-              className="text-lg font-display font-bold text-cream"
+              className="text-lg font-display font-bold text-th-text"
             >
               Vincular Pantalla TV
             </h2>
-            <p className="text-xs text-cream/50">
+            <p className="text-xs text-th-text-2">
               Generá un enlace seguro para la pantalla del salón
             </p>
           </div>
@@ -100,10 +100,7 @@ export function PairPlayerDialog({
         {!tokenResult ? (
           <div className="mt-5 space-y-4">
             <div>
-              <label
-                htmlFor="device-name"
-                className="block text-xs font-medium text-cream/70"
-              >
+              <label htmlFor="device-name" className="ui-label">
                 Nombre del dispositivo
               </label>
               <input
@@ -112,12 +109,12 @@ export function PairPlayerDialog({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="ej: TV Salón, Proyector Pool"
-                className="mt-1.5 w-full rounded-xl border border-cream/15 bg-white/5 px-3.5 py-2.5 text-sm text-cream placeholder:text-cream/30 focus:border-amber focus:outline-none"
+                className="ui-input"
               />
             </div>
 
             {error ? (
-              <p role="alert" className="text-xs text-coral">
+              <p role="alert" className="text-xs text-th-danger font-medium">
                 {error}
               </p>
             ) : null}
@@ -126,7 +123,7 @@ export function PairPlayerDialog({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-cream/15 px-4 py-2 text-xs font-semibold text-cream/70 hover:bg-cream/5"
+                className="h-9 rounded-xl border border-th-border bg-th-recessed px-4 text-xs font-semibold text-th-text hover:bg-th-hover cursor-pointer"
               >
                 Cancelar
               </button>
@@ -134,7 +131,7 @@ export function PairPlayerDialog({
                 type="button"
                 disabled={loading}
                 onClick={() => void handlePair()}
-                className="flex items-center gap-2 rounded-xl bg-amber px-4 py-2 text-xs font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
+                className="h-9 flex items-center gap-2 rounded-xl bg-th-accent hover:bg-th-accent-hover px-4 text-xs font-semibold text-white disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <RefreshCw className="size-3.5 animate-spin" />
@@ -145,16 +142,15 @@ export function PairPlayerDialog({
           </div>
         ) : (
           <div className="mt-5 space-y-4">
-            <div className="rounded-xl border border-mint/20 bg-mint/5 p-3.5 text-xs text-mint">
-              ¡Dispositivo vinculado con éxito! Usá este link en el navegador de
-              la TV para abrir el reproductor.
+            <div className="rounded-xl border border-th-emerald/25 bg-th-emerald-soft p-3.5 text-xs text-th-emerald font-medium">
+              ¡Dispositivo vinculado con éxito! Usá este link en el navegador de la TV para abrir el reproductor.
             </div>
 
-            <div className="rounded-xl border border-cream/10 bg-black/40 p-3">
-              <p className="font-mono text-[10px] uppercase tracking-wider text-cream/40">
+            <div className="rounded-xl border border-th-border bg-th-recessed p-3">
+              <p className="font-mono text-[10px] uppercase tracking-wider text-th-muted">
                 Enlace para la TV
               </p>
-              <p className="mt-1 truncate font-mono text-xs text-cream">
+              <p className="mt-1 truncate font-mono text-xs text-th-text">
                 {playerUrl}
               </p>
             </div>
@@ -163,7 +159,7 @@ export function PairPlayerDialog({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="flex items-center justify-center gap-2 rounded-xl bg-amber px-4 py-2.5 text-xs font-bold text-[#041611] hover:bg-amber/90"
+                className="h-10 flex items-center justify-center gap-2 rounded-xl bg-th-accent hover:bg-th-accent-hover px-4 text-xs font-semibold text-white cursor-pointer"
               >
                 {copied ? (
                   <>
@@ -181,16 +177,16 @@ export function PairPlayerDialog({
                   type="button"
                   onClick={handleConfigureThisPc}
                   disabled={configuredThisPc}
-                  className="rounded-xl border border-cream/15 bg-cream/5 px-3 py-2 text-center text-xs font-semibold text-cream/80 hover:bg-cream/10 disabled:opacity-50"
+                  className="h-9 rounded-xl border border-th-border bg-th-recessed px-3 text-center text-xs font-semibold text-th-text-2 hover:bg-th-hover hover:text-th-text disabled:opacity-50 cursor-pointer"
                 >
-                  {configuredThisPc ? "✓ Guardado en esta PC" : "Usar en esta PC"}
+                  {configuredThisPc ? "Guardado en esta PC" : "Usar en esta PC"}
                 </button>
 
                 <a
                   href={`/player/${slug}?token=${tokenResult}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-center gap-1.5 rounded-xl border border-cream/15 bg-cream/5 px-3 py-2 text-xs font-semibold text-cream/80 hover:bg-cream/10"
+                  className="h-9 flex items-center justify-center gap-1.5 rounded-xl border border-th-border bg-th-recessed px-3 text-xs font-semibold text-th-text-2 hover:bg-th-hover hover:text-th-text"
                 >
                   Abrir pantalla <ExternalLink className="size-3" />
                 </a>
@@ -202,4 +198,3 @@ export function PairPlayerDialog({
     </div>
   );
 }
-

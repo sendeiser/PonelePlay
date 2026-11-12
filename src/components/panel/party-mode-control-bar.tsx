@@ -16,7 +16,7 @@ export interface PartyModeControlBarProps {
 }
 
 const VOTE_LIMIT_PRESETS = [
-  { label: "♾️ Ilimitado", value: 0 },
+  { label: "Ilimitado", value: 0 },
   { label: "3 votos", value: 3 },
   { label: "5 votos", value: 5 },
   { label: "10 votos", value: 10 },
@@ -62,24 +62,24 @@ export function PartyModeControlBar({
         : { partyMode },
     );
     if (partyMode === "democratic") {
-      showToast("🗳️ Modo Democrático activado en vivo.");
+      showToast("Modo Democrático activado en vivo.");
     } else if (partyMode === "hybrid_turbo") {
-      showToast("🔥 Modo Híbrido Turbo activado: invitados tienen Fueguitos (+3 votos).");
+      showToast("Modo Híbrido Turbo activado: invitados tienen Fueguitos (+3 votos).");
     } else {
-      showToast("🎰 Modo Duelos y Ruleta activado para TV y celulares.");
+      showToast("Modo Duelos y Ruleta activado para TV y celulares.");
     }
   };
 
   const handleLaunchDuel = async () => {
     if (queueItems.length < 2) {
-      showToast("⚠️ Necesitás al menos 2 canciones propuestas o en cola para lanzar un Duelo 1v1.");
+      showToast("Necesitás al menos 2 canciones propuestas o en cola para lanzar un Duelo 1v1.");
       return;
     }
     setDuelLaunching(true);
     try {
       const [trackA, trackB] = queueItems.slice(0, 2);
       await triggerPartyDuel(slug, trackA, trackB, 30);
-      showToast(`⚡ ¡Duelo lanzado en TV y celulares! "${trackA.title}" vs "${trackB.title}" (30s)`);
+      showToast(`Duelo lanzado: "${trackA.title}" vs "${trackB.title}" (30s)`);
     } finally {
       setDuelLaunching(false);
     }
@@ -87,7 +87,7 @@ export function PartyModeControlBar({
 
   const handleSpinRoulette = async () => {
     if (queueItems.length === 0) {
-      showToast("⚠️ Agregá o pedí al menos 1 canción en la cola para girar la Ruleta Fiestera.");
+      showToast("Agregá o pedí al menos 1 canción en la cola para girar la Ruleta.");
       return;
     }
     setRouletteSpinning(true);
@@ -95,7 +95,7 @@ export function PartyModeControlBar({
       const pool = queueItems.slice(0, 8);
       const winner = pool[Math.floor(Math.random() * pool.length)];
       await triggerPartyRoulette(slug, pool, winner);
-      showToast(`🎡 ¡Ruleta girando en la TV! Ganadora: "${winner.title}"`);
+      showToast(`Ruleta girando en la TV. Ganadora: "${winner.title}"`);
     } finally {
       setRouletteSpinning(false);
     }
@@ -105,41 +105,43 @@ export function PartyModeControlBar({
     if (onReloadGuestVotes) {
       void onReloadGuestVotes();
     }
-    showToast("🔄 ¡Votos recargados para todos los invitados conectados!");
+    showToast("Votos recargados para todos los invitados conectados.");
   };
 
   return (
-    <section className="rounded-2xl border border-fuchsia-500/40 bg-gradient-to-br from-fuchsia-950/35 via-[#121524] to-amber-950/20 p-4 sm:p-5 shadow-xl space-y-4">
+    <section className="card-panel rounded-2xl p-4 sm:p-5 space-y-4">
       {/* Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-fuchsia-500 to-amber-500 text-white shadow-lg shadow-fuchsia-500/20 text-lg">
-            🎉
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-th-accent-soft text-th-accent shrink-0">
+            <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>
+              celebration
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm sm:text-base font-display font-bold text-th-text tracking-tight">
                 Cabina Modo Fiesta · Todo Desbloqueado
               </h2>
-              <span className="rounded-full bg-fuchsia-500/20 border border-fuchsia-400/40 px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase text-fuchsia-200">
+              <span className="rounded-full bg-th-teal-soft border border-th-teal/25 px-2.5 py-0.5 text-[10px] font-mono font-bold uppercase text-th-teal">
                 Sin Códigos
               </span>
             </div>
-            <p className="text-xs text-slate-300 font-mono">
-              {venueName ? `${venueName} · ` : ""}Los invitados entran con el QR o link y eligen música libremente
+            <p className="text-xs text-th-text-2 mt-0.5">
+              {venueName ? `${venueName} · ` : ""}Los invitados entran por QR y eligen música libremente
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {onOpenQrInvite && (
             <button
               type="button"
               onClick={onOpenQrInvite}
-              className="flex items-center gap-1.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-white px-3.5 py-2 text-xs font-mono font-bold shadow-md shadow-fuchsia-500/25 transition-all active:scale-95"
+              className="inline-flex items-center gap-1.5 h-9 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white px-3.5 text-xs font-semibold transition-all active:scale-95 cursor-pointer whitespace-nowrap"
             >
               <span className="material-symbols-outlined text-base">qr_code_2</span>
-              <span>Invitar Amigos (QR Fiesta)</span>
+              <span>Invitar Amigos (QR)</span>
             </button>
           )}
         </div>
@@ -150,88 +152,88 @@ export function PartyModeControlBar({
         <button
           type="button"
           onClick={() => handleSelectMode("democratic")}
-          className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+          className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             config.partyMode === "democratic"
-              ? "border-cyan-400 bg-cyan-500/15 text-white shadow-lg shadow-cyan-500/10"
-              : "border-white/10 bg-[#0d111c]/80 text-slate-300 hover:border-white/25"
+              ? "border-th-accent bg-th-accent-soft text-th-text"
+              : "border-th-border bg-th-recessed text-th-text-2 hover:border-th-border-strong"
           }`}
         >
           <div className="flex items-center justify-between w-full mb-1">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-cyan-300">
-              🗳️ Modo Democrático
+            <span className="text-xs font-bold text-th-accent">
+              Modo Democrático
             </span>
             {config.partyMode === "democratic" && (
-              <span className="text-[10px] font-mono font-bold bg-cyan-400/20 text-cyan-200 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-mono font-bold bg-th-accent text-white px-2 py-0.5 rounded-full">
                 ACTIVO
               </span>
             )}
           </div>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
-            El pueblo decide. Podés ajustar el tope individual y cuántos votos necesita un tema para subir.
+          <p className="text-xs text-th-text-2 leading-relaxed">
+            El público decide el orden. Ajustá el tope individual y los votos requeridos para entrar en cola.
           </p>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectMode("hybrid_turbo")}
-          className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+          className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             config.partyMode === "hybrid_turbo"
-              ? "border-amber-400 bg-amber-500/15 text-white shadow-lg shadow-amber-500/10"
-              : "border-white/10 bg-[#0d111c]/80 text-slate-300 hover:border-white/25"
+              ? "border-th-amber bg-th-amber-soft text-th-text"
+              : "border-th-border bg-th-recessed text-th-text-2 hover:border-th-border-strong"
           }`}
         >
           <div className="flex items-center justify-between w-full mb-1">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-amber-300">
-              🔥 Híbrido Turbo
+            <span className="text-xs font-bold text-th-amber">
+              Híbrido Turbo
             </span>
             {config.partyMode === "hybrid_turbo" && (
-              <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-200 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-mono font-bold bg-th-amber text-white px-2 py-0.5 rounded-full">
                 ACTIVO
               </span>
             )}
           </div>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
-            Votos libres + <strong>Fueguitos Turbo (+3 votos de golpe)</strong> recargables cada 3 minutos para destrabar empates.
+          <p className="text-xs text-th-text-2 leading-relaxed">
+            Votos libres más <strong className="text-th-text">Fueguitos Turbo (+3 votos)</strong> recargables cada 3 minutos.
           </p>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectMode("party_games")}
-          className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+          className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
             config.partyMode === "party_games"
-              ? "border-fuchsia-400 bg-fuchsia-500/15 text-white shadow-lg shadow-fuchsia-500/10"
-              : "border-white/10 bg-[#0d111c]/80 text-slate-300 hover:border-white/25"
+              ? "border-th-teal bg-th-teal-soft text-th-text"
+              : "border-th-border bg-th-recessed text-th-text-2 hover:border-th-border-strong"
           }`}
         >
           <div className="flex items-center justify-between w-full mb-1">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-fuchsia-300">
-              🎰 Duelos y Ruleta
+            <span className="text-xs font-bold text-th-teal">
+              Duelos y Ruleta
             </span>
             {config.partyMode === "party_games" && (
-              <span className="text-[10px] font-mono font-bold bg-fuchsia-400/20 text-fuchsia-200 px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-mono font-bold bg-th-teal text-white px-2 py-0.5 rounded-full">
                 ACTIVO
               </span>
             )}
           </div>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
-            Dispará batallas 1 vs 1 de 30 segundos en todos los celulares o girá la Ruleta Fiestera en la TV.
+          <p className="text-xs text-th-text-2 leading-relaxed">
+            Dispará batallas 1 vs 1 de 30s en los celulares o girá la Ruleta Fiestera en la TV.
           </p>
         </button>
       </div>
 
-      {/* Sub-panel for Democratic Mode Controls (Always visible in Democratic Mode, or quick summary) */}
+      {/* Sub-panel for Democratic Mode Controls */}
       {config.partyMode === "democratic" && (
-        <div className="rounded-xl border border-cyan-500/30 bg-[#0b101b]/90 p-3.5 space-y-3">
+        <div className="rounded-xl border border-th-border bg-th-recessed p-3.5 sm:p-4 space-y-3.5">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Control 1: Límite de votos por persona */}
+            {/* Control 1 */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-cyan-200">
-                  Límite de votos por persona (Opcional)
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-th-text">
+                  Límite de votos por persona
                 </label>
-                <span className="text-[11px] font-mono text-cyan-300 font-bold">
-                  {config.votesPerGuest === 0 ? "♾️ Ilimitado" : `${config.votesPerGuest} votos máx.`}
+                <span className="text-[11px] font-mono text-th-accent font-bold">
+                  {config.votesPerGuest === 0 ? "Ilimitado" : `${config.votesPerGuest} votos máx.`}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -240,10 +242,10 @@ export function PartyModeControlBar({
                     key={preset.value}
                     type="button"
                     onClick={() => void onConfigChange({ votesPerGuest: preset.value })}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold border transition-all ${
+                    className={`h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer whitespace-nowrap ${
                       config.votesPerGuest === preset.value
-                        ? "bg-cyan-500 text-slate-950 border-cyan-300"
-                        : "bg-[#141a29] text-slate-300 border-white/10 hover:border-cyan-400/40"
+                        ? "bg-th-accent text-white border-th-accent"
+                        : "bg-th-card text-th-text-2 border-th-border hover:border-th-border-strong hover:text-th-text"
                     }`}
                   >
                     {preset.label}
@@ -260,27 +262,27 @@ export function PartyModeControlBar({
                       votesPerGuest: Math.max(0, Number(e.target.value) || 0),
                     })
                   }
-                  className="w-20 rounded-lg border border-white/15 bg-[#141a29] px-2.5 py-1 text-xs font-mono text-white"
+                  className="w-20 h-8 rounded-lg border border-th-border bg-th-card px-2.5 text-xs font-mono text-th-text focus:outline-none focus:border-th-accent"
                 />
                 <button
                   type="button"
                   onClick={handleReloadVotes}
-                  className="ml-auto flex items-center gap-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 px-2.5 py-1 text-xs font-mono font-bold text-emerald-200 transition-all active:scale-95"
+                  className="ml-auto inline-flex items-center gap-1 h-8 rounded-lg bg-th-emerald-soft hover:bg-th-emerald hover:text-white border border-th-emerald/30 px-2.5 text-xs font-semibold text-th-emerald transition-colors cursor-pointer whitespace-nowrap"
                 >
-                  <span>🔄 Recargar votos a todos</span>
+                  <span>Recargar votos a todos</span>
                 </button>
               </div>
             </div>
 
-            {/* Control 2: Cantidad de votos para que la canción suba */}
+            {/* Control 2 */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-amber-200">
-                  Votos para que la canción suba a la cola (Opcional)
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-th-text">
+                  Votos necesarios para ingresar a la cola
                 </label>
-                <span className="text-[11px] font-mono text-amber-300 font-bold">
+                <span className="text-[11px] font-mono text-th-amber font-bold">
                   {config.minVotesToQueue <= 1
-                    ? "1 voto (Sube directo)"
+                    ? "1 voto (Directo)"
                     : `${config.minVotesToQueue} votos requeridos`}
                 </span>
               </div>
@@ -290,10 +292,10 @@ export function PartyModeControlBar({
                     key={preset.value}
                     type="button"
                     onClick={() => void onConfigChange({ minVotesToQueue: preset.value })}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold border transition-all ${
+                    className={`h-8 px-2.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer whitespace-nowrap ${
                       config.minVotesToQueue === preset.value
-                        ? "bg-amber-400 text-slate-950 border-amber-200"
-                        : "bg-[#141a29] text-slate-300 border-white/10 hover:border-amber-400/40"
+                        ? "bg-th-amber text-white border-th-amber"
+                        : "bg-th-card text-th-text-2 border-th-border hover:border-th-border-strong hover:text-th-text"
                     }`}
                   >
                     {preset.label}
@@ -310,29 +312,29 @@ export function PartyModeControlBar({
                       minVotesToQueue: Math.max(1, Number(e.target.value) || 1),
                     })
                   }
-                  className="w-20 rounded-lg border border-white/15 bg-[#141a29] px-2.5 py-1 text-xs font-mono text-white"
+                  className="w-20 h-8 rounded-lg border border-th-border bg-th-card px-2.5 text-xs font-mono text-th-text focus:outline-none focus:border-th-accent"
                 />
               </div>
             </div>
           </div>
 
-          {/* Control 3: Votación para cambiar la canción que se está reproduciendo */}
-          <div className="pt-2.5 border-t border-cyan-500/20 flex flex-wrap items-center justify-between gap-3">
-            <label className="flex items-center gap-2 text-xs font-bold text-rose-200 cursor-pointer">
+          {/* Control 3 */}
+          <div className="pt-3 border-t border-th-border flex flex-wrap items-center justify-between gap-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-th-text cursor-pointer">
               <input
                 type="checkbox"
                 checked={config.skipVoteEnabled ?? true}
                 onChange={(e) =>
                   void onConfigChange({ skipVoteEnabled: e.target.checked })
                 }
-                className="accent-rose-500 size-4"
+                className="accent-th-danger size-4 rounded cursor-pointer"
               />
-              <span>⏭️ Permitir iniciar votación para cambiar la canción en curso</span>
+              <span>Permitir votación para saltar la canción en curso</span>
             </label>
 
             {(config.skipVoteEnabled ?? true) && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-[11px] font-mono text-slate-400 mr-1">
+                <span className="text-[11px] font-mono text-th-muted mr-1">
                   Votos para saltar:
                 </span>
                 {SKIP_THRESHOLD_PRESETS.map((preset) => (
@@ -342,10 +344,10 @@ export function PartyModeControlBar({
                     onClick={() =>
                       void onConfigChange({ skipVotesThreshold: preset.value })
                     }
-                    className={`px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold border transition-all ${
+                    className={`h-7 px-2.5 rounded-lg text-[11px] font-medium border transition-colors cursor-pointer ${
                       (config.skipVotesThreshold ?? 3) === preset.value
-                        ? "bg-rose-500 text-white border-rose-300"
-                        : "bg-[#141a29] text-slate-300 border-white/10 hover:border-rose-400/40"
+                        ? "bg-th-danger text-white border-th-danger"
+                        : "bg-th-card text-th-text-2 border-th-border hover:border-th-border-strong"
                     }`}
                   >
                     {preset.label}
@@ -362,7 +364,7 @@ export function PartyModeControlBar({
                       skipVotesThreshold: Math.max(1, Number(e.target.value) || 3),
                     })
                   }
-                  className="w-16 rounded-lg border border-white/15 bg-[#141a29] px-2 py-0.5 text-[11px] font-mono text-white"
+                  className="w-16 h-7 rounded-lg border border-th-border bg-th-card px-2 text-[11px] font-mono text-th-text focus:outline-none focus:border-th-accent"
                 />
               </div>
             )}
@@ -370,41 +372,41 @@ export function PartyModeControlBar({
         </div>
       )}
 
-      {/* Sub-panel for Party Games (Duels & Roulette triggers) */}
+      {/* Sub-panel for Party Games */}
       {config.partyMode === "party_games" && (
-        <div className="rounded-xl border border-fuchsia-500/30 bg-[#0b101b]/90 p-3.5 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-slate-300">
-            <span className="font-bold text-fuchsia-300">🎮 Controles de Show en Vivo:</span>{" "}
-            Dispará un duelo interactivo entre los 2 mejores temas o sorteá un tema al azar en la TV.
+        <div className="rounded-xl border border-th-border bg-th-recessed p-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-th-text-2">
+            <span className="font-semibold text-th-text">Controles de Show en Vivo:</span>{" "}
+            Dispará un duelo interactivo entre los 2 mejores temas o sorteá un tema al azar en TV.
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={duelLaunching}
               onClick={() => void handleLaunchDuel()}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 px-3.5 py-2 text-xs font-mono font-extrabold shadow-md shadow-amber-500/20 transition-all active:scale-95 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 h-9 rounded-xl bg-th-amber text-white px-3.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              <span>⚡ Lanzar Duelo 1v1 (30s)</span>
+              <span>Lanzar Duelo 1v1 (30s)</span>
             </button>
             <button
               type="button"
               disabled={rouletteSpinning}
               onClick={() => void handleSpinRoulette()}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-indigo-600 hover:from-fuchsia-400 hover:to-indigo-500 text-white px-3.5 py-2 text-xs font-mono font-extrabold shadow-md shadow-fuchsia-500/25 transition-all active:scale-95 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 h-9 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white px-3.5 text-xs font-semibold transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              <span>🎡 Girar Ruleta en TV</span>
+              <span>Girar Ruleta en TV</span>
             </button>
           </div>
         </div>
       )}
 
       {statusFeedback && (
-        <div className="rounded-lg bg-fuchsia-500/15 border border-fuchsia-400/30 px-3 py-2 text-xs font-mono text-fuchsia-200 flex items-center justify-between">
+        <div className="rounded-xl bg-th-accent-soft border border-th-accent/30 px-3.5 py-2 text-xs font-medium text-th-text flex items-center justify-between gap-2">
           <span>{statusFeedback}</span>
           <button
             type="button"
             onClick={() => setStatusFeedback(null)}
-            className="text-fuchsia-300 hover:text-white text-xs"
+            className="text-th-muted hover:text-th-text text-xs cursor-pointer"
           >
             ✕
           </button>

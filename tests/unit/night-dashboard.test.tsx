@@ -61,7 +61,7 @@ describe("NightDashboard component", () => {
         source: "youtube",
         durationSeconds: 212,
         thumbnailUrl: null,
-        voteCount: 4,
+        voteCount: 6,
         createdAt: "2026-10-31T20:05:00Z",
         status: "queued",
         myVote: false,
@@ -86,7 +86,7 @@ describe("NightDashboard component", () => {
     render(<NightDashboard slug="billar-aurora" role="owner" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Control de la Noche")).toBeInTheDocument();
+      expect(screen.getByText("Cabina en Vivo")).toBeInTheDocument();
       expect(screen.getByText("Crimen")).toBeInTheDocument();
       expect(screen.getByText("De Música Ligera")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /cerrar noche/i })).toBeInTheDocument();

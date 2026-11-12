@@ -62,13 +62,13 @@ export function FallbackList({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-display text-sm font-bold text-cream flex items-center gap-2">
-            <ListMusic className="size-4 text-amber" />
+          <h3 className="font-display text-sm font-bold text-th-text flex items-center gap-2">
+            <ListMusic className="size-4 text-th-accent" />
             Lista de Respaldo (Fallback)
           </h3>
-          <p className="text-xs text-cream/50">
+          <p className="text-xs text-th-muted mt-0.5">
             Canciones que suenan cuando la cola de votación queda vacía
           </p>
         </div>
@@ -77,7 +77,7 @@ export function FallbackList({
           type="button"
           disabled={saving}
           onClick={() => void handleSave()}
-          className="flex items-center gap-1.5 rounded-xl bg-amber px-3 py-1.5 font-display text-xs font-bold text-[#041611] hover:bg-amber/90 disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-xl bg-th-accent hover:bg-th-accent-hover px-3.5 py-2 font-mono text-xs font-semibold text-th-on-accent shadow-sm disabled:opacity-50 transition-colors"
         >
           {saving ? (
             <RefreshCw className="size-3.5 animate-spin" />
@@ -89,25 +89,25 @@ export function FallbackList({
       </div>
 
       {error ? (
-        <p role="alert" className="text-xs text-coral">
+        <p role="alert" className="text-xs font-mono text-th-danger">
           {error}
         </p>
       ) : null}
 
       {tracks.length > 0 ? (
-        <ul className="space-y-2">
+        <ul className="max-h-[420px] min-h-0 rounded-xl bg-th-recessed border border-th-border p-2.5 space-y-2 ui-scroll-container">
           {tracks.map((track, idx) => (
             <li
               key={track.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-cream/5 bg-white/[0.015] p-3"
+              className="flex items-center justify-between gap-3 rounded-xl border border-th-border bg-th-card p-3 hover:border-th-border-strong transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
                 <BallChip n={idx + 1} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-cream">
+                  <p className="truncate text-xs font-semibold text-th-text">
                     {track.title}
                   </p>
-                  <p className="truncate text-[11px] text-cream/45">
+                  <p className="truncate text-[11px] text-th-muted">
                     {track.artist}
                   </p>
                 </div>
@@ -119,7 +119,7 @@ export function FallbackList({
                   type="button"
                   disabled={idx === 0}
                   onClick={() => move(idx, "up")}
-                  className="grid size-7 place-items-center rounded-lg border border-cream/10 text-cream/60 hover:text-cream disabled:opacity-20"
+                  className="grid size-7 place-items-center rounded-lg border border-th-border text-th-secondary hover:text-th-text hover:bg-th-card-hover disabled:opacity-25 transition-colors"
                   aria-label="Subir"
                 >
                   <ArrowUp className="size-3.5" />
@@ -128,7 +128,7 @@ export function FallbackList({
                   type="button"
                   disabled={idx === tracks.length - 1}
                   onClick={() => move(idx, "down")}
-                  className="grid size-7 place-items-center rounded-lg border border-cream/10 text-cream/60 hover:text-cream disabled:opacity-20"
+                  className="grid size-7 place-items-center rounded-lg border border-th-border text-th-secondary hover:text-th-text hover:bg-th-card-hover disabled:opacity-25 transition-colors"
                   aria-label="Bajar"
                 >
                   <ArrowDown className="size-3.5" />
@@ -136,7 +136,7 @@ export function FallbackList({
                 <button
                   type="button"
                   onClick={() => remove(idx)}
-                  className="grid size-7 place-items-center rounded-lg border border-coral/20 text-coral hover:bg-coral/10"
+                  className="grid size-7 place-items-center rounded-lg border border-th-danger/25 text-th-danger hover:bg-th-danger-soft transition-colors"
                   aria-label="Quitar de respaldo"
                 >
                   <Trash2 className="size-3.5" />
@@ -146,7 +146,7 @@ export function FallbackList({
           ))}
         </ul>
       ) : (
-        <div className="rounded-2xl border border-dashed border-cream/10 p-8 text-center text-xs text-cream/40">
+        <div className="rounded-2xl border border-dashed border-th-border p-8 text-center text-xs font-mono text-th-muted">
           No hay canciones en la lista de respaldo.
         </div>
       )}

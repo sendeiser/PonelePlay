@@ -78,6 +78,8 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
   const [lastTvProgressAt, setLastTvProgressAt] = useState<number>(0);
   const [roundSecondsLeft, setRoundSecondsLeft] = useState<number>(180);
   const [partyConfig, setPartyConfig] = useState<PartyConfig>(DEFAULT_BAR_PARTY_CONFIG);
+  const [cabinaQueueTab, setCabinaQueueTab] = useState<"queue" | "candidates">("queue");
+  const [queueFilter, setQueueFilter] = useState("");
 
   // Sync party config from localStorage and server state
   useEffect(() => {
@@ -434,76 +436,92 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
     [activeQueue, candidateProposals],
   );
   const queue = activeQueue;
+  const normalizedFilter = queueFilter.trim().toLowerCase();
+  const filteredActiveQueue = useMemo(() => {
+    if (!normalizedFilter) return activeQueue;
+    return activeQueue.filter(
+      (item) =>
+        item.title.toLowerCase().includes(normalizedFilter) ||
+        item.artist.toLowerCase().includes(normalizedFilter) ||
+        (item.guestName && item.guestName.toLowerCase().includes(normalizedFilter)),
+    );
+  }, [activeQueue, normalizedFilter]);
+  const filteredCandidates = useMemo(() => {
+    if (!normalizedFilter) return candidateProposals;
+    return candidateProposals.filter(
+      (item) =>
+        item.title.toLowerCase().includes(normalizedFilter) ||
+        item.artist.toLowerCase().includes(normalizedFilter) ||
+        (item.guestName && item.guestName.toLowerCase().includes(normalizedFilter)),
+    );
+  }, [candidateProposals, normalizedFilter]);
   const nowPlaying = state?.nowPlaying ?? null;
   const isPlayerConnected =
     Boolean(state?.player?.lastSeenAt) || (lastTvProgressAt > 0 && Date.now() - lastTvProgressAt < 6000);
 
   if (loading && !state) {
     return (
-      <div className="flex h-64 items-center justify-center text-slate-400 font-mono text-xs">
-        <span className="inline-block size-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin mr-2" />
+      <div className="flex h-64 items-center justify-center text-th-text-2 font-mono text-xs">
+        <span className="inline-block size-4 border-2 border-th-accent border-t-transparent rounded-full animate-spin mr-2" />
         Cargando panel de control y telemetría nocturna...
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-24 md:pb-36">
+    <div className="space-y-5 pb-24 md:pb-32">
       {/* ==================== TOP OPERATIONAL STATUS BAR ==================== */}
-      <section className="card-panel rounded-xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 sm:gap-4 overflow-hidden">
-        {/* Session Live Meta */}
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0 w-full lg:w-auto">
+      <section className="card-panel rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 min-w-0">
           <div className="flex flex-col">
-            <h1 className="text-base font-bold text-white tracking-tight">
-              Control de la Noche
+            <h1 className="text-lg font-display font-bold text-th-text tracking-tight">
+              Cabina en Vivo
             </h1>
-            <p className="font-mono text-[10px] text-slate-400">
-              {state?.venue.name} · Modo {role}
+            <p className="font-mono text-[11px] text-th-muted">
+              {state?.venue.name} · Perfil {role}
             </p>
           </div>
+
           <div
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-xs font-bold uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full font-mono text-[11px] font-bold uppercase tracking-wider border ${
               isOpen
-                ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
-                : "bg-slate-800 text-slate-400 border border-slate-700"
+                ? "bg-th-emerald-soft border-th-emerald/30 text-th-emerald"
+                : "bg-th-recessed text-th-muted border-th-border"
             }`}
           >
             <span
               className={`size-2 rounded-full ${
-                isOpen ? "bg-emerald-400 pulse-dot" : "bg-slate-500"
+                isOpen ? "bg-th-emerald pulse-dot" : "bg-th-muted"
               }`}
             />
             <span>{isOpen ? "Noche Abierta" : "Noche Cerrada"}</span>
           </div>
 
-          <div className="h-4 w-px bg-[#1E2333] hidden sm:block" />
+          <div className="h-5 w-px bg-th-border hidden sm:block" />
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs font-mono text-slate-300">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-th-text-2">
             <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-slate-500 text-base">schedule</span>
-              <span className="text-slate-400">Estado:</span>
-              <span className="font-bold text-white">
-                {isOpen ? "Sesión Activa" : "Cerrado"}
+              <span className="text-th-muted">Cola:</span>
+              <span className="font-mono font-bold text-th-text tabular-nums">{queue.length}</span>
+            </div>
+            <span className="text-th-border-strong hidden sm:inline">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-th-muted">Votando:</span>
+              <span className="font-mono font-bold text-th-amber tabular-nums">{candidateProposals.length}</span>
+            </div>
+            <span className="text-th-border-strong hidden sm:inline">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-th-muted">Ingreso:</span>
+              <span className="font-mono font-bold text-th-accent tabular-nums">
+                {effectiveThreshold} {effectiveThreshold === 1 ? "voto" : "votos"}
               </span>
-            </div>
-            <span className="text-slate-600 hidden sm:inline">•</span>
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-indigo-400 text-base">group</span>
-              <span className="text-white font-semibold">{queue.length} temas</span>
-              <span className="text-slate-400">en cola</span>
-            </div>
-            <span className="text-slate-600 hidden sm:inline">•</span>
-            <div className="flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-cyan-400 text-base">verified_user</span>
-              <span className="text-white font-semibold uppercase">{role}</span>
             </div>
           </div>
         </div>
 
         {/* Operational Control Toggles & Close Shift Button */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6">
-          {/* Switch Toggle: Aceptar Propuestas de Clientes */}
-          <label className="flex items-center gap-3 cursor-pointer select-none">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
             <div className="relative">
               <input
                 type="checkbox"
@@ -513,43 +531,40 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                 disabled={actionLoading || !isOpen}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-[#181b25] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white peer-checked:bg-indigo-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#1E2333] after:border after:rounded-full after:size-5 after:transition-all" />
+              <div className="w-11 h-6 bg-th-recessed border border-th-border peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-th-accent after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:bg-white after:shadow-xs after:rounded-full after:size-[18px] after:transition-all" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-white">
-                Aceptar Propuestas de Clientes
+              <span className="text-xs font-semibold text-th-text">
+                Propuestas de Clientes
               </span>
               <span
                 className={`text-[10px] font-mono ${
-                  state?.settings.proposalsEnabled ? "text-emerald-400" : "text-slate-400"
+                  state?.settings.proposalsEnabled ? "text-th-emerald font-bold" : "text-th-muted"
                 }`}
               >
-                {state?.settings.proposalsEnabled
-                  ? "ON · Clientes pueden proponer temas"
-                  : "OFF · Propuestas pausadas"}
+                {state?.settings.proposalsEnabled ? "Habilitadas" : "Pausadas"}
               </span>
             </div>
           </label>
 
-          <div className="h-6 w-px bg-[#1E2333] hidden sm:block" />
+          <div className="h-6 w-px bg-th-border hidden sm:block" />
 
-          {/* Botón: Cerrar Noche / Abrir Noche */}
           {isOpen ? (
             <button
               type="button"
               disabled={actionLoading}
               onClick={() => setConfirmClose(true)}
-              className="flex items-center gap-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 px-4 py-2 rounded-lg text-xs font-mono font-bold border border-rose-500/30 active:scale-95 duration-150 transition-all"
+              className="inline-flex items-center gap-1.5 h-9 bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white px-3.5 rounded-xl text-xs font-semibold border border-th-danger/30 active:scale-95 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-base">power_settings_new</span>
-              <span>Cerrar Noche (Fin de Turno)</span>
+              <span>Cerrar Noche</span>
             </button>
           ) : (
             <button
               type="button"
               disabled={actionLoading}
               onClick={() => setConfirmOpen(true)}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-xs font-mono font-bold active:scale-95 duration-150 transition-all shadow-md shadow-emerald-600/30"
+              className="inline-flex items-center gap-1.5 h-9 bg-th-emerald hover:opacity-90 text-white px-4 rounded-xl text-xs font-semibold active:scale-95 transition-all cursor-pointer"
             >
               <span className="material-symbols-outlined text-base">play_arrow</span>
               <span>Abrir Noche</span>
@@ -558,63 +573,65 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         </div>
       </section>
 
-      {/* ==================== HARDWARE & CONNECTIVITY BANNER ==================== */}
-      <section className="recessed-dark rounded-xl px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs font-mono overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4 min-w-0">
-          <div className="flex items-center gap-2 text-indigo-300">
-            <span className="material-symbols-outlined text-base text-cyan-400">desktop_windows</span>
-            <span className="text-slate-300">Reproductor TV PC:</span>
+      {/* ==================== HARDWARE & QUICK UTILITIES BAR ==================== */}
+      <section className="recessed-panel rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-base text-th-teal">desktop_windows</span>
+            <span className="text-th-text-2">TV Salón:</span>
             {isPlayerConnected ? (
-              <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span>Conectado (Sync Activo)</span>
+              <span className="text-th-emerald font-semibold flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-th-emerald animate-pulse" />
+                <span>Conectado (Sync 100%)</span>
               </span>
             ) : (
-              <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                <span className="size-2 rounded-full bg-amber-400" />
-                <span>Esperando vinculación</span>
+              <span className="text-th-amber font-semibold flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-th-amber" />
+                <span>Esperando TV</span>
               </span>
             )}
           </div>
-          <span className="text-slate-600 hidden sm:inline">|</span>
-          <div className="flex items-center gap-2 text-slate-400">
-            <span className="material-symbols-outlined text-base text-indigo-400">volume_up</span>
-            <span>Canal Audio Principal Salón</span>
+          <span className="text-th-border-strong hidden sm:inline">·</span>
+          <div className="flex items-center gap-1.5 text-th-muted">
+            <span className="material-symbols-outlined text-base text-th-accent">volume_up</span>
+            <span>Audio Cabina + TV</span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-400">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => setPrintQrModalOpen(true)}
-            className="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white px-3 py-1.5 rounded-lg border border-indigo-500/40 text-xs font-mono font-bold transition-all shadow-sm"
+            className="inline-flex items-center gap-1.5 h-8 bg-th-card hover:bg-th-hover text-th-text-2 hover:text-th-text px-3 rounded-xl border border-th-border text-xs font-medium transition-colors cursor-pointer"
             title="Imprimir cartel con código QR para las mesas o barra"
           >
-            <span className="material-symbols-outlined text-sm text-cyan-400">qr_code_scanner</span>
-            <span>Imprimir QR Mesas (PDF)</span>
+            <span className="material-symbols-outlined text-sm text-th-accent">qr_code_scanner</span>
+            <span>QR Mesas (PDF)</span>
           </button>
 
           <button
             type="button"
             onClick={() => setTvManagerOpen(true)}
-            className="flex items-center gap-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white px-3 py-1.5 rounded-lg border border-indigo-500/40 text-xs font-mono font-bold transition-all shadow-sm"
+            className="inline-flex items-center gap-1.5 h-8 bg-th-card hover:bg-th-hover text-th-text-2 hover:text-th-text px-3 rounded-xl border border-th-border text-xs font-medium transition-colors cursor-pointer"
           >
-            <span className="material-symbols-outlined text-sm text-cyan-400">tv</span>
-            <span>Pantallas TV (PIN / QR)</span>
+            <span className="material-symbols-outlined text-sm text-th-teal">tv</span>
+            <span>Pantallas TV</span>
           </button>
+
           <button
             type="button"
             onClick={() => setPairDialogOpen(true)}
-            className="hover:text-slate-300 text-slate-400 text-xs transition-colors hidden sm:flex items-center gap-1"
+            className="hidden sm:inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-th-muted hover:text-th-text hover:bg-th-card text-xs transition-colors cursor-pointer"
             title="Vincular mediante token manual"
           >
-            <span className="material-symbols-outlined text-xs">key</span>
+            <span className="material-symbols-outlined text-sm">key</span>
             <span>Token</span>
           </button>
+
           <button
             type="button"
             onClick={() => void refresh()}
-            className="hover:text-white text-slate-400 text-xs flex items-center gap-1"
+            className="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-th-muted hover:text-th-text hover:bg-th-card text-xs transition-colors cursor-pointer"
             title="Actualizar datos"
           >
             <span className="material-symbols-outlined text-sm">refresh</span>
@@ -623,7 +640,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         </div>
       </section>
 
-      {/* ==================== PARTY MODE CONTROL BAR (WHEN VENUE_TYPE === 'PARTY') ==================== */}
+      {/* ==================== PARTY MODE CONTROL BAR ==================== */}
       {partyConfig.venueType === "party" && (
         <PartyModeControlBar
           slug={slug}
@@ -639,16 +656,16 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
       {errorMsg && (
         <div
           role="alert"
-          className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center justify-between gap-3 shadow-lg"
+          className="rounded-xl border border-th-danger/30 bg-th-danger-soft p-3 text-xs text-th-danger flex items-center justify-between gap-3"
         >
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-base text-red-400">error</span>
+          <div className="flex items-center gap-2 font-medium">
+            <span className="material-symbols-outlined text-base">error</span>
             <span>{errorMsg}</span>
           </div>
           <button
             type="button"
             onClick={() => setErrorMsg(null)}
-            className="text-red-300 hover:text-white p-1 rounded hover:bg-red-900/40 transition-colors"
+            className="p-1 rounded-lg hover:bg-th-card transition-colors cursor-pointer"
             title="Cerrar mensaje"
           >
             <span className="material-symbols-outlined text-base leading-none">close</span>
@@ -656,25 +673,24 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
         </div>
       )}
 
-      {/* ==================== 2-COLUMN CENTRAL OPERATIONAL PANEL ==================== */}
-      <div className="grid grid-cols-12 gap-6 items-start">
-        {/* ==================== COLUMNA IZQUIERDA: AHORA SUENA & CONTROLES STAFF (5 COLS) ==================== */}
-        <section className="col-span-12 lg:col-span-5 flex flex-col gap-5">
-          {/* Tarjeta Prominente: Ahora Suena */}
-          <div className="hero-panel rounded-2xl p-5 relative overflow-hidden border border-[#2a3148] shadow-2xl">
-            {/* Ambient Neon Top Glow */}
-            <div className="absolute -top-12 -right-12 size-48 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
-
-            {/* Header badge ON AIR */}
-            <div className="flex items-center justify-between mb-4 relative z-10">
-              <div className="flex items-center gap-2 bg-rose-500/15 border border-rose-500/40 px-3 py-1 rounded-full text-rose-400">
-                <span className="size-2 rounded-full bg-rose-500 pulse-dot" />
-                <span className="font-mono text-[10px] font-bold tracking-wider">
-                  EN AIRE · JUKEBOX SALÓN
+      {/* ==================== 2-COLUMN OPERATIONAL STAGE ==================== */}
+      <div className="grid grid-cols-12 gap-5 items-start">
+        {/* ==================== LEFT COLUMN (5 COLS): NOW PLAYING & QUICK CONTROLS ==================== */}
+        <section className="col-span-12 lg:col-span-5 flex flex-col gap-4">
+          {/* Now Playing Hero Deck */}
+          <div className="hero-panel rounded-2xl p-5 relative overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <div className="inline-flex items-center gap-2 bg-th-danger-soft border border-th-danger/30 px-2.5 py-1 rounded-full text-th-danger">
+                <span className="size-2 rounded-full bg-th-danger pulse-dot" />
+                <span className="font-mono text-[10px] font-bold tracking-wider uppercase">
+                  Sonando Ahora
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 font-mono text-xs text-indigo-300 bg-[#0a0e17]/80 px-2.5 py-1 rounded-lg border border-[#1E2333]">
-                <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+              <div className="inline-flex items-center gap-1.5 font-mono text-xs text-th-accent bg-th-card px-2.5 py-1 rounded-full border border-th-border font-bold">
+                <span
+                  className="material-symbols-outlined text-sm"
+                  style={{ fontVariationSettings: "'FILL' 1" }}
+                >
                   {nowPlaying && (nowPlaying.voteCount >= 9999 || nowPlaying.voteCount === 0) ? "stars" : "thumb_up"}
                 </span>
                 <span>
@@ -685,74 +701,64 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
               </div>
             </div>
 
-            {/* Vinyl Showcase & Song Details */}
-            <div className="flex items-center gap-4 my-2 relative z-10">
-              {/* Vinyl Record Artwork Graphic */}
-              <div className="relative size-28 shrink-0">
-                <div className="absolute inset-0 rounded-xl overflow-hidden border border-[#2a3148] shadow-lg z-10 bg-[#181b25] flex items-center justify-center">
+            <div className="flex items-center gap-4 my-1">
+              <div className="relative size-24 shrink-0">
+                <div className="size-24 rounded-2xl overflow-hidden border border-th-border shadow-md bg-th-card flex items-center justify-center">
                   {nowPlaying?.thumbnailUrl ? (
                     <Image
                       src={nowPlaying.thumbnailUrl}
                       alt={nowPlaying.title}
-                      width={112}
-                      height={112}
+                      width={96}
+                      height={96}
                       className="w-full h-full object-cover"
                       unoptimized
                     />
                   ) : (
-                    <span className="material-symbols-outlined text-slate-500 text-3xl">music_note</span>
+                    <span className="material-symbols-outlined text-th-muted text-3xl">music_note</span>
                   )}
-                </div>
-                {/* Vinyl Record Disc Sliding Out */}
-                <div className="absolute -right-4 -top-1 size-24 rounded-full bg-[#07090e] border border-[#2a3045] flex items-center justify-center spin-vinyl z-0 shadow-xl">
-                  <div className="size-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center border-2 border-[#0a0e17]">
-                    <div className="size-2.5 rounded-full bg-[#0a0e17]" />
-                  </div>
                 </div>
               </div>
 
-              {/* Title & Artist Meta */}
               <div className="flex flex-col min-w-0 flex-1">
-                <span className="font-mono text-[11px] text-indigo-300 uppercase tracking-widest truncate">
+                <span className="font-mono text-[11px] text-th-accent font-bold uppercase tracking-wider truncate">
                   {nowPlaying?.artist || "Playlist Local"}
                 </span>
-                <h2 className="text-lg font-bold text-white tracking-tight truncate leading-tight mt-0.5">
+                <h2 className="text-lg font-display font-bold text-th-text tracking-tight truncate leading-snug mt-0.5">
                   {nowPlaying?.title || "Música de fondo activa"}
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 mt-2">
-                  <span className="px-2 py-0.5 rounded-md bg-[#0a0e17] font-mono text-[10px] text-slate-300 border border-[#1E2333] flex items-center gap-1">
-                    <span className="material-symbols-outlined text-xs text-indigo-400">table_bar</span>
+                  <span className="px-2 py-0.5 rounded-md bg-th-card text-xs text-th-text-2 border border-th-border flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs text-th-accent">table_bar</span>
                     <span>
                       {nowPlaying?.guestName
-                        ? `🎉 Pedido por ${nowPlaying.guestName}`
-                        : "Pedido por Mesa Salón"}
+                        ? `Pedido por ${nowPlaying.guestName}`
+                        : "Pedido por Mesa"}
                     </span>
                   </span>
                   {nowPlaying?.isKaraoke && (
-                    <span className="px-2 py-0.5 rounded-md bg-pink-500/20 font-mono text-[10px] text-pink-200 border border-pink-400/40 font-bold">
-                      🎤 Karaoke
+                    <span className="px-2 py-0.5 rounded-md bg-th-accent-soft font-mono text-[10px] text-th-accent font-bold">
+                      Karaoke
                     </span>
                   )}
-                  <span className="font-mono text-[10px] text-slate-400">
+                  <span className="font-mono text-[11px] text-th-muted tabular-nums">
                     {formatDuration(nowPlaying?.durationSeconds ?? 0)}
                   </span>
                 </div>
                 {nowPlaying?.dedication && (
-                  <p className="mt-1.5 text-xs font-medium text-fuchsia-200 bg-fuchsia-950/40 border border-fuchsia-500/30 rounded-lg px-2.5 py-1 truncate">
-                    💬 &ldquo;{nowPlaying.dedication}&rdquo;
+                  <p className="mt-2 text-xs font-medium text-th-text bg-th-card border border-th-border rounded-xl px-2.5 py-1.5 truncate">
+                    “{nowPlaying.dedication}”
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Staff Moderation Actions for Now Playing */}
             {nowPlaying && (
-              <div className="mt-4 pt-3 border-t border-[#2a3148] flex items-center gap-3 relative z-10">
+              <div className="mt-4 pt-3.5 border-t border-th-border flex items-center gap-2.5">
                 <button
                   type="button"
                   disabled={actionLoading}
                   onClick={() => void handleSkip()}
-                  className="flex-1 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 shadow-md shadow-indigo-600/30"
+                  className="flex-1 h-9 px-3 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">skip_next</span>
                   <span>Saltear Tema</span>
@@ -762,7 +768,7 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                   type="button"
                   disabled={actionLoading}
                   onClick={() => setConfirmVetoId(nowPlaying.id)}
-                  className="py-2 px-3 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-500/30 font-mono text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                  className="h-9 px-3.5 rounded-xl bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white border border-th-danger/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">block</span>
                   <span>Vetar</span>
@@ -771,113 +777,109 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
             )}
           </div>
 
-          {/* Card: Control Maestro de Cabina */}
-          <div className="card-panel rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between border-b border-[#1E2333] pb-2">
+          {/* Control Maestro & Audio Card */}
+          <div className="card-panel rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-th-border pb-2.5">
               <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-indigo-400 text-base">settings_remote</span>
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                <span className="material-symbols-outlined text-th-accent text-lg">settings_remote</span>
+                <h3 className="text-xs font-display font-bold text-th-text uppercase tracking-wider">
                   Control Maestro de Cabina
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-emerald-400 font-semibold flex items-center gap-1">
-                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>En Vivo TV</span>
+              <span className="text-[11px] font-mono text-th-emerald font-bold flex items-center gap-1.5">
+                <span className="size-1.5 rounded-full bg-th-emerald animate-pulse" />
+                <span>En Vivo</span>
               </span>
             </div>
 
-            {/* Modo Karaoke Live Switch */}
-            <button
-              type="button"
-              onClick={() => void handleKaraokeToggle()}
-              className={`w-full flex items-center justify-between p-2.5 rounded-xl border font-mono text-xs font-bold transition-all ${
-                karaokeMode
-                  ? "bg-gradient-to-r from-pink-950/60 to-purple-950/60 border-pink-500/50 text-pink-200 shadow-lg shadow-pink-500/20"
-                  : "bg-[#181b25] border-[#232b42] text-slate-300 hover:text-white hover:border-pink-500/30"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-lg text-pink-400">
-                  mic_external_on
-                </span>
-                <span>Modo Karaoke en Vivo</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase ${
-                  karaokeMode
-                    ? "bg-pink-500 text-white font-bold animate-pulse"
-                    : "bg-slate-800 text-slate-400"
-                }`}>
-                  {karaokeMode ? "ACTIVO" : "INACTIVO"}
-                </span>
-              </div>
-            </button>
-
-            {/* Quick Button: Poner Canción Manualmente */}
             <button
               type="button"
               onClick={() => setManualModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white py-2.5 px-3 rounded-lg text-xs font-mono font-bold shadow-md shadow-emerald-600/25 transition-all active:scale-95"
+              className="w-full h-10 flex items-center justify-center gap-2 bg-th-accent hover:bg-th-accent-hover text-white rounded-xl text-xs font-semibold transition-all active:scale-95 cursor-pointer"
             >
               <span className="material-symbols-outlined text-base">queue_music</span>
               <span>+ Poner Canción Manualmente</span>
             </button>
 
-            {/* Main Player Control Buttons */}
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => void handleTogglePause()}
-                className="flex items-center justify-center gap-2 bg-[#181b25] hover:bg-[#202534] text-white py-2.5 px-3 rounded-lg text-xs font-mono font-bold border border-[#1E2333] hover:border-indigo-500/40 transition-all active:scale-95"
+                className="h-9 flex items-center justify-center gap-1.5 bg-th-recessed hover:bg-th-hover text-th-text px-3 rounded-xl text-xs font-semibold border border-th-border transition-colors active:scale-95 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-lg text-indigo-400">
+                <span className="material-symbols-outlined text-base text-th-accent">
                   {isPaused ? "play_circle" : "pause_circle"}
                 </span>
-                <span>{isPaused ? "Reanudar Música" : "Pausar Música"}</span>
+                <span>{isPaused ? "Reanudar" : "Pausar"}</span>
               </button>
 
               <button
                 type="button"
                 disabled={actionLoading || (!nowPlaying && queue.length === 0)}
                 onClick={() => void handleSkip()}
-                className="flex items-center justify-center gap-2 bg-[#181b25] hover:bg-rose-500/10 text-rose-400 py-2.5 px-3 rounded-lg text-xs font-mono font-bold border border-rose-500/30 transition-all active:scale-95 disabled:opacity-40"
+                className="h-9 flex items-center justify-center gap-1.5 bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white px-3 rounded-xl text-xs font-semibold border border-th-danger/25 transition-colors active:scale-95 disabled:opacity-40 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-lg">skip_next</span>
-                <span>Saltar Tema (Skip)</span>
+                <span className="material-symbols-outlined text-base">skip_next</span>
+                <span>Saltar Tema</span>
               </button>
             </div>
 
-            {/* Remote TV Fullscreen Toggle Button */}
-            <button
-              type="button"
-              onClick={() => void handleToggleTvFullscreen()}
-              className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-mono font-bold border transition-all active:scale-95 ${
-                isTvFullscreen
-                  ? "bg-gradient-to-r from-cyan-500/25 to-indigo-500/25 text-cyan-300 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.35)] animate-pulse"
-                  : "bg-[#181b25] hover:bg-[#202534] text-slate-300 hover:text-cyan-400 border-[#1E2333]"
-              }`}
-              title={isTvFullscreen ? "Desactivar pantalla completa en la TV" : "Activar pantalla completa en la TV del salón"}
-            >
-              <span className="material-symbols-outlined text-base text-cyan-400">fullscreen</span>
-              <span>{isTvFullscreen ? "Pantalla Completa TV: ACTIVADA" : "Activar Pantalla Completa en TV"}</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => void handleKaraokeToggle()}
+                className={`h-9 flex items-center justify-between px-3 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                  karaokeMode
+                    ? "bg-th-accent-soft border-th-accent text-th-accent"
+                    : "bg-th-recessed border-th-border text-th-text-2 hover:text-th-text"
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base">mic_external_on</span>
+                  <span>Karaoke</span>
+                </span>
+                <span className="font-mono text-[10px] font-bold">
+                  {karaokeMode ? "ON" : "OFF"}
+                </span>
+              </button>
 
-            {/* Volume Slider / Salida de Emergencia */}
-            <div className="recessed-dark p-3 rounded-lg flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void handleToggleTvFullscreen()}
+                className={`h-9 flex items-center justify-between px-3 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                  isTvFullscreen
+                    ? "bg-th-teal-soft border-th-teal text-th-teal"
+                    : "bg-th-recessed border-th-border text-th-text-2 hover:text-th-text"
+                }`}
+                title={isTvFullscreen ? "Desactivar pantalla completa en TV" : "Activar pantalla completa en TV"}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-base">fullscreen</span>
+                  <span>TV Full</span>
+                </span>
+                <span className="font-mono text-[10px] font-bold">
+                  {isTvFullscreen ? "ON" : "OFF"}
+                </span>
+              </button>
+            </div>
+
+            {/* Volume Well */}
+            <div className="recessed-panel p-3.5 rounded-xl flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
-                  <span className="material-symbols-outlined text-indigo-400 text-base">volume_up</span>
-                  <span>Volumen Salón Principal</span>
-                </div>
-                <span className="font-mono text-xs text-white font-bold">{isMuted ? "0%" : `${volume}%`}</span>
+                <span className="text-xs font-semibold text-th-text-2 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-th-accent text-base">volume_up</span>
+                  Volumen Salón
+                </span>
+                <span className="font-mono text-xs text-th-text font-bold tabular-nums">
+                  {isMuted ? "0%" : `${volume}%`}
+                </span>
               </div>
 
-              {/* Range Slider */}
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void handleToggleMute()}
-                  className="text-slate-400 hover:text-indigo-400 transition-colors"
+                  className="text-th-muted hover:text-th-accent transition-colors cursor-pointer"
                   title="Silenciar / Activar Sonido (M)"
                 >
                   <span className="material-symbols-outlined text-sm">
@@ -890,252 +892,248 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                   max="100"
                   value={isMuted ? 0 : volume}
                   onChange={(e) => void handleVolumeChange(Number(e.target.value))}
-                  className="w-full accent-indigo-500 h-1.5 bg-[#0a0e17] rounded-lg cursor-pointer border border-[#1E2333]"
+                  className="w-full accent-th-accent h-1.5 bg-th-border rounded-lg cursor-pointer"
                 />
                 <button
                   type="button"
                   onClick={() => void handleVolumeChange(100)}
-                  className="text-slate-400 hover:text-indigo-400 transition-colors"
+                  className="text-th-muted hover:text-th-accent transition-colors cursor-pointer"
                   title="Volumen al máximo"
                 >
                   <span className="material-symbols-outlined text-sm">volume_up</span>
                 </button>
               </div>
 
-              {/* Emergency Mic / Silence Bar Button */}
-              <div className="pt-1 flex items-center justify-between border-t border-[#1E2333]/50">
+              <div className="pt-1.5 flex items-center justify-between border-t border-th-border">
                 <button
                   type="button"
                   onClick={() => void handleToggleMute()}
-                  className="flex items-center gap-1.5 text-[11px] font-mono text-rose-400 hover:text-rose-300 underline py-0.5"
+                  className="flex items-center gap-1 text-[11px] font-medium text-th-danger hover:underline cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-sm">mic_off</span>
-                  <span>{isMuted ? "Restablecer Audio Salón" : "Silenciar Salón (Corte de Emergencia)"}</span>
+                  <span>{isMuted ? "Restablecer Audio" : "Corte de Emergencia"}</span>
                 </button>
-                <span className="text-[10px] font-mono text-slate-500">Limitador: -3dB</span>
+                <button
+                  type="button"
+                  onClick={() => void handleRestartPlayer()}
+                  className="text-[11px] font-medium text-th-accent hover:underline cursor-pointer"
+                >
+                  Reiniciar TV
+                </button>
               </div>
-            </div>
-
-            {/* Quick Action: Emitir Código Térmico en 1 Clic */}
-            <Link
-              href={`/panel/${slug}/tickets`}
-              className="w-full flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition-all shadow-md shadow-indigo-600/25 active:scale-98"
-            >
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-base">confirmation_number</span>
-                <span>Emitir Código Térmico en 1 Clic</span>
-              </div>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded font-mono">F4</span>
-            </Link>
-
-            {/* Reiniciar Player Link */}
-            <div className="flex items-center justify-between pt-1 text-[11px] font-mono text-slate-400">
-              <button
-                type="button"
-                onClick={() => void handleRestartPlayer()}
-                className="hover:text-indigo-400 text-indigo-300 underline transition-colors"
-              >
-                Reiniciar Player TV
-              </button>
               {playerResetMsg && (
-                <span className="text-emerald-400 text-[10px]">{playerResetMsg}</span>
+                <p className="text-th-emerald text-[11px] font-mono">{playerResetMsg}</p>
               )}
             </div>
+
+            <Link
+              href={`/panel/${slug}/tickets`}
+              className="w-full h-10 flex items-center justify-between bg-th-recessed hover:bg-th-hover text-th-text border border-th-border px-4 rounded-xl text-xs font-semibold transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-base text-th-accent">confirmation_number</span>
+                <span>Emitir Código Térmico</span>
+              </div>
+              <span className="text-[10px] bg-th-card border border-th-border px-2 py-0.5 rounded font-mono text-th-muted">F4</span>
+            </Link>
           </div>
 
-          {/* Card: Configuración rápida de reproducción */}
-          <div className="card-panel rounded-xl p-4 space-y-3">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
-              <span className="material-symbols-outlined text-indigo-400 text-base">tune</span>
+          {/* Parámetros de Turno */}
+          <div className="card-panel rounded-2xl p-4 space-y-2.5">
+            <h3 className="text-xs font-display font-bold text-th-text uppercase tracking-wider flex items-center gap-2">
+              <span className="material-symbols-outlined text-th-accent text-base">tune</span>
               Parámetros de Turno
             </h3>
-            <div className="space-y-2 text-xs font-mono text-slate-300">
-              <div className="flex justify-between items-center py-1 border-b border-[#1E2333]">
-                <span className="text-slate-400">Límite de cola:</span>
-                <span className="font-bold text-white">{state?.settings.maxQueueSize ?? 20} canciones</span>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <div className="recessed-panel rounded-xl p-2.5 text-center">
+                <p className="text-[10px] font-mono uppercase text-th-muted">Límite cola</p>
+                <p className="font-mono text-sm font-bold text-th-text tabular-nums mt-0.5">
+                  {state?.settings.maxQueueSize ?? 20}
+                </p>
               </div>
-              <div className="flex justify-between items-center py-1 border-b border-[#1E2333]">
-                <span className="text-slate-400">Créditos default ticket:</span>
-                <span className="font-bold text-indigo-300">{state?.settings.defaultCreditsPerCode ?? 3} votos</span>
+              <div className="recessed-panel rounded-xl p-2.5 text-center">
+                <p className="text-[10px] font-mono uppercase text-th-muted">Ticket Base</p>
+                <p className="font-mono text-sm font-bold text-th-accent tabular-nums mt-0.5">
+                  {state?.settings.defaultCreditsPerCode ?? 3} votos
+                </p>
               </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="text-slate-400">Filtro explícito:</span>
-                <span className="font-bold text-emerald-400">
-                  {state?.settings.explicitFilterEnabled ? "Activado" : "Desactivado"}
-                </span>
+              <div className="recessed-panel rounded-xl p-2.5 text-center">
+                <p className="text-[10px] font-mono uppercase text-th-muted">Filtro</p>
+                <p className="font-mono text-sm font-bold text-th-emerald mt-0.5">
+                  {state?.settings.explicitFilterEnabled ? "Activo" : "Libre"}
+                </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ==================== COLUMNA DERECHA: COLA EN VIVO & MODERACIÓN (7 COLS) ==================== */}
-        <section className="col-span-12 lg:col-span-7 card-panel rounded-2xl p-5 shadow-2xl">
-          <div className="flex items-center justify-between pb-3 border-b border-[#1E2333]">
+        {/* ==================== RIGHT COLUMN (7 COLS): BOUNDED SCROLLABLE QUEUE & PLAYLIST CONTAINER ==================== */}
+        <section className="col-span-12 lg:col-span-7 card-panel rounded-2xl p-5 flex flex-col gap-4">
+          {/* Header & Quick Add */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                <span className="material-symbols-outlined text-indigo-400 text-lg">queue_music</span>
-                Cola en Vivo & Moderación
+              <h2 className="text-base font-display font-bold text-th-text tracking-tight flex items-center gap-2">
+                <span className="material-symbols-outlined text-th-accent text-xl">queue_music</span>
+                <span>Playlist & Cola en Vivo de Cabina</span>
               </h2>
-              <p className="font-mono text-xs text-slate-400">
-                Canciones en espera ordenadas por votos y orden de llegada
+              <p className="text-xs text-th-text-2 mt-0.5">
+                Ordenada por votos · Contenedor con scroll interno independiente
               </p>
             </div>
-            <span className="font-mono text-xs text-indigo-300 bg-[#181b25] px-2.5 py-1 rounded-full border border-[#1E2333]">
-              {activeQueue.length} temas en cola
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-bold text-th-accent bg-th-accent-soft px-2.5 py-1 rounded-full tabular-nums">
+                {activeQueue.length + candidateProposals.length} temas
+              </span>
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(true)}
+                className="h-9 px-3 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+                <span>Poner Tema</span>
+              </button>
+            </div>
           </div>
 
-          {/* Active Queue List */}
-          {activeQueue.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 font-mono space-y-1">
-              <span className="material-symbols-outlined text-slate-600 text-2xl">playlist_remove</span>
-              <p>No hay canciones con 5+ votos en la cola en este momento.</p>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {activeQueue.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="p-3 rounded-xl bg-[#131722] border border-[#1e2333] flex items-center justify-between gap-3 hover:border-[#2a344e] transition-colors"
+          {/* Segmented Tabs + Inline Filter Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-th-border">
+            <div className="inline-flex items-center rounded-xl bg-th-recessed border border-th-border p-1 gap-1 self-start">
+              <button
+                type="button"
+                onClick={() => setCabinaQueueTab("queue")}
+                className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  cabinaQueueTab === "queue"
+                    ? "bg-th-card text-th-text shadow-xs"
+                    : "text-th-text-2 hover:text-th-text"
+                }`}
+              >
+                <span>Cola Activa</span>
+                <span className="font-mono text-[11px] px-1.5 py-0.2 rounded-full bg-th-accent-soft text-th-accent tabular-nums">
+                  {activeQueue.length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCabinaQueueTab("candidates")}
+                className={`h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  cabinaQueueTab === "candidates"
+                    ? "bg-th-card text-th-text shadow-xs"
+                    : "text-th-text-2 hover:text-th-text"
+                }`}
+              >
+                <span>Propuestas</span>
+                <span
+                  className={`font-mono text-[11px] px-1.5 py-0.2 rounded-full tabular-nums ${
+                    candidateProposals.length > 0
+                      ? "bg-th-amber-soft text-th-amber font-bold"
+                      : "bg-th-recessed text-th-muted"
+                  }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <BallChip n={index + 1} size="md" />
-                    <div className="min-w-0 flex-1">
-                      <h4 className="text-sm font-bold text-white truncate">
-                        {item.title}
-                      </h4>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
-                        {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[10px] text-slate-400">
-                        <span className="text-indigo-400 font-semibold">
-                          {item.voteCount >= 9999 || item.voteCount === 0 ? "⭐ Selección Cabina" : `${item.voteCount} votos`}
-                        </span>
-                        <span className="text-slate-600">•</span>
-                        <span>
-                          {item.guestName
-                            ? `🎉 ${item.guestName}`
-                            : item.voteCount >= 9999 || item.voteCount === 0
-                              ? "Puesto por Operador"
-                              : "Mesa en vivo"}
-                        </span>
-                        {item.isKaraoke && (
-                          <span className="text-pink-300 font-bold bg-pink-500/15 border border-pink-400/30 px-1.5 py-0.2 rounded">
-                            🎤 Karaoke
-                          </span>
-                        )}
-                      </div>
-                      {item.dedication && (
-                        <p className="mt-1 text-[11px] text-fuchsia-200 italic truncate">
-                          💬 &ldquo;{item.dedication}&rdquo;
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={() => setConfirmVetoId(item.id)}
-                      className="py-1.5 px-3 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-500/30 font-mono text-xs font-semibold flex items-center gap-1 active:scale-95 transition-all"
-                      title="Vetar de la cola"
-                    >
-                      <span className="material-symbols-outlined text-sm">block</span>
-                      <span>Vetar</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                  {candidateProposals.length}
+                </span>
+              </button>
             </div>
-          )}
 
-          {/* ================= PROPUESTAS CANDIDATAS EN VOTACIÓN POPULAR ================= */}
-          <div className="mt-6 pt-5 border-t border-[#1E2333]">
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                  <span className="material-symbols-outlined text-amber-400 text-base">how_to_vote</span>
-                  Propuestas en Votación ({effectiveThreshold} votos requeridos)
-                </h3>
-                <p className="font-mono text-[11px] text-slate-400">
-                  Temas propuestos · Con {effectiveThreshold} {effectiveThreshold === 1 ? "voto entran" : "votos entran"} directo a la TV, o al terminar la ronda entra la más votada
-                </p>
+            <div className="relative flex-1 sm:max-w-[240px]">
+              <span className="material-symbols-outlined text-base text-th-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                search
+              </span>
+              <input
+                type="search"
+                value={queueFilter}
+                onChange={(e) => setQueueFilter(e.target.value)}
+                placeholder="Filtrar tema o mesa..."
+                aria-label="Filtrar temas en cola"
+                className="ui-input h-9 pl-9 pr-3 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Proposals Voting Round Controls Bar when Candidates Tab Active */}
+          {cabinaQueueTab === "candidates" && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-th-amber-soft border border-th-amber/25 px-3.5 py-2.5 text-xs">
+              <div className="flex items-center gap-2 text-th-text">
+                <span className="material-symbols-outlined text-base text-th-amber">how_to_vote</span>
+                <span>
+                  Meta: <strong className="font-mono">{effectiveThreshold} {effectiveThreshold === 1 ? "voto" : "votos"}</strong> para subir directo a la TV
+                </span>
               </div>
-
               <div className="flex items-center gap-2">
                 {state?.votingRound?.enabled && (
-                  <span className="font-mono text-xs text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/25 flex items-center gap-1.5 shadow-sm">
-                    <span className="material-symbols-outlined text-sm text-amber-400">timer</span>
-                    <span>
-                      Ronda #{state.votingRound.roundNumber}: {formatDuration(roundSecondsLeft)}
-                    </span>
+                  <span className="font-mono text-[11px] text-th-amber bg-th-card px-2.5 py-1 rounded-full border border-th-amber/30 flex items-center gap-1 tabular-nums">
+                    <span className="material-symbols-outlined text-xs">timer</span>
+                    <span>Ronda #{state.votingRound.roundNumber}: {formatDuration(roundSecondsLeft)}</span>
                   </span>
                 )}
-
                 {candidateProposals.length > 0 && (
                   <button
                     type="button"
                     disabled={actionLoading}
                     onClick={handleResolveRound}
-                    className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 font-mono text-xs font-bold transition-all active:scale-95 flex items-center gap-1"
+                    className="h-7 px-2.5 rounded-lg bg-th-amber text-white text-xs font-semibold transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
                     title="Promueve inmediatamente el tema líder a la cola sin esperar que termine el temporizador"
                   >
                     <span className="material-symbols-outlined text-sm">bolt</span>
-                    <span>Resolver Ronda Ahora</span>
+                    <span>Resolver Ronda</span>
                   </button>
                 )}
-
-                <span className="font-mono text-xs text-slate-400 bg-[#101420] px-2.5 py-1 rounded-full border border-[#232b42]">
-                  {candidateProposals.length} en votación
-                </span>
               </div>
             </div>
+          )}
 
-            {candidateProposals.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500 font-mono">
-                No hay propuestas esperando votos en este momento.
-              </div>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {candidateProposals.map((item, index) => (
+          {/* BOUNDED INTERNAL SCROLLABLE CONTAINER */}
+          <div className="max-h-[430px] lg:max-h-[500px] min-h-[260px] rounded-xl bg-th-recessed border border-th-border p-2.5 ui-scroll-container space-y-2">
+            {cabinaQueueTab === "queue" ? (
+              filteredActiveQueue.length === 0 ? (
+                <div className="py-12 text-center text-xs text-th-muted space-y-2">
+                  <span className="material-symbols-outlined text-3xl text-th-muted/60">playlist_remove</span>
+                  <p className="font-medium text-th-text-2">
+                    {normalizedFilter
+                      ? "Ningún tema coincide con tu búsqueda."
+                      : `No hay canciones en la cola en este momento.`}
+                  </p>
+                </div>
+              ) : (
+                filteredActiveQueue.map((item, index) => (
                   <div
                     key={item.id}
-                    className="p-3 rounded-xl bg-[#101420] border border-amber-500/20 flex items-center justify-between gap-3 hover:border-amber-500/40 transition-colors"
+                    className="p-3 rounded-xl bg-th-card border border-th-border flex items-center justify-between gap-3 hover:border-th-border-strong transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className="flex items-center justify-center size-7 rounded-lg bg-amber-500/10 text-amber-400 font-mono text-xs font-bold shrink-0">
-                        #{index + 1}
-                      </div>
+                      <BallChip n={index + 1} size="md" />
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-white truncate">
-                            {item.title}
-                          </h4>
-                          {index === 0 && (
-                            <span className="shrink-0 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.2 rounded-md">
-                              🏆 1° de la Ronda
+                        <h4 className="text-sm font-display font-bold text-th-text truncate">
+                          {item.title}
+                        </h4>
+                        <p className="text-xs text-th-text-2 truncate mt-0.5">
+                          {item.artist}{" "}
+                          {item.durationSeconds ? (
+                            <span className="font-mono tabular-nums text-th-muted">
+                              · {formatDuration(item.durationSeconds)}
+                            </span>
+                          ) : ""}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[11px] text-th-muted">
+                          <span className="text-th-accent font-bold tabular-nums">
+                            {item.voteCount >= 9999 || item.voteCount === 0 ? "Selección Cabina" : `${item.voteCount} votos`}
+                          </span>
+                          <span>·</span>
+                          <span>
+                            {item.guestName
+                              ? item.guestName
+                              : item.voteCount >= 9999 || item.voteCount === 0
+                                ? "Operador"
+                                : "Mesa en vivo"}
+                          </span>
+                          {item.isKaraoke && (
+                            <span className="text-th-accent font-bold bg-th-accent-soft px-1.5 py-0.5 rounded text-[10px]">
+                              Karaoke
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-slate-400 truncate mt-0.5">
-                          {item.artist}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[10px]">
-                          <span className="text-amber-400 font-semibold">{item.voteCount} / {effectiveThreshold} votos</span>
-                          <span className="text-slate-600">•</span>
-                          <span className="text-slate-400">Faltan {Math.max(0, effectiveThreshold - item.voteCount)} para entrada directa</span>
-                          {item.guestName && (
-                            <span className="text-fuchsia-300 font-semibold">· 🎉 {item.guestName}</span>
-                          )}
-                          {item.isKaraoke && (
-                            <span className="text-pink-300 font-bold">· 🎤 Karaoke</span>
-                          )}
-                        </div>
                         {item.dedication && (
-                          <p className="mt-1 text-[11px] text-fuchsia-200 italic truncate">
-                            💬 &ldquo;{item.dedication}&rdquo;
+                          <p className="mt-1 text-xs text-th-text-2 italic truncate">
+                            “{item.dedication}”
                           </p>
                         )}
                       </div>
@@ -1146,16 +1144,83 @@ export function NightDashboard({ slug, role, staffToken }: NightDashboardProps) 
                         type="button"
                         disabled={actionLoading}
                         onClick={() => setConfirmVetoId(item.id)}
-                        className="py-1 px-2.5 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-500/30 font-mono text-xs flex items-center gap-1 active:scale-95 transition-all"
-                        title="Vetar propuesta"
+                        className="h-8 px-3 rounded-lg bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white border border-th-danger/25 text-xs font-semibold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                        title="Vetar de la cola"
                       >
                         <span className="material-symbols-outlined text-sm">block</span>
                         <span>Vetar</span>
                       </button>
                     </div>
                   </div>
-                ))}
+                ))
+              )
+            ) : filteredCandidates.length === 0 ? (
+              <div className="py-12 text-center text-xs text-th-muted space-y-2">
+                <span className="material-symbols-outlined text-3xl text-th-muted/60">how_to_vote</span>
+                <p className="font-medium text-th-text-2">
+                  {normalizedFilter
+                    ? "Ninguna propuesta coincide con tu búsqueda."
+                    : "No hay propuestas esperando votos en este momento."}
+                </p>
               </div>
+            ) : (
+              filteredCandidates.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="p-3 rounded-xl bg-th-card border border-th-border flex items-center justify-between gap-3 hover:border-th-border-strong transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex items-center justify-center size-8 rounded-lg bg-th-amber-soft text-th-amber font-mono text-xs font-bold shrink-0 tabular-nums">
+                      #{index + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-display font-bold text-th-text truncate">
+                          {item.title}
+                        </h4>
+                        {index === 0 && (
+                          <span className="shrink-0 text-[10px] font-mono font-bold bg-th-amber-soft text-th-amber px-2 py-0.5 rounded-full">
+                            Líder Ronda
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-th-text-2 truncate mt-0.5">
+                        {item.artist}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1 font-mono text-[11px] text-th-muted">
+                        <span className="text-th-amber font-bold tabular-nums">
+                          {item.voteCount} / {effectiveThreshold} votos
+                        </span>
+                        <span>·</span>
+                        <span>
+                          Faltan {Math.max(0, effectiveThreshold - item.voteCount)} para cola
+                        </span>
+                        {item.guestName && (
+                          <span className="text-th-accent font-semibold">· {item.guestName}</span>
+                        )}
+                      </div>
+                      {item.dedication && (
+                        <p className="mt-1 text-xs text-th-text-2 italic truncate">
+                          “{item.dedication}”
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() => setConfirmVetoId(item.id)}
+                      className="h-8 px-3 rounded-lg bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white border border-th-danger/25 text-xs font-semibold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                      title="Vetar propuesta"
+                    >
+                      <span className="material-symbols-outlined text-sm">block</span>
+                      <span>Vetar</span>
+                    </button>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </section>

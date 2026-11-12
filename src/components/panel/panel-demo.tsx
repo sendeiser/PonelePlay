@@ -27,6 +27,7 @@ import {
 import { BallChip } from "@/components/ball-chip";
 import { BrandMark, Wordmark } from "@/components/brand";
 import { SourceBadge } from "@/components/source-badge";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TicketCode } from "@/components/ticket-code";
 import { cn } from "@/lib/cn";
 import {
@@ -174,7 +175,7 @@ export function PanelDemo({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="min-h-dvh lg:flex">
+    <div className="min-h-dvh bg-th-canvas text-th-text lg:flex">
       <PanelSidebar
         slug={slug}
         nightOpen={nightOpen}
@@ -197,7 +198,7 @@ export function PanelDemo({ slug }: { slug: string }) {
         />
 
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 lg:px-8 lg:py-7">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-3">
             <StatCard
               label="Votos de la noche"
               value={demoStats.votes}
@@ -224,28 +225,28 @@ export function PanelDemo({ slug }: { slug: string }) {
                 onSkip={skip}
               />
 
-              <section className="rounded-3xl border border-cream/10 bg-felt-900 p-4 lg:p-5">
+              <section className="card-panel rounded-3xl p-4 lg:p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-cream/40">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-th-muted">
                       Cola en vivo
                     </p>
-                    <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">
+                    <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-th-text">
                       Lo que viene
                     </h2>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full border border-cream/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-cream/45">
+                    <span className="rounded-full border border-th-border bg-th-recessed px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-th-secondary">
                       {queue.length} temas
                     </span>
-                    <span className="hidden rounded-full border border-amber/20 bg-amber/[0.07] px-2.5 py-1 font-mono text-[9px] uppercase tracking-wider text-amber/80 sm:inline-flex">
+                    <span className="hidden rounded-full border border-th-amber/30 bg-th-amber-soft px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-th-amber sm:inline-flex">
                       Por votos
                     </span>
                   </div>
                 </div>
 
                 {queue.length ? (
-                  <motion.ol layout className="mt-4 space-y-2">
+                  <motion.ol layout className="mt-4 max-h-[420px] pr-1 space-y-2 ui-scroll-container">
                     <AnimatePresence initial={false}>
                       {queue.map((track, index) => (
                         <motion.li
@@ -259,17 +260,17 @@ export function PanelDemo({ slug }: { slug: string }) {
                             stiffness: 420,
                             damping: 34,
                           }}
-                          className="flex items-center gap-3 rounded-xl border border-cream/10 bg-white/[0.02] p-2.5"
+                          className="flex items-center gap-3 rounded-xl border border-th-border bg-th-recessed/70 p-2.5"
                         >
                           <BallChip n={index + 1} size="sm" />
-                          <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-felt-800 text-cream/35">
+                          <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-th-card border border-th-border text-th-muted">
                             <Music2 className="size-4" aria-hidden="true" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold">
+                            <p className="truncate text-sm font-semibold text-th-text">
                               {track.title}
                             </p>
-                            <p className="truncate text-[11px] text-cream/45">
+                            <p className="truncate text-[11px] text-th-muted">
                               {track.artist} · {track.duration}
                             </p>
                           </div>
@@ -278,14 +279,14 @@ export function PanelDemo({ slug }: { slug: string }) {
                             label={false}
                             className="hidden shrink-0 sm:inline-flex"
                           />
-                          <span className="w-7 shrink-0 text-right font-mono text-xs text-amber">
+                          <span className="w-7 shrink-0 text-right font-mono text-xs font-bold text-th-amber tabular-nums">
                             {track.votes}
                           </span>
                           <button
                             type="button"
                             onClick={() => veto(track)}
                             disabled={!nightOpen}
-                            className="grid size-8 shrink-0 place-items-center rounded-full border border-cream/10 text-cream/35 transition-colors hover:border-coral/40 hover:bg-coral/10 hover:text-coral disabled:cursor-not-allowed disabled:opacity-35"
+                            className="grid size-8 shrink-0 place-items-center rounded-full border border-th-border bg-th-card text-th-muted transition-colors hover:border-th-danger/40 hover:bg-th-danger-soft hover:text-th-danger disabled:cursor-not-allowed disabled:opacity-35"
                             aria-label={`Vetar ${track.title}`}
                             title="Vetar tema"
                           >
@@ -296,18 +297,18 @@ export function PanelDemo({ slug }: { slug: string }) {
                     </AnimatePresence>
                   </motion.ol>
                 ) : (
-                  <div className="mt-4 flex flex-col items-center rounded-2xl border border-dashed border-cream/15 px-6 py-10 text-center">
-                    <Music2 className="size-8 text-cream/25" aria-hidden="true" />
-                    <p className="mt-3 font-display text-lg font-bold">
+                  <div className="mt-4 flex flex-col items-center rounded-2xl border border-dashed border-th-border px-6 py-10 text-center">
+                    <Music2 className="size-8 text-th-muted" aria-hidden="true" />
+                    <p className="mt-3 font-display text-lg font-bold text-th-text">
                       La cola está vacía
                     </p>
-                    <p className="mt-1 text-xs text-cream/40">
+                    <p className="mt-1 text-xs text-th-muted">
                       Suena la playlist de fondo hasta que alguien proponga.
                     </p>
                   </div>
                 )}
 
-                <p className="mt-3 flex items-start gap-2 text-[10px] leading-relaxed text-cream/30">
+                <p className="mt-3 flex items-start gap-2 text-[10px] leading-relaxed text-th-muted">
                   <Info className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
                   El veto saca el tema de la cola y no devuelve créditos. Los
                   votos nunca se apilan sobre una misma canción.
@@ -316,27 +317,27 @@ export function PanelDemo({ slug }: { slug: string }) {
             </div>
 
             <div className="space-y-4">
-              <section className="rounded-3xl border border-cream/10 bg-felt-900 p-4 lg:p-5">
+              <section className="card-panel rounded-3xl p-4 lg:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-cream/40">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-th-muted">
                       Mostrador
                     </p>
-                    <h2 className="mt-1 font-display text-2xl font-bold tracking-tight">
+                    <h2 className="mt-1 font-display text-2xl font-bold tracking-tight text-th-text">
                       Emitir código
                     </h2>
                   </div>
-                  <span className="grid size-9 place-items-center rounded-full bg-amber/15 text-amber">
+                  <span className="grid size-9 place-items-center rounded-full bg-th-amber-soft text-th-amber">
                     <Ticket className="size-4" aria-hidden="true" />
                   </span>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-2xl border border-cream/10 bg-felt-950/50 p-3">
+                <div className="mt-4 flex items-center justify-between rounded-2xl border border-th-border bg-th-recessed p-3">
                   <div>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-cream/40">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-th-muted">
                       Créditos
                     </p>
-                    <p className="font-display text-2xl font-black leading-none">
+                    <p className="font-display text-2xl font-black leading-none text-th-text tabular-nums">
                       {creditValue}
                     </p>
                   </div>
@@ -346,7 +347,7 @@ export function PanelDemo({ slug }: { slug: string }) {
                       onClick={() =>
                         setCreditValue((value) => Math.max(1, value - 1))
                       }
-                      className="grid size-9 place-items-center rounded-full border border-cream/10 bg-cream/5 text-cream/60 hover:text-cream"
+                      className="grid size-9 place-items-center rounded-full border border-th-border bg-th-card text-th-secondary hover:text-th-text transition-colors"
                       aria-label="Restar un crédito"
                     >
                       <Minus className="size-4" aria-hidden="true" />
@@ -356,7 +357,7 @@ export function PanelDemo({ slug }: { slug: string }) {
                       onClick={() =>
                         setCreditValue((value) => Math.min(50, value + 1))
                       }
-                      className="grid size-9 place-items-center rounded-full border border-cream/10 bg-cream/5 text-cream/60 hover:text-cream"
+                      className="grid size-9 place-items-center rounded-full border border-th-border bg-th-card text-th-secondary hover:text-th-text transition-colors"
                       aria-label="Sumar un crédito"
                     >
                       <Plus className="size-4" aria-hidden="true" />
@@ -371,10 +372,10 @@ export function PanelDemo({ slug }: { slug: string }) {
                       type="button"
                       onClick={() => setCreditValue(preset)}
                       className={cn(
-                        "flex-1 rounded-lg border px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                        "flex-1 rounded-lg border px-2 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider transition-colors",
                         creditValue === preset
-                          ? "border-amber/40 bg-amber/10 text-amber"
-                          : "border-cream/10 text-cream/40 hover:text-cream/70",
+                          ? "border-th-amber bg-th-amber-soft text-th-amber"
+                          : "border-th-border bg-th-recessed text-th-muted hover:text-th-text",
                       )}
                     >
                       {preset} votos
@@ -386,7 +387,7 @@ export function PanelDemo({ slug }: { slug: string }) {
                   type="button"
                   onClick={generateCode}
                   disabled={!nightOpen}
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-amber px-4 py-2.5 font-display text-sm font-bold text-ink transition-all hover:bg-amber/90 active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-cream/10 disabled:text-cream/30"
+                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-th-accent px-4 py-2.5 font-display text-sm font-bold text-th-on-accent transition-all hover:bg-th-accent-hover active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-th-recessed disabled:text-th-muted"
                 >
                   <Plus className="size-4" aria-hidden="true" />
                   Generar código
@@ -398,14 +399,14 @@ export function PanelDemo({ slug }: { slug: string }) {
                       code={ticket.code}
                       credits={ticket.credits}
                       venueName={demoVenue.name}
-                      notchColor="#07211b"
+                      notchColor="var(--bg-card)"
                       printable
                     />
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={copyCode}
-                        className="flex items-center justify-center gap-1.5 rounded-full border border-cream/10 bg-cream/5 px-3 py-2 font-mono text-[9px] uppercase tracking-wider text-cream/60 transition-colors hover:text-cream"
+                        className="flex items-center justify-center gap-1.5 rounded-full border border-th-border bg-th-recessed px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-wider text-th-secondary transition-colors hover:text-th-text"
                       >
                         <Copy className="size-3.5" aria-hidden="true" />
                         Copiar
@@ -413,7 +414,7 @@ export function PanelDemo({ slug }: { slug: string }) {
                       <button
                         type="button"
                         onClick={printTicket}
-                        className="flex items-center justify-center gap-1.5 rounded-full border border-cream/10 bg-cream/5 px-3 py-2 font-mono text-[9px] uppercase tracking-wider text-cream/60 transition-colors hover:text-cream"
+                        className="flex items-center justify-center gap-1.5 rounded-full border border-th-border bg-th-recessed px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-wider text-th-secondary transition-colors hover:text-th-text"
                       >
                         <Printer className="size-3.5" aria-hidden="true" />
                         Imprimir
@@ -421,59 +422,59 @@ export function PanelDemo({ slug }: { slug: string }) {
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-4 rounded-2xl border border-dashed border-cream/15 px-5 py-8 text-center">
+                  <div className="mt-4 rounded-2xl border border-dashed border-th-border px-5 py-8 text-center">
                     <Ticket
-                      className="mx-auto size-6 text-cream/25"
+                      className="mx-auto size-6 text-th-muted"
                       aria-hidden="true"
                     />
-                    <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.2em] text-cream/30">
+                    <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.2em] text-th-muted">
                       El ticket aparece acá
                     </p>
                   </div>
                 )}
 
-                <p className="mt-3 text-[10px] leading-relaxed text-cream/30">
+                <p className="mt-3 text-[10px] leading-relaxed text-th-muted">
                   El staff elige los créditos. Un código = un uso. Se puede
                   dictar, mostrar o imprimir.
                 </p>
               </section>
 
-              <section className="rounded-3xl border border-cream/10 bg-felt-900 p-4 lg:p-5">
+              <section className="card-panel rounded-3xl p-4 lg:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-cream/40">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-th-muted">
                       Reproductor
                     </p>
-                    <h2 className="mt-1 font-display text-xl font-bold tracking-tight">
+                    <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-th-text">
                       PC del bar
                     </h2>
                   </div>
-                  <span className="grid size-9 place-items-center rounded-full bg-mint/10 text-mint">
+                  <span className="grid size-9 place-items-center rounded-full bg-th-emerald-soft text-th-emerald">
                     <Monitor className="size-4" aria-hidden="true" />
                   </span>
                 </div>
 
-                <div className="mt-3 flex items-center justify-between rounded-xl border border-mint/20 bg-mint/[0.05] px-3 py-2.5">
+                <div className="mt-3 flex items-center justify-between rounded-xl border border-th-emerald/25 bg-th-emerald-soft px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="size-2 animate-pulse rounded-full bg-mint" />
-                    <span className="text-xs font-semibold text-mint">
+                    <span className="size-2 animate-pulse rounded-full bg-th-emerald" />
+                    <span className="text-xs font-semibold text-th-emerald">
                       Conectado
                     </span>
                   </div>
-                  <span className="font-mono text-[9px] uppercase tracking-wider text-cream/35">
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-th-muted">
                     hace 3 s
                   </span>
                 </div>
 
                 <div className="mt-3 flex items-center gap-3">
-                  <div className="grid size-11 place-items-center rounded-xl border border-cream/10 bg-felt-950/50">
-                    <QrCode className="size-5 text-cream/35" aria-hidden="true" />
+                  <div className="grid size-11 place-items-center rounded-xl border border-th-border bg-th-recessed">
+                    <QrCode className="size-5 text-th-muted" aria-hidden="true" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold">
+                    <p className="truncate text-xs font-semibold text-th-text">
                       Pantalla del salón
                     </p>
-                    <p className="truncate font-mono text-[9px] uppercase tracking-wider text-cream/35">
+                    <p className="truncate font-mono text-[9px] uppercase tracking-wider text-th-muted">
                       QR + cola + canción actual
                     </p>
                   </div>
@@ -482,19 +483,19 @@ export function PanelDemo({ slug }: { slug: string }) {
                 <Link
                   href={`/player/${slug}`}
                   target="_blank"
-                  className="mt-3 flex items-center justify-center gap-1.5 rounded-full border border-cream/10 bg-cream/5 px-3 py-2 text-xs font-semibold text-cream/70 transition-colors hover:bg-cream/10 hover:text-cream"
+                  className="mt-3 flex items-center justify-center gap-1.5 rounded-full border border-th-border bg-th-recessed px-3 py-2 text-xs font-semibold text-th-secondary transition-colors hover:bg-th-card hover:text-th-text"
                 >
                   Abrir pantalla
                   <ArrowUpRight className="size-3.5" aria-hidden="true" />
                 </Link>
               </section>
 
-              <section className="rounded-3xl border border-cream/10 bg-felt-900 p-4 lg:p-5">
+              <section className="card-panel rounded-3xl p-4 lg:p-5">
                 <div>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-cream/40">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-th-muted">
                     Operación
                   </p>
-                  <h2 className="mt-1 font-display text-xl font-bold tracking-tight">
+                  <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-th-text">
                     Modos y filtros
                   </h2>
                 </div>
@@ -529,43 +530,43 @@ export function PanelDemo({ slug }: { slug: string }) {
                   />
                 </div>
 
-                <p className="mt-4 flex items-start gap-2 text-[10px] leading-relaxed text-cream/30">
+                <p className="mt-4 flex items-start gap-2 text-[10px] leading-relaxed text-th-muted">
                   <Info className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
                   Los dos modos conviven: el catálogo del dueño siempre se vota
                   y las propuestas se pueden abrir o cerrar.
                 </p>
               </section>
 
-              <section className="rounded-3xl border border-cream/10 bg-felt-900 p-4 lg:p-5">
+              <section className="card-panel rounded-3xl p-4 lg:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-cream/40">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.25em] text-th-muted">
                       Últimos movimientos
                     </p>
-                    <h2 className="mt-1 font-display text-xl font-bold tracking-tight">
+                    <h2 className="mt-1 font-display text-xl font-bold tracking-tight text-th-text">
                       Actividad
                     </h2>
                   </div>
-                  <Clock3 className="size-4 text-cream/25" aria-hidden="true" />
+                  <Clock3 className="size-4 text-th-muted" aria-hidden="true" />
                 </div>
 
-                <ul className="mt-3 space-y-2.5">
+                <ul className="mt-3 space-y-2.5 max-h-[260px] pr-1 ui-scroll-container">
                   {log.map((entry, index) => (
                     <li key={`${entry.time}-${index}`} className="flex gap-2.5">
                       <span
                         className={cn(
                           "mt-1.5 size-1.5 shrink-0 rounded-full",
-                          entry.tone === "amber" && "bg-amber",
-                          entry.tone === "coral" && "bg-coral",
-                          entry.tone === "mint" && "bg-mint",
-                          entry.tone === "neutral" && "bg-cream/30",
+                          entry.tone === "amber" && "bg-th-amber",
+                          entry.tone === "coral" && "bg-th-danger",
+                          entry.tone === "mint" && "bg-th-emerald",
+                          entry.tone === "neutral" && "bg-th-muted",
                         )}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[11px] leading-snug text-cream/60">
+                        <p className="text-[11px] leading-snug text-th-secondary">
                           {entry.text}
                         </p>
-                        <p className="font-mono text-[9px] text-cream/25">
+                        <p className="font-mono text-[9px] text-th-muted">
                           {entry.time}
                         </p>
                       </div>
@@ -585,17 +586,17 @@ export function PanelDemo({ slug }: { slug: string }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             className={cn(
-              "fixed bottom-4 right-4 z-[70] flex max-w-sm items-center gap-2 rounded-full border px-4 py-2.5 text-xs shadow-2xl",
+              "fixed bottom-4 right-4 z-[70] flex max-w-sm items-center gap-2 rounded-full border bg-th-card px-4 py-2.5 text-xs text-th-text shadow-xl",
               toast.tone === "ok"
-                ? "border-mint/25 bg-felt-800 text-cream"
-                : "border-coral/30 bg-felt-800 text-cream",
+                ? "border-th-emerald/35"
+                : "border-th-danger/35",
             )}
             role="status"
           >
             {toast.tone === "ok" ? (
-              <BadgeCheck className="size-4 shrink-0 text-mint" aria-hidden="true" />
+              <BadgeCheck className="size-4 shrink-0 text-th-emerald" aria-hidden="true" />
             ) : (
-              <Info className="size-4 shrink-0 text-coral" aria-hidden="true" />
+              <Info className="size-4 shrink-0 text-th-danger" aria-hidden="true" />
             )}
             {toast.message}
           </motion.div>
@@ -615,38 +616,38 @@ function PanelSidebar({
   onNavigate: (label: string) => void;
 }) {
   return (
-    <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-cream/10 bg-felt-950/60 p-5 scrollbar-none lg:flex">
+    <aside className="no-print sticky top-0 hidden h-dvh w-64 shrink-0 flex-col overflow-y-auto border-r border-th-border bg-th-shell p-5 scrollbar-none lg:flex">
       <Link href="/" className="flex items-center gap-2.5">
         <BrandMark />
         <Wordmark />
       </Link>
 
-      <div className="mt-6 rounded-2xl border border-cream/10 bg-white/[0.02] p-3">
+      <div className="mt-6 rounded-2xl border border-th-border bg-th-card p-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-cream/35">
+          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-th-muted">
             Noche
           </span>
           <span
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-[8px] uppercase tracking-wider",
+              "flex items-center gap-1.5 rounded-full px-2 py-1 font-mono text-[8px] font-bold uppercase tracking-wider",
               nightOpen
-                ? "bg-mint/10 text-mint"
-                : "bg-coral/10 text-coral",
+                ? "bg-th-emerald-soft text-th-emerald"
+                : "bg-th-danger-soft text-th-danger",
             )}
           >
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                nightOpen ? "bg-mint" : "bg-coral",
+                nightOpen ? "bg-th-emerald" : "bg-th-danger",
               )}
             />
             {nightOpen ? "Abierta" : "Cerrada"}
           </span>
         </div>
-        <p className="mt-2 font-display text-lg font-bold leading-tight">
+        <p className="mt-2 font-display text-lg font-bold leading-tight text-th-text">
           {demoVenue.name}
         </p>
-        <p className="font-mono text-[9px] uppercase tracking-wider text-cream/30">
+        <p className="font-mono text-[9px] uppercase tracking-wider text-th-muted">
           /{slug}
         </p>
       </div>
@@ -662,14 +663,14 @@ function PanelSidebar({
             className={cn(
               "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
               active
-                ? "bg-amber text-ink font-bold"
-                : "text-cream/45 hover:bg-cream/5 hover:text-cream/80",
+                ? "bg-th-accent text-th-on-accent font-bold shadow-xs"
+                : "text-th-secondary hover:bg-th-recessed hover:text-th-text",
             )}
           >
             <Icon className="size-4" aria-hidden="true" />
             {label}
             {!active ? (
-              <span className="ml-auto rounded-full border border-cream/10 px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-wider text-cream/25">
+              <span className="ml-auto rounded-full border border-th-border px-1.5 py-0.5 font-mono text-[7px] uppercase tracking-wider text-th-muted">
                 luego
               </span>
             ) : null}
@@ -678,21 +679,21 @@ function PanelSidebar({
       </nav>
 
       <div className="mt-auto">
-        <div className="rounded-2xl border border-cream/10 bg-white/[0.02] p-3">
+        <div className="rounded-2xl border border-th-border bg-th-card p-3">
           <div className="flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-full bg-coral/15 font-display text-sm font-bold text-coral">
+            <span className="grid size-9 place-items-center rounded-full bg-th-accent-soft font-display text-sm font-bold text-th-accent">
               L
             </span>
             <div>
-              <p className="text-sm font-semibold">Luz</p>
-              <p className="font-mono text-[9px] uppercase tracking-wider text-cream/35">
+              <p className="text-sm font-semibold text-th-text">Luz</p>
+              <p className="font-mono text-[9px] uppercase tracking-wider text-th-muted">
                 Dueña
               </p>
             </div>
           </div>
           <Link
             href="/"
-            className="mt-3 flex items-center justify-between rounded-lg bg-cream/5 px-3 py-2 font-mono text-[9px] uppercase tracking-wider text-cream/40 transition-colors hover:text-cream"
+            className="mt-3 flex items-center justify-between rounded-lg border border-th-border bg-th-recessed px-3 py-2 font-mono text-[9px] uppercase tracking-wider text-th-muted transition-colors hover:text-th-text"
           >
             Volver a la maqueta
             <ArrowUpRight className="size-3" aria-hidden="true" />
@@ -713,30 +714,32 @@ function PanelHeader({
   onToggleNight: () => void;
 }) {
   return (
-    <header className="no-print sticky top-0 z-30 border-b border-cream/10 bg-felt-950/85 px-4 py-3 backdrop-blur-xl lg:px-8">
+    <header className="no-print sticky top-0 z-30 border-b border-th-border bg-th-shell/90 px-4 py-3 backdrop-blur-xl lg:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link href="/" className="lg:hidden">
             <BrandMark className="size-9" />
           </Link>
           <div>
-            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-cream/35">
+            <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-th-muted">
               Panel del bar
             </p>
             <div className="mt-0.5 flex items-center gap-2">
-              <h1 className="font-display text-xl font-bold tracking-tight">
+              <h1 className="font-display text-xl font-bold tracking-tight text-th-text">
                 {demoVenue.name}
               </h1>
               <span
                 className={cn(
-                  "flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[8px] uppercase tracking-wider",
-                  nightOpen ? "bg-mint/10 text-mint" : "bg-coral/10 text-coral",
+                  "flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider",
+                  nightOpen
+                    ? "bg-th-emerald-soft text-th-emerald"
+                    : "bg-th-danger-soft text-th-danger",
                 )}
               >
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
-                    nightOpen ? "bg-mint" : "bg-coral",
+                    nightOpen ? "bg-th-emerald" : "bg-th-danger",
                   )}
                 />
                 {nightOpen ? "Noche abierta" : "Noche cerrada"}
@@ -746,10 +749,12 @@ function PanelHeader({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <ThemeToggle variant="compact" />
+
           <Link
             href={`/player/${slug}`}
             target="_blank"
-            className="flex items-center gap-1.5 rounded-full border border-cream/10 bg-cream/5 px-3 py-2 text-[11px] font-semibold text-cream/60 transition-colors hover:bg-cream/10 hover:text-cream"
+            className="flex items-center gap-1.5 rounded-full border border-th-border bg-th-recessed px-3 py-2 text-[11px] font-semibold text-th-secondary transition-colors hover:bg-th-card hover:text-th-text"
           >
             <Monitor className="size-3.5" aria-hidden="true" />
             <span className="hidden sm:inline">Abrir reproductor</span>
@@ -763,21 +768,21 @@ function PanelHeader({
             className={cn(
               "flex items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-bold transition-colors",
               nightOpen
-                ? "border border-coral/30 bg-coral/10 text-coral hover:bg-coral hover:text-ink"
-                : "bg-amber text-ink",
+                ? "border border-th-danger/30 bg-th-danger-soft text-th-danger hover:bg-th-danger hover:text-white"
+                : "bg-th-accent text-th-on-accent hover:bg-th-accent-hover",
             )}
           >
             <Radio className="size-3.5" aria-hidden="true" />
             {nightOpen ? "Cerrar noche" : "Abrir noche"}
           </button>
 
-          <div className="hidden items-center gap-2 rounded-full border border-cream/10 bg-cream/5 py-1 pl-1 pr-3 xl:flex">
-            <span className="grid size-7 place-items-center rounded-full bg-coral/15 font-display text-[10px] font-bold text-coral">
+          <div className="hidden items-center gap-2 rounded-full border border-th-border bg-th-recessed py-1 pl-1 pr-3 xl:flex">
+            <span className="grid size-7 place-items-center rounded-full bg-th-accent-soft font-display text-[10px] font-bold text-th-accent">
               L
             </span>
             <div className="leading-tight">
-              <p className="text-[11px] font-semibold">Luz</p>
-              <p className="font-mono text-[8px] uppercase tracking-wider text-cream/30">
+              <p className="text-[11px] font-semibold text-th-text">Luz</p>
+              <p className="font-mono text-[8px] uppercase tracking-wider text-th-muted">
                 Dueña
               </p>
             </div>
@@ -790,7 +795,7 @@ function PanelHeader({
 
 function MobileNav({ onNavigate }: { onNavigate: (label: string) => void }) {
   return (
-    <div className="no-print flex gap-1.5 overflow-x-auto border-b border-cream/10 px-4 py-2 scrollbar-none lg:hidden">
+    <div className="no-print flex gap-1.5 overflow-x-auto border-b border-th-border bg-th-shell px-4 py-2 scrollbar-none lg:hidden">
       {navItems.map(({ label, icon: Icon, active }) => (
         <button
           key={label}
@@ -799,10 +804,10 @@ function MobileNav({ onNavigate }: { onNavigate: (label: string) => void }) {
             if (!active) onNavigate(label);
           }}
           className={cn(
-            "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[9px] uppercase tracking-wider transition-colors",
+            "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-wider transition-colors",
             active
-              ? "bg-amber text-ink"
-              : "border border-cream/10 text-cream/40",
+              ? "bg-th-accent text-th-on-accent"
+              : "border border-th-border bg-th-card text-th-muted hover:text-th-text",
           )}
         >
           <Icon className="size-3" aria-hidden="true" />
@@ -829,22 +834,22 @@ function StatCard({
       className={cn(
         "rounded-2xl border p-3.5",
         accent
-          ? "border-amber/25 bg-amber/[0.06]"
-          : "border-cream/10 bg-white/[0.02]",
+          ? "border-th-accent/30 bg-th-accent-soft"
+          : "card-panel",
       )}
     >
-      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-cream/35">
+      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-th-muted">
         {label}
       </p>
       <p
         className={cn(
-          "mt-1 font-display text-3xl font-extrabold leading-none",
-          accent ? "text-amber" : "text-cream",
+          "mt-1 font-display text-3xl font-extrabold leading-none tabular-nums",
+          accent ? "text-th-accent" : "text-th-text",
         )}
       >
         {value}
       </p>
-      <p className="mt-1 font-mono text-[8px] uppercase tracking-wider text-cream/25">
+      <p className="mt-1 font-mono text-[8px] uppercase tracking-wider text-th-muted">
         {hint}
       </p>
     </div>
@@ -861,40 +866,40 @@ function NowPlayingPanel({
   onSkip: () => void;
 }) {
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-cream/10 bg-felt-900 p-4 lg:p-5">
+    <section className="card-panel relative overflow-hidden rounded-3xl p-4 lg:p-5">
       <div
         aria-hidden="true"
-        className="absolute -right-20 -top-24 size-56 rounded-full border border-amber/15 bg-amber/[0.03]"
+        className="absolute -right-20 -top-24 size-56 rounded-full border border-th-accent/15 bg-th-accent-soft/50"
       />
       <div className="relative">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.25em] text-amber">
+            <p className="flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.25em] text-th-accent">
               <Radio className="size-3" aria-hidden="true" />
               Reproduciendo ahora
             </p>
             {now ? (
               <>
-                <h2 className="mt-2 font-display text-3xl font-extrabold leading-[0.95] tracking-tight">
+                <h2 className="mt-2 font-display text-3xl font-extrabold leading-[0.95] tracking-tight text-th-text">
                   {now.title}
                 </h2>
-                <p className="mt-1 text-sm text-cream/55">{now.artist}</p>
+                <p className="mt-1 text-sm text-th-secondary">{now.artist}</p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <SourceBadge source={now.source} />
-                  <span className="rounded-full border border-cream/10 bg-cream/5 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-cream/45">
+                  <span className="rounded-full border border-th-border bg-th-recessed px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-th-muted">
                     {formatVotes(now.votes)}
                   </span>
-                  <span className="rounded-full border border-cream/10 bg-cream/5 px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-cream/45">
+                  <span className="rounded-full border border-th-border bg-th-recessed px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-th-muted">
                     Cola colaborativa
                   </span>
                 </div>
               </>
             ) : (
               <>
-                <h2 className="mt-2 font-display text-2xl font-bold tracking-tight">
+                <h2 className="mt-2 font-display text-2xl font-bold tracking-tight text-th-text">
                   Sin canción en curso
                 </h2>
-                <p className="mt-1 max-w-md text-sm text-cream/45">
+                <p className="mt-1 max-w-md text-sm text-th-muted">
                   La cola quedó vacía. El reproductor pasa a la playlist de fondo.
                 </p>
               </>
@@ -905,7 +910,7 @@ function NowPlayingPanel({
             type="button"
             onClick={onSkip}
             disabled={!nightOpen || !now}
-            className="flex shrink-0 items-center gap-1.5 rounded-full border border-amber/30 bg-amber/10 px-3 py-2 text-[11px] font-bold text-amber transition-colors hover:bg-amber hover:text-ink disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-th-accent/30 bg-th-accent-soft px-3 py-2 text-[11px] font-bold text-th-accent transition-colors hover:bg-th-accent hover:text-th-on-accent disabled:cursor-not-allowed disabled:opacity-30"
           >
             <SkipForward className="size-3.5" aria-hidden="true" />
             Saltar
@@ -914,16 +919,16 @@ function NowPlayingPanel({
 
         {now ? (
           <div className="mt-5 flex items-center gap-3">
-            <span className="font-mono text-[10px] text-cream/40">
+            <span className="font-mono text-[10px] text-th-muted tabular-nums">
               {now.elapsed}
             </span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-cream/10">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-th-recessed">
               <div
-                className="h-full rounded-full bg-amber"
+                className="h-full rounded-full bg-th-accent"
                 style={{ width: `${now.elapsedPct}%` }}
               />
             </div>
-            <span className="font-mono text-[10px] text-cream/40">
+            <span className="font-mono text-[10px] text-th-muted tabular-nums">
               {now.duration}
             </span>
           </div>
@@ -949,8 +954,8 @@ function ToggleRow({
   return (
     <div className="flex items-start justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-sm font-semibold">{label}</p>
-        <p className="mt-0.5 text-[11px] leading-relaxed text-cream/40">
+        <p className="text-sm font-semibold text-th-text">{label}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-th-muted">
           {description}
         </p>
       </div>
@@ -963,12 +968,12 @@ function ToggleRow({
         onClick={() => onChange(!checked)}
         className={cn(
           "mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40",
-          checked ? "bg-amber" : "bg-cream/15",
+          checked ? "bg-th-accent" : "bg-th-border-strong",
         )}
       >
         <span
           className={cn(
-            "block size-5 rounded-full bg-felt-950 transition-transform",
+            "block size-5 rounded-full bg-white shadow-xs transition-transform",
             checked ? "translate-x-5" : "translate-x-0",
           )}
         />

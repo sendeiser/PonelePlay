@@ -976,50 +976,48 @@ export function PanelPlaybackFooter({
     <>
       {/* Toast Feedback */}
       {feedbackToast && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[90] bg-[#0A0E17]/95 text-white font-mono text-xs font-bold px-5 py-2 rounded-full border border-indigo-500/50 shadow-2xl backdrop-blur-md animate-fade-in flex items-center gap-2">
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[90] card-panel text-th-text font-mono text-xs font-bold px-5 py-2.5 rounded-full border-th-accent/40 shadow-xl backdrop-blur-md animate-fade-in flex items-center gap-2">
           <span>{feedbackToast}</span>
         </div>
       )}
 
       {/* Sticky Bottom Control Bar */}
       <footer className={`fixed bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] md:bottom-0 left-0 ${
-          isSidebarCollapsed ? "md:left-20" : "md:left-64"
-        } right-0 z-40 bg-[#080b14] border-t border-[#1E2333] shadow-[0_-8px_30px_rgba(0,0,0,0.8)] px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col gap-1 select-none transition-all duration-300`}>
+          isSidebarCollapsed ? "md:left-[74px]" : "md:left-60"
+        } right-0 z-40 bg-th-shell/95 backdrop-blur-md border-t border-th-border shadow-lg px-3 sm:px-5 py-2 flex flex-col gap-1.5 select-none transition-all duration-200`}>
         {/* Scrubber line */}
-        <div className="w-full flex items-center gap-2.5 px-2">
-          <span className="font-mono text-[10px] text-cyan-400 font-semibold w-9 text-right">
+        <div className="w-full flex items-center gap-2.5 px-1">
+          <span className="font-mono text-[10px] text-th-accent font-bold w-9 text-right tabular-nums">
             {formatDuration(elapsed)}
           </span>
           <div
             onClick={handleScrubberClick}
-            className="flex-1 h-2 hover:h-2.5 bg-[#181b25] rounded-full overflow-hidden relative border border-white/5 cursor-pointer group transition-all"
+            className="flex-1 h-2 hover:h-2.5 bg-th-recessed rounded-full overflow-hidden relative border border-th-border cursor-pointer group transition-all"
             title="Click para adelantar o retroceder el video en la TV"
           >
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 rounded-full transition-all duration-150 pointer-events-none"
+              className="h-full bg-th-accent rounded-full transition-all duration-150 pointer-events-none"
               style={{ width: `${progressPercent}%` }}
             />
             <div
-              className="absolute top-1/2 -translate-y-1/2 size-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+              className="absolute top-1/2 -translate-y-1/2 size-3 bg-white border border-th-accent rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
               style={{ left: `calc(${progressPercent}% - 6px)` }}
             />
           </div>
-          <span className="font-mono text-[10px] text-slate-400 font-semibold w-9">
+          <span className="font-mono text-[10px] text-th-muted font-bold w-9 tabular-nums">
             {formatDuration(duration)}
           </span>
         </div>
 
-        {/* Main Controls Row */}
-                {/* ==================== MOBILE COMPACT DOCK (< md) ==================== */}
+        {/* ==================== MOBILE COMPACT DOCK (< md) ==================== */}
         <div className="md:hidden flex items-center justify-between gap-2 px-1 py-0.5">
-          {/* Track Info: Clickable to expand full player drawer */}
           <button
             type="button"
             onClick={() => setDrawerOpen(true)}
-            className="flex items-center gap-2 min-w-0 flex-1 text-left p-0.5 rounded-lg hover:bg-white/5 active:scale-[0.98] transition-all"
+            className="flex items-center gap-2 min-w-0 flex-1 text-left p-0.5 rounded-xl hover:bg-th-recessed active:scale-[0.98] transition-all cursor-pointer"
             title="Tocá para ver y gestionar la cola de canciones"
           >
-            <div className="relative size-9 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] shrink-0 shadow-md flex items-center justify-center">
+            <div className="relative size-9 rounded-lg overflow-hidden bg-th-recessed border border-th-border shrink-0 flex items-center justify-center">
               {currentTrack?.thumbnailUrl ? (
                 <Image
                   src={currentTrack.thumbnailUrl}
@@ -1030,87 +1028,81 @@ export function PanelPlaybackFooter({
                   unoptimized
                 />
               ) : (
-                <Music2 className="size-4 text-indigo-400" />
+                <Music2 className="size-4 text-th-accent" />
               )}
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="text-white text-xs font-bold truncate leading-tight">
+              <p className="text-th-text text-xs font-display font-bold truncate leading-tight">
                 {currentTrack?.title || "Sin música activa"}
               </p>
-              <p className="text-slate-400 text-[10px] truncate leading-tight mt-0.5">
+              <p className="text-th-muted text-[10px] truncate leading-tight mt-0.5">
                 {currentTrack?.artist || "Playlist Local"}
               </p>
             </div>
           </button>
 
-          {/* Quick Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Queue Drawer Toggle Pill */}
             <button
               type="button"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className="flex items-center gap-1 bg-gradient-to-r from-indigo-600/30 to-violet-600/30 hover:from-indigo-600/40 text-indigo-300 border border-indigo-500/40 px-2.5 py-1.5 rounded-xl font-mono text-[11px] font-bold active:scale-95 transition-all shrink-0 shadow-sm"
+              className="flex items-center gap-1 bg-th-accent-soft hover:bg-th-accent hover:text-white text-th-accent border border-th-accent/30 px-2.5 h-8 rounded-xl font-mono text-[11px] font-bold active:scale-95 transition-all shrink-0 cursor-pointer"
               title="Abrir cola y gestión de temas"
             >
-              <ListMusic className="size-3.5 text-cyan-400" />
-              <span>Cola ({activeQueue.length})</span>
-              <ChevronUp className="size-3 text-indigo-300" />
+              <ListMusic className="size-3.5" />
+              <span>({activeQueue.length})</span>
+              <ChevronUp className="size-3" />
             </button>
 
-            {/* Search YouTube modal */}
             <button
               type="button"
               onClick={() => setManualModalOpen(true)}
-              className="size-8 rounded-lg bg-indigo-600/20 text-indigo-300 border border-indigo-500/30 flex items-center justify-center active:scale-95 transition-all"
+              className="size-8 rounded-xl bg-th-recessed text-th-text-2 hover:text-th-text border border-th-border flex items-center justify-center active:scale-95 transition-all cursor-pointer"
               title="Buscar en YouTube y poner en TV"
             >
-              <Search className="size-3.5 text-cyan-400" />
+              <Search className="size-3.5" />
             </button>
 
-            {/* TV Audio Routing — 3-way compact (Mobile) */}
-            <div className="flex items-center gap-0.5 bg-[#131722] rounded-lg border border-[#232b42] overflow-hidden" title="Audio: Cabina / Ambos / Solo TV">
+            <div className="flex items-center gap-0.5 bg-th-recessed rounded-xl border border-th-border overflow-hidden p-0.5" title="Audio: Cabina / Ambos / Solo TV">
               <button
                 type="button"
                 onClick={() => void handleSetAudioRouting("CABINA_ONLY")}
-                className={`size-8 flex items-center justify-center active:scale-95 transition-all text-sm ${
-                  audioRouting === "CABINA_ONLY" ? "bg-indigo-600/40 text-indigo-200" : "text-slate-400"
+                className={`size-7 rounded-lg flex items-center justify-center transition-all text-xs cursor-pointer ${
+                  audioRouting === "CABINA_ONLY" ? "bg-th-accent text-white" : "text-th-muted"
                 }`}
                 title="Audio solo Cabina"
               >🎧</button>
               <button
                 type="button"
                 onClick={() => void handleSetAudioRouting("BOTH")}
-                className={`size-8 flex items-center justify-center active:scale-95 transition-all text-sm ${
-                  audioRouting === "BOTH" ? "bg-emerald-600/40 text-emerald-200" : "text-slate-400"
+                className={`size-7 rounded-lg flex items-center justify-center transition-all text-xs cursor-pointer ${
+                  audioRouting === "BOTH" ? "bg-th-emerald text-white" : "text-th-muted"
                 }`}
                 title="Audio en Cabina y TV"
               >🔊</button>
               <button
                 type="button"
                 onClick={() => void handleSetAudioRouting("TV_ONLY")}
-                className={`size-8 flex items-center justify-center active:scale-95 transition-all text-sm ${
-                  audioRouting === "TV_ONLY" ? "bg-cyan-600/40 text-cyan-200" : "text-slate-400"
+                className={`size-7 rounded-lg flex items-center justify-center transition-all text-xs cursor-pointer ${
+                  audioRouting === "TV_ONLY" ? "bg-th-teal text-white" : "text-th-muted"
                 }`}
                 title="Audio solo TV"
               >📺</button>
             </div>
 
-            {/* Play / Pause */}
             <button
               type="button"
               onClick={() => void handleTogglePlay()}
-              className="size-9 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/30 active:scale-95 transition-all"
+              className="size-9 rounded-full bg-th-accent hover:bg-th-accent-hover text-white flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer"
               title={isPaused ? "Reanudar música en TV" : "Pausar música en TV"}
             >
               {isPaused ? <Play className="size-4 fill-white ml-0.5" /> : <Pause className="size-4 fill-white" />}
             </button>
 
-            {/* Skip */}
             <button
               type="button"
               onClick={() => void handleSkipNext()}
-              className="size-8 rounded-lg bg-[#131722] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-white active:scale-90 transition-all"
+              className="size-8 rounded-xl bg-th-recessed border border-th-border flex items-center justify-center text-th-text-2 hover:text-th-text active:scale-90 transition-all cursor-pointer"
               title="Saltear tema actual"
             >
               <SkipForward className="size-4" />
@@ -1119,16 +1111,16 @@ export function PanelPlaybackFooter({
         </div>
 
         {/* ==================== DESKTOP CONTROLS ROW (>= md) ==================== */}
-        <div className="hidden md:flex items-center justify-between gap-2 lg:gap-4 xl:gap-6 w-full px-2 lg:px-4">
-          {/* LEFT: Currently Playing Track Details + Cola Trigger + Poner Tema */}
-          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden justify-start">
+        <div className="hidden md:flex items-center justify-between gap-3 xl:gap-5 w-full">
+          {/* LEFT: Currently Playing Track Details + Cola Trigger */}
+          <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
-              className="flex items-center gap-2.5 min-w-0 flex-1 max-w-[180px] lg:max-w-[230px] xl:max-w-[280px] text-left p-1 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all cursor-pointer group"
+              className="flex items-center gap-2.5 min-w-0 max-w-[230px] xl:max-w-[280px] text-left p-1 rounded-xl hover:bg-th-recessed transition-colors cursor-pointer group"
               title="Click para abrir la cola de reproducción y gestionar temas"
             >
-              <div className="relative size-10 rounded-lg overflow-hidden bg-[#131722] border border-[#283250] group-hover:border-indigo-500/50 shrink-0 shadow-md flex items-center justify-center transition-colors">
+              <div className="relative size-10 rounded-lg overflow-hidden bg-th-recessed border border-th-border group-hover:border-th-accent/40 shrink-0 flex items-center justify-center transition-colors">
                 {currentTrack?.thumbnailUrl ? (
                   <Image
                     src={currentTrack.thumbnailUrl}
@@ -1139,208 +1131,196 @@ export function PanelPlaybackFooter({
                     unoptimized
                   />
                 ) : (
-                  <Music2 className="size-4 text-indigo-400" />
+                  <Music2 className="size-4 text-th-accent" />
                 )}
               </div>
 
               <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-white text-xs font-bold truncate leading-tight group-hover:text-cyan-300 transition-colors">
+                  <span className="text-th-text text-xs font-display font-bold truncate leading-tight group-hover:text-th-accent transition-colors">
                     {currentTrack?.title || "Sin música activa"}
                   </span>
                   {karaokeMode || currentTrack?.isKaraoke ? (
-                    <span className="shrink-0 bg-pink-500/20 text-pink-300 border border-pink-500/30 font-mono text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase">
+                    <span className="shrink-0 bg-th-accent-soft text-th-accent font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase">
                       Karaoke
                     </span>
                   ) : null}
                 </div>
-                <p className="text-slate-400 text-[10px] truncate mt-0.5 group-hover:text-slate-300 transition-colors">
-                  {currentTrack?.artist || "Billar & Bar Playlist"}
+                <p className="text-th-text-2 text-[11px] truncate mt-0.5">
+                  {currentTrack?.artist || "Playlist del Bar"}
                 </p>
               </div>
             </button>
 
-            {/* Quick Button: Abrir Cola */}
             <button
               type="button"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className="shrink-0 flex items-center gap-1.5 bg-gradient-to-r from-indigo-600/25 to-violet-600/25 hover:from-indigo-600/35 hover:to-violet-600/35 text-indigo-300 hover:text-white px-2.5 py-1.5 rounded-xl border border-indigo-500/40 font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm whitespace-nowrap"
+              className="shrink-0 inline-flex items-center gap-1.5 h-8 bg-th-accent-soft hover:bg-th-accent text-th-accent hover:text-white px-2.5 rounded-xl border border-th-accent/25 font-mono text-[11px] font-bold transition-all active:scale-95 whitespace-nowrap cursor-pointer"
               title="Abrir la cola de reproducción y gestionar temas"
             >
-              <ListMusic className="size-3.5 text-cyan-400 shrink-0" />
+              <ListMusic className="size-3.5 shrink-0" />
               <span>Cola ({activeQueue.length})</span>
-              <ChevronUp className="size-3 text-indigo-400 shrink-0" />
+              <ChevronUp className="size-3 shrink-0" />
             </button>
 
-            {/* Quick Button: Elegir Canción (YouTube) */}
             <button
               type="button"
               onClick={() => setManualModalOpen(true)}
-              className="shrink-0 size-8 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/30 flex items-center justify-center transition-all active:scale-95"
+              className="shrink-0 size-8 rounded-xl bg-th-recessed hover:bg-th-hover text-th-text-2 hover:text-th-accent border border-th-border flex items-center justify-center transition-colors active:scale-95 cursor-pointer"
               title="Buscar en YouTube y poner tema en TV"
             >
-              <Search className="size-3.5 text-cyan-400" />
+              <Search className="size-3.5" />
             </button>
           </div>
 
           {/* CENTER: Main Playback Transport Buttons */}
-          <div className="flex items-center justify-center gap-1.5 lg:gap-2 shrink-0 px-1">
-            {/* Prev / Restart */}
+          <div className="flex items-center justify-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => void handleRestart()}
-              className="size-8 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
+              className="size-8 rounded-xl bg-th-recessed hover:bg-th-hover border border-th-border flex items-center justify-center text-th-text-2 hover:text-th-text transition-colors active:scale-90 cursor-pointer"
               title="Reiniciar tema actual"
             >
-              <RotateCcw className="size-4" />
+              <RotateCcw className="size-3.5" />
             </button>
 
-            {/* Seek -10s */}
             <button
               type="button"
               onClick={() => void handleSeekDelta(-10)}
-              className="h-8 px-2 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 font-mono text-[11px] font-bold"
+              className="h-8 px-2.5 rounded-xl bg-th-recessed hover:bg-th-hover border border-th-border flex items-center justify-center text-th-text-2 hover:text-th-accent transition-colors active:scale-90 font-mono text-[11px] font-bold cursor-pointer"
               title="Retroceder 10 segundos"
             >
               -10s
             </button>
 
-            {/* Play / Pause Primary Button */}
             <button
               type="button"
               onClick={() => void handleTogglePlay()}
-              className="size-10 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-400 hover:to-violet-500 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 transition-all active:scale-95"
+              className="size-10 rounded-full bg-th-accent hover:bg-th-accent-hover text-white flex items-center justify-center shadow-md transition-all active:scale-95 cursor-pointer"
               title={isPaused ? "Reanudar música (Espacio)" : "Pausar música (Espacio)"}
             >
-              {isPaused ? <Play className="size-5 fill-white ml-0.5" /> : <Pause className="size-5 fill-white" />}
+              {isPaused ? <Play className="size-4 fill-white ml-0.5" /> : <Pause className="size-4 fill-white" />}
             </button>
 
-            {/* Seek +10s */}
             <button
               type="button"
               onClick={() => void handleSeekDelta(10)}
-              className="h-8 px-2 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all active:scale-90 font-mono text-[11px] font-bold"
+              className="h-8 px-2.5 rounded-xl bg-th-recessed hover:bg-th-hover border border-th-border flex items-center justify-center text-th-text-2 hover:text-th-accent transition-colors active:scale-90 font-mono text-[11px] font-bold cursor-pointer"
               title="Adelantar 10 segundos"
             >
               +10s
             </button>
 
-            {/* Skip Next */}
             <button
               type="button"
               onClick={() => void handleSkipNext()}
-              className="size-8 rounded-lg bg-[#131722] hover:bg-[#1c2234] border border-[#232b42] flex items-center justify-center text-slate-300 hover:text-white transition-all active:scale-90"
+              className="size-8 rounded-xl bg-th-recessed hover:bg-th-hover border border-th-border flex items-center justify-center text-th-text-2 hover:text-th-text transition-colors active:scale-90 cursor-pointer"
               title="Saltear al siguiente tema (S)"
             >
-              <SkipForward className="size-4" />
+              <SkipForward className="size-3.5" />
             </button>
           </div>
 
-          {/* RIGHT: Volume & Display Remote Manager */}
-          <div className="flex items-center justify-end gap-1.5 xl:gap-2 shrink-0">
-            {/* TV Screen & Display Remote Manager */}
+          {/* RIGHT: TV Display Manager, Audio Routing & Volume */}
+          <div className="flex items-center justify-end gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setTvManagerOpen(true)}
-              className="h-8 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border border-[#232b42] bg-[#131722] hover:bg-[#1a2030] text-slate-300 hover:text-white font-mono text-[11px] font-bold transition-all active:scale-95 shadow-sm whitespace-nowrap"
+              className="h-8 shrink-0 inline-flex items-center gap-1.5 px-2.5 rounded-xl border border-th-border bg-th-recessed hover:bg-th-hover text-th-text-2 hover:text-th-text text-xs font-semibold transition-colors active:scale-95 whitespace-nowrap cursor-pointer"
               title="Administrar pantallas TV: cambiar modos, ocultar/mostrar listas, temas y tamaños desde la cabina"
             >
-              <Tv className="size-3.5 text-cyan-400 shrink-0" />
+              <Tv className="size-3.5 text-th-teal shrink-0" />
               <span className="hidden xl:inline">Pantallas TV</span>
               <span className="xl:hidden">TV</span>
             </button>
 
-            {/* 3-Way Audio Routing Selector (Cabina + TV) */}
-            <div className="h-8 shrink-0 flex items-center gap-0.5 bg-[#131722] rounded-lg border border-[#232b42] overflow-hidden" title="Enrutamiento de audio: elegí dónde se escucha la música">
+            <div className="h-8 shrink-0 flex items-center gap-0.5 bg-th-recessed rounded-xl border border-th-border p-0.5" title="Enrutamiento de audio: elegí dónde se escucha la música">
               <button
                 type="button"
                 onClick={() => void handleSetAudioRouting("CABINA_ONLY")}
-                className={`h-full px-2 font-mono text-[10px] font-bold transition-all flex items-center gap-1 ${
+                className={`h-full px-2 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
                   audioRouting === "CABINA_ONLY"
-                    ? "bg-indigo-600/40 text-indigo-200 border-r border-indigo-500/40"
-                    : "text-slate-400 hover:text-white border-r border-[#232b42]"
+                    ? "bg-th-accent text-white"
+                    : "text-th-text-2 hover:text-th-text"
                 }`}
                 title="Audio solo en Cabina (TV silenciada)"
               >
-                <span className="text-[11px]">🎧</span>
                 <span className="hidden xl:inline">Cabina</span>
+                <span className="xl:hidden">🎧</span>
               </button>
               <button
                 type="button"
                 onClick={() => void handleSetAudioRouting("BOTH")}
-                className={`h-full px-2 font-mono text-[10px] font-bold transition-all flex items-center gap-1 ${
+                className={`h-full px-2 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
                   audioRouting === "BOTH"
-                    ? "bg-emerald-600/40 text-emerald-200 border-r border-emerald-500/40"
-                    : "text-slate-400 hover:text-white border-r border-[#232b42]"
+                    ? "bg-th-emerald text-white"
+                    : "text-th-text-2 hover:text-th-text"
                 }`}
                 title="Audio en Cabina y en TV"
               >
-                <span className="text-[11px]">🔊</span>
                 <span className="hidden xl:inline">Ambos</span>
+                <span className="xl:hidden">🔊</span>
               </button>
               <button
                 type="button"
                 onClick={() => void handleSetAudioRouting("TV_ONLY")}
-                className={`h-full px-2 font-mono text-[10px] font-bold transition-all flex items-center gap-1 ${
+                className={`h-full px-2 rounded-lg text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer ${
                   audioRouting === "TV_ONLY"
-                    ? "bg-cyan-600/40 text-cyan-200"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-th-teal text-white"
+                    : "text-th-text-2 hover:text-th-text"
                 }`}
                 title="Audio solo en TV (cabina silenciada)"
               >
-                <span className="text-[11px]">📺</span>
                 <span className="hidden xl:inline">Solo TV</span>
+                <span className="xl:hidden">📺</span>
               </button>
             </div>
 
-            {/* Karaoke Mode Toggle Button */}
             <button
               type="button"
               onClick={() => void handleToggleKaraoke()}
-              className={`h-8 shrink-0 flex items-center gap-1.5 px-2.5 rounded-lg border font-mono text-[11px] font-bold transition-all whitespace-nowrap ${
+              className={`h-8 shrink-0 inline-flex items-center gap-1.5 px-2.5 rounded-xl border text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
                 karaokeMode
-                  ? "bg-gradient-to-r from-pink-500/25 to-purple-500/25 text-pink-300 border-pink-500/50 shadow-[0_0_12px_rgba(236,72,153,0.3)] animate-pulse"
-                  : "bg-[#131722] text-slate-400 border-[#232b42] hover:text-white"
+                  ? "bg-th-accent text-white border-th-accent"
+                  : "bg-th-recessed text-th-text-2 border-th-border hover:text-th-text hover:bg-th-hover"
               }`}
               title="Alternar Modo Karaoke en el salón"
             >
-              <Mic className="size-3.5 text-pink-400 shrink-0" />
-              <span>{karaokeMode ? "Karaoke ON" : "Karaoke"}</span>
+              <Mic className="size-3.5 shrink-0" />
+              <span className="hidden lg:inline">{karaokeMode ? "Karaoke ON" : "Karaoke"}</span>
             </button>
 
-            {/* Cabina Audio Output Badge & Autoplay Unlocker */}
             {isAudioBlocked ? (
               <button
                 type="button"
                 onClick={() => audioEngineRef.current?.unlockAudio()}
-                className="h-8 shrink-0 flex items-center gap-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-2.5 rounded-lg font-mono text-[11px] font-bold active:scale-95 transition-all shadow-sm whitespace-nowrap"
+                className="h-8 shrink-0 flex items-center gap-1.5 bg-th-amber-soft hover:bg-th-amber text-th-amber hover:text-white border border-th-amber/40 px-2.5 rounded-xl text-xs font-semibold active:scale-95 transition-all whitespace-nowrap cursor-pointer"
                 title="Clic para habilitar sonido en la cabina del local"
               >
-                <VolumeX className="size-3.5 text-amber-400 animate-pulse shrink-0" />
+                <VolumeX className="size-3.5 shrink-0" />
                 <span>Habilitar Sonido</span>
               </button>
             ) : (
               <div
-                className="hidden 2xl:flex h-8 shrink-0 items-center gap-1.5 bg-emerald-950/60 border border-emerald-500/30 text-emerald-400 px-2 rounded-lg font-mono text-[11px] font-bold whitespace-nowrap"
-                title="Sonido principal del salón activo desde esta cabina (Solo sonido, sin video)"
+                className="hidden 2xl:flex h-8 shrink-0 items-center gap-1.5 bg-th-emerald-soft border border-th-emerald/30 text-th-emerald px-2.5 rounded-xl text-[11px] font-semibold whitespace-nowrap"
+                title="Sonido principal del salón activo desde esta cabina"
               >
-                <span className="size-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <span>Audio Cabina</span>
+                <span className="size-2 rounded-full bg-th-emerald animate-pulse shrink-0" />
+                <span>Cabina ON</span>
               </div>
             )}
 
-            {/* Volume Control */}
-            <div className="h-8 shrink-0 flex items-center gap-2 bg-[#131722] px-2.5 rounded-lg border border-[#232b42]">
+            <div className="h-8 shrink-0 flex items-center gap-2 bg-th-recessed px-2.5 rounded-xl border border-th-border">
               <button
                 type="button"
                 onClick={() => void handleToggleMute()}
-                className="text-slate-400 hover:text-white transition-colors shrink-0"
+                className="text-th-text-2 hover:text-th-text transition-colors shrink-0 cursor-pointer"
                 title="Silenciar / Activar sonido (M)"
               >
                 {isMuted || volume === 0 ? (
-                  <VolumeX className="size-4 text-rose-400" />
+                  <VolumeX className="size-4 text-th-danger" />
                 ) : (
-                  <Volume2 className="size-4 text-cyan-400" />
+                  <Volume2 className="size-4 text-th-accent" />
                 )}
               </button>
               <input
@@ -1349,10 +1329,10 @@ export function PanelPlaybackFooter({
                 max="100"
                 value={isMuted ? 0 : volume}
                 onChange={(e) => void handleVolume(Number(e.target.value))}
-                className="w-16 lg:w-20 xl:w-24 h-1.5 accent-indigo-500 bg-[#232b42] rounded-lg appearance-none cursor-pointer"
+                className="w-16 lg:w-20 h-1.5 accent-th-accent bg-th-border rounded-lg cursor-pointer"
                 title={`Volumen cabina: ${volume}%`}
               />
-              <span className="text-[10px] font-mono text-slate-400 w-7 text-right shrink-0">
+              <span className="text-[11px] font-mono text-th-text-2 w-8 text-right shrink-0 tabular-nums">
                 {isMuted ? "0%" : `${volume}%`}
               </span>
             </div>
@@ -1482,43 +1462,40 @@ export function PanelPlaybackFooter({
       {/* ==================== EXPANDABLE QUEUE & REMOTE PLAYER DRAWER ==================== */}
       {drawerOpen && (
         <div className="fixed inset-0 z-[60] flex flex-col justify-end md:justify-center md:items-end animate-in fade-in duration-200">
-          {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setDrawerOpen(false)}
           />
 
-          {/* Drawer Body Sheet */}
-          <div className="relative w-full md:max-w-xl md:h-[92vh] max-h-[85vh] bg-[#0c101c] border-t md:border-l md:border-t-0 border-[#1E2538] rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none shadow-[0_-15px_40px_rgba(0,0,0,0.9)] flex flex-col z-10 overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
-            {/* Top Drag Handle (Mobile) */}
+          <div className="relative w-full md:max-w-xl md:h-[92vh] max-h-[85vh] bg-th-card border-t md:border-l md:border-t-0 border-th-border rounded-t-3xl md:rounded-l-3xl md:rounded-tr-none shadow-2xl flex flex-col z-10 overflow-hidden pb-[env(safe-area-inset-bottom,0px)]">
             <div className="pt-3 pb-1 flex justify-center md:hidden cursor-pointer" onClick={() => setDrawerOpen(false)}>
-              <div className="w-12 h-1.5 bg-slate-700/60 rounded-full" />
+              <div className="w-12 h-1.5 bg-th-border-strong rounded-full" />
             </div>
 
             {/* Drawer Header */}
-            <div className="px-5 py-3 border-b border-[#1E2538] flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="size-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md shadow-indigo-600/40">
+            <div className="px-5 py-3.5 border-b border-th-border flex items-center justify-between gap-2 bg-th-shell">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="size-9 rounded-xl bg-th-accent text-white flex items-center justify-center shrink-0">
                   <ListMusic className="size-5" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-white tracking-tight">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-display font-bold text-th-text tracking-tight truncate">
                     Control Maestro & Cola de Salón
                   </h3>
-                  <p className="font-mono text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                    <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                  <p className="font-mono text-[10px] text-th-text-2 flex items-center gap-1.5 mt-0.5">
+                    <span className="size-1.5 rounded-full bg-th-teal animate-pulse" />
                     <span>TV Conectada</span>
-                    <span className="text-slate-600">·</span>
+                    <span className="text-th-muted">·</span>
                     <span>{activeQueue.length} temas en cola</span>
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
                   onClick={() => setManualModalOpen(true)}
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold transition-all shadow-md flex items-center gap-1.5 active:scale-95"
+                  className="h-8 px-3 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
                 >
                   <Plus className="size-3.5" />
                   <span>Poner Tema</span>
@@ -1526,7 +1503,7 @@ export function PanelPlaybackFooter({
                 <button
                   type="button"
                   onClick={() => setDrawerOpen(false)}
-                  className="size-8 rounded-lg bg-[#181F33] text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                  className="size-8 rounded-xl bg-th-recessed border border-th-border text-th-text-2 hover:text-th-text flex items-center justify-center transition-colors cursor-pointer"
                   aria-label="Cerrar panel de cola"
                 >
                   <X className="size-4" />
@@ -1535,19 +1512,19 @@ export function PanelPlaybackFooter({
             </div>
 
             {/* Now Playing Banner in Drawer */}
-            <div className="p-4 bg-[#101524] border-b border-[#1E2538]">
+            <div className="p-4 bg-th-recessed border-b border-th-border">
               {isAudioBlocked && (
                 <button
                   type="button"
                   onClick={() => audioEngineRef.current?.unlockAudio()}
-                  className="w-full mb-3 flex items-center justify-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 py-2 px-3 rounded-xl font-mono text-xs font-bold active:scale-95 transition-all shadow-md"
+                  className="w-full mb-3 flex items-center justify-center gap-2 bg-th-amber-soft hover:bg-th-amber text-th-amber hover:text-white border border-th-amber/40 py-2 px-3 rounded-xl text-xs font-semibold active:scale-95 transition-all cursor-pointer"
                 >
-                  <VolumeX className="size-4 text-amber-400 animate-pulse" />
+                  <VolumeX className="size-4" />
                   <span>Toca aquí para habilitar el sonido en la cabina</span>
                 </button>
               )}
               <div className="flex items-center gap-3">
-                <div className="size-12 rounded-xl bg-[#090D16] border border-[#232B42] shrink-0 overflow-hidden flex items-center justify-center relative shadow-md">
+                <div className="size-12 rounded-xl bg-th-card border border-th-border shrink-0 overflow-hidden flex items-center justify-center">
                   {currentTrack?.thumbnailUrl ? (
                     <Image
                       src={currentTrack.thumbnailUrl}
@@ -1558,35 +1535,34 @@ export function PanelPlaybackFooter({
                       unoptimized
                     />
                   ) : (
-                    <Music2 className="size-6 text-indigo-400" />
+                    <Music2 className="size-6 text-th-accent" />
                   )}
                 </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 font-bold">
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-th-danger-soft text-th-danger font-bold">
                       Sonando Ahora
                     </span>
                     {karaokeMode && (
-                      <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded bg-pink-500/20 text-pink-300 font-bold">
+                      <span className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-th-accent-soft text-th-accent font-bold">
                         Karaoke
                       </span>
                     )}
                   </div>
-                  <h4 className="text-white text-sm font-bold truncate mt-0.5">
+                  <h4 className="text-th-text text-sm font-display font-bold truncate mt-1">
                     {currentTrack?.title || "Sin música activa"}
                   </h4>
-                  <p className="text-slate-400 text-xs truncate">
+                  <p className="text-th-text-2 text-xs truncate">
                     {currentTrack?.artist || "Playlist del Bar"}
                   </p>
                 </div>
 
-                {/* Quick Play/Pause & Skip */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button
                     type="button"
                     onClick={() => void handleTogglePlay()}
-                    className="size-10 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 text-white flex items-center justify-center shadow-lg active:scale-95"
+                    className="size-10 rounded-full bg-th-accent hover:bg-th-accent-hover text-white flex items-center justify-center shadow-sm active:scale-95 cursor-pointer"
                     title={isPaused ? "Reanudar" : "Pausar"}
                   >
                     {isPaused ? <Play className="size-4 fill-white ml-0.5" /> : <Pause className="size-4 fill-white" />}
@@ -1594,7 +1570,7 @@ export function PanelPlaybackFooter({
                   <button
                     type="button"
                     onClick={() => void handleSkipNext()}
-                    className="size-9 rounded-xl bg-[#181F33] border border-[#232B42] flex items-center justify-center text-slate-300 hover:text-white active:scale-90"
+                    className="size-9 rounded-xl bg-th-card border border-th-border flex items-center justify-center text-th-text-2 hover:text-th-text active:scale-90 cursor-pointer"
                     title="Saltear al siguiente"
                   >
                     <SkipForward className="size-4" />
@@ -1602,35 +1578,34 @@ export function PanelPlaybackFooter({
                 </div>
               </div>
 
-              {/* Scrubber inside drawer */}
-              <div className="mt-3 pt-2 border-t border-[#1C2336] flex items-center gap-2.5">
-                <span className="font-mono text-[10px] text-cyan-400 font-semibold w-8 text-right">
+              <div className="mt-3 pt-2.5 border-t border-th-border flex items-center gap-2.5">
+                <span className="font-mono text-[10px] text-th-accent font-bold w-9 text-right tabular-nums">
                   {formatDuration(elapsed)}
                 </span>
                 <div
                   onClick={handleScrubberClick}
-                  className="flex-1 h-2 bg-[#181b25] rounded-full overflow-hidden relative border border-white/5 cursor-pointer"
+                  className="flex-1 h-2 bg-th-card rounded-full overflow-hidden relative border border-th-border cursor-pointer"
                 >
                   <div
-                    className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 rounded-full"
+                    className="h-full bg-th-accent rounded-full"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <span className="font-mono text-[10px] text-slate-400 font-semibold w-8">
+                <span className="font-mono text-[10px] text-th-muted font-bold w-9 tabular-nums">
                   {formatDuration(duration)}
                 </span>
               </div>
             </div>
 
-            {/* Drawer Tabs: Cola Activa vs Candidatos */}
-            <div className="px-5 pt-3 pb-2 flex gap-2 border-b border-[#1E2538] bg-[#0c101c]">
+            {/* Drawer Tabs */}
+            <div className="px-5 py-2.5 flex gap-2 border-b border-th-border bg-th-shell">
               <button
                 type="button"
                 onClick={() => setDrawerTab("queue")}
-                className={`flex-1 py-2 px-3 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`flex-1 h-9 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   drawerTab === "queue"
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                    : "bg-[#181F33] text-slate-400 hover:text-white border border-[#232B42]"
+                    ? "bg-th-accent text-white"
+                    : "bg-th-recessed text-th-text-2 hover:text-th-text border border-th-border"
                 }`}
               >
                 <ListMusic className="size-3.5" />
@@ -1639,32 +1614,32 @@ export function PanelPlaybackFooter({
               <button
                 type="button"
                 onClick={() => setDrawerTab("candidates")}
-                className={`flex-1 py-2 px-3 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                className={`flex-1 h-9 px-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   drawerTab === "candidates"
-                    ? "bg-amber-600 text-white shadow-md shadow-amber-600/30"
-                    : "bg-[#181F33] text-slate-400 hover:text-white border border-[#232B42]"
+                    ? "bg-th-amber text-white"
+                    : "bg-th-recessed text-th-text-2 hover:text-th-text border border-th-border"
                 }`}
               >
-                <Sparkles className="size-3.5 text-amber-400" />
+                <Sparkles className="size-3.5" />
                 <span>Candidatas ({candidateProposals.length})</span>
               </button>
             </div>
 
-            {/* Drawer Queue Scrollable List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
+            {/* Bounded Internal Scrollable Queue List */}
+            <div className="flex-1 min-h-0 ui-scroll-container p-4 space-y-2 bg-th-recessed">
               {drawerTab === "queue" && (
                 <>
                   {activeQueue.length === 0 ? (
-                    <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-[#232B42] bg-[#101524]/60">
-                      <Music2 className="size-8 mx-auto text-slate-600 mb-2" />
-                      <p className="text-sm font-bold text-white">No hay canciones en la cola de la TV</p>
-                      <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                    <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-th-border bg-th-card">
+                      <Music2 className="size-8 mx-auto text-th-muted mb-2" />
+                      <p className="text-sm font-display font-bold text-th-text">No hay canciones en la cola de la TV</p>
+                      <p className="text-xs text-th-text-2 mt-1 max-w-xs mx-auto">
                         Buscá un tema en YouTube o aprobá propuestas candidatas para llenar la cola.
                       </p>
                       <button
                         type="button"
                         onClick={() => setManualModalOpen(true)}
-                        className="mt-3.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-bold shadow-md"
+                        className="mt-4 h-9 px-4 rounded-xl bg-th-accent hover:bg-th-accent-hover text-white text-xs font-semibold cursor-pointer"
                       >
                         Buscar y Poner Canción
                       </button>
@@ -1673,56 +1648,52 @@ export function PanelPlaybackFooter({
                     activeQueue.map((item, index) => (
                       <div
                         key={item.id}
-                        className="p-3 rounded-xl bg-[#121626] border border-[#232B42] hover:border-[#2f3b5c] transition-all flex items-center justify-between gap-3 shadow-sm"
+                        className="p-3 rounded-xl bg-th-card border border-th-border hover:border-th-border-strong transition-colors flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="size-7 rounded-lg bg-[#181F33] border border-[#283250] text-indigo-300 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                          <div className="size-7 rounded-lg bg-th-recessed border border-th-border text-th-accent font-mono text-xs font-bold flex items-center justify-center shrink-0 tabular-nums">
                             #{index + 1}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h5 className="text-xs font-bold text-white truncate">{item.title}</h5>
-                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                            <h5 className="text-xs font-display font-bold text-th-text truncate">{item.title}</h5>
+                            <p className="text-[11px] text-th-text-2 truncate mt-0.5">
                               {item.artist} {item.durationSeconds ? `· ${formatDuration(item.durationSeconds)}` : ""}
                             </p>
-                            <span className="inline-flex items-center gap-1 font-mono text-[10px] text-indigo-400 font-semibold mt-1">
-                              <Flame className="size-3 text-amber-400" />
-                              {item.voteCount >= 9999 || item.voteCount === 0 ? "⭐ Selección Bar" : `${item.voteCount} votos`}
+                            <span className="inline-flex items-center gap-1 font-mono text-[10px] text-th-accent font-semibold mt-1">
+                              <Flame className="size-3 text-th-amber" />
+                              {item.voteCount >= 9999 || item.voteCount === 0 ? "Selección Bar" : `${item.voteCount} votos`}
                             </span>
                           </div>
                         </div>
 
-                        {/* Actions for this song */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Play Now */}
                           <button
                             type="button"
                             onClick={() => void handlePlayQueueItemNow(item)}
                             disabled={pendingActionId === item.id}
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            className="h-8 px-2.5 rounded-lg bg-th-emerald-soft hover:bg-th-emerald text-th-emerald hover:text-white border border-th-emerald/30 text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
                             title="Reproducir inmediatamente en TV"
                           >
                             <PlayCircle className="size-3.5" />
                             <span>Poner Ya</span>
                           </button>
 
-                          {/* Boost / Subir al tope de la cola */}
                           <button
                             type="button"
                             onClick={() => void handleBoostQueueItem(item, "queue")}
                             disabled={pendingActionId === item.id}
-                            className="px-2 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
-                            title="Subir de puesto al tope de la cola"
+                            className="h-8 px-2 rounded-lg bg-th-accent-soft hover:bg-th-accent text-th-accent hover:text-white border border-th-accent/30 text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
+                            title="Subir al tope de la cola"
                           >
                             <ArrowUp className="size-3.5" />
                             <span className="hidden sm:inline">Subir</span>
                           </button>
 
-                          {/* Veto */}
                           <button
                             type="button"
                             onClick={() => void handleVetoQueueItem(item)}
                             disabled={pendingActionId === item.id}
-                            className="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center active:scale-95 transition-all"
+                            className="size-8 rounded-lg bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white border border-th-danger/30 flex items-center justify-center active:scale-95 transition-all cursor-pointer"
                             title="Vetar / Quitar de la cola"
                           >
                             <Trash2 className="size-3.5" />
@@ -1737,10 +1708,10 @@ export function PanelPlaybackFooter({
               {drawerTab === "candidates" && (
                 <>
                   {candidateProposals.length === 0 ? (
-                    <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-[#232B42] bg-[#101524]/60">
-                      <Sparkles className="size-8 mx-auto text-amber-500 mb-2" />
-                      <p className="text-sm font-bold text-white">No hay propuestas esperando votos</p>
-                      <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                    <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-th-border bg-th-card">
+                      <Sparkles className="size-8 mx-auto text-th-amber mb-2" />
+                      <p className="text-sm font-display font-bold text-th-text">No hay propuestas esperando votos</p>
+                      <p className="text-xs text-th-text-2 mt-1 max-w-xs mx-auto">
                         Cuando los invitados propongan canciones desde sus celulares, aparecerán aquí hasta juntar {effectiveThreshold} votos.
                       </p>
                     </div>
@@ -1748,22 +1719,22 @@ export function PanelPlaybackFooter({
                     candidateProposals.map((item, index) => (
                       <div
                         key={item.id}
-                        className="p-3 rounded-xl bg-[#121626] border border-[#232B42] hover:border-[#2f3b5c] transition-all flex items-center justify-between gap-3 shadow-sm"
+                        className="p-3 rounded-xl bg-th-card border border-th-border hover:border-th-border-strong transition-colors flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="size-7 rounded-lg bg-[#181F33] border border-[#283250] text-amber-400 font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                          <div className="size-7 rounded-lg bg-th-recessed border border-th-border text-th-amber font-mono text-xs font-bold flex items-center justify-center shrink-0 tabular-nums">
                             #{index + 1}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h5 className="text-xs font-bold text-white truncate">{item.title}</h5>
-                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{item.artist}</p>
+                            <h5 className="text-xs font-display font-bold text-th-text truncate">{item.title}</h5>
+                            <p className="text-[11px] text-th-text-2 truncate mt-0.5">{item.artist}</p>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="font-mono text-[10px] text-amber-300 font-bold">
+                              <span className="font-mono text-[10px] text-th-amber font-bold tabular-nums">
                                 {item.voteCount}/{effectiveThreshold} votos
                               </span>
-                              <div className="w-16 h-1.5 rounded-full bg-[#181F33] overflow-hidden">
+                              <div className="w-16 h-1.5 rounded-full bg-th-recessed overflow-hidden">
                                 <div
-                                  className="h-full bg-amber-400 rounded-full"
+                                  className="h-full bg-th-amber rounded-full"
                                   style={{ width: `${Math.min(100, (item.voteCount / effectiveThreshold) * 100)}%` }}
                                 />
                               </div>
@@ -1771,49 +1742,44 @@ export function PanelPlaybackFooter({
                           </div>
                         </div>
 
-                        {/* Actions for candidate */}
                         <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Promote directly to Cola Activa */}
                           <button
                             type="button"
                             onClick={() => void handlePromoteCandidateToQueue(item)}
                             disabled={pendingActionId === item.id}
-                            className="px-2.5 py-1.5 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-200 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            className="h-8 px-2.5 rounded-lg bg-th-accent-soft hover:bg-th-accent text-th-accent hover:text-white border border-th-accent/30 text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
                             title="Aprobar y subir a la Cola Principal"
                           >
-                            <ArrowUp className="size-3.5 text-cyan-300" />
+                            <ArrowUp className="size-3.5" />
                             <span>Subir a Cola</span>
                           </button>
 
-                          {/* Play Now directly */}
                           <button
                             type="button"
                             onClick={() => void handlePlayQueueItemNow(item)}
                             disabled={pendingActionId === item.id}
-                            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-mono text-[11px] font-bold flex items-center gap-1 active:scale-95 transition-all"
+                            className="h-8 px-2.5 rounded-lg bg-th-emerald-soft hover:bg-th-emerald text-th-emerald hover:text-white border border-th-emerald/30 text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all cursor-pointer"
                             title="Reproducir inmediatamente en TV"
                           >
                             <PlayCircle className="size-3.5" />
                             <span className="hidden sm:inline">Poner Ya</span>
                           </button>
 
-                          {/* Add +1 vote */}
                           <button
                             type="button"
                             onClick={() => void handleBoostQueueItem(item, "candidate")}
                             disabled={pendingActionId === item.id}
-                            className="px-2 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-mono text-[10px] font-bold flex items-center justify-center active:scale-95 transition-all"
+                            className="h-8 px-2 rounded-lg bg-th-amber-soft hover:bg-th-amber text-th-amber hover:text-white border border-th-amber/30 font-mono text-[11px] font-bold flex items-center justify-center active:scale-95 transition-all cursor-pointer"
                             title="Sumar +1 voto"
                           >
                             +1
                           </button>
 
-                          {/* Veto */}
                           <button
                             type="button"
                             onClick={() => void handleVetoQueueItem(item)}
                             disabled={pendingActionId === item.id}
-                            className="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center active:scale-95 transition-all"
+                            className="size-8 rounded-lg bg-th-danger-soft hover:bg-th-danger text-th-danger hover:text-white border border-th-danger/30 flex items-center justify-center active:scale-95 transition-all cursor-pointer"
                             title="Rechazar propuesta"
                           >
                             <Trash2 className="size-3.5" />

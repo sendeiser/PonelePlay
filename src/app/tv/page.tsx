@@ -62,7 +62,7 @@ export default function TvEntryPage() {
   const digits = pinCode ? pinCode.split("") : ["-", "-", "-", "-", "-", "-"];
 
   return (
-    <div className="min-h-screen w-full bg-[#07090e] text-[#dfe2ef] flex flex-col justify-between p-6 sm:p-12 relative overflow-hidden select-none">
+    <div data-theme="dark" className="dark min-h-screen w-full bg-[#07090e] text-[#dfe2ef] flex flex-col justify-between p-6 sm:p-12 relative overflow-hidden select-none">
       {/* Background neon ambient glows */}
       <div className="absolute -top-40 -left-40 size-96 rounded-full bg-indigo-600/15 blur-3xl pointer-events-none" />
       <div className="absolute -bottom-40 -right-40 size-96 rounded-full bg-cyan-600/15 blur-3xl pointer-events-none" />

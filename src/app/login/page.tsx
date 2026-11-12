@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { signInOwner, getOwnerVenueSlug } from "@/lib/api/auth";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 function LoginForm() {
   const router = useRouter();
@@ -127,28 +128,31 @@ function LoginForm() {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 rounded-2xl border border-[#232b42] bg-[#0a0e17]/90 backdrop-blur-2xl shadow-2xl overflow-hidden min-h-[580px]">
+    <div className="w-full max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 rounded-2xl card-panel overflow-hidden min-h-[580px]">
       {/* LEFT / MAIN: Dual-Mode Auth Terminal (7 cols) */}
       <div className="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-between">
         <div>
-          {/* Back link */}
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-slate-400 hover:text-white uppercase mb-4 py-2 px-1 transition-colors min-h-[44px]"
-          >
-            <span className="material-symbols-outlined text-sm">arrow_back</span>
-            <span>Volver a PonelePlay</span>
-          </Link>
+          {/* Top utility bar */}
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs font-mono tracking-wider text-th-text-2 hover:text-th-text uppercase py-2 px-1 transition-colors min-h-[44px]"
+            >
+              <span className="material-symbols-outlined text-sm">arrow_back</span>
+              <span>Volver a PonelePlay</span>
+            </Link>
+            <ThemeToggle variant="compact" />
+          </div>
 
           {/* Main Auth Header Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#181b25] rounded-xl border border-[#232b42] mb-5">
-            <span className="material-symbols-outlined text-base text-indigo-400">admin_panel_settings</span>
-            <span className="font-mono text-xs font-bold text-white">Acceso Principal · Cabina & Administración</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-th-recessed rounded-xl border border-th-border mb-5">
+            <span className="material-symbols-outlined text-base text-th-accent">admin_panel_settings</span>
+            <span className="font-mono text-xs font-bold text-th-text">Acceso Principal · Cabina & Administración</span>
           </div>
 
           {error && (
-            <div className="mb-5 rounded-xl bg-red-950/60 border border-red-500/40 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
-              <span className="material-symbols-outlined text-base text-red-400 shrink-0">error</span>
+            <div className="mb-5 rounded-xl bg-th-danger-soft border border-th-danger/30 p-3 text-xs text-th-danger flex items-center gap-2 font-mono">
+              <span className="material-symbols-outlined text-base text-th-danger shrink-0">error</span>
               <span>{error}</span>
             </div>
           )}
@@ -156,16 +160,16 @@ function LoginForm() {
           {/* MODE 1: OWNER EMAIL & PASSWORD */}
           {authMode === "owner" && (
             <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">
+              <h2 className="font-display text-xl font-bold text-th-text tracking-tight">
                 Iniciar sesión como Dueño
               </h2>
-              <p className="text-xs text-slate-400 mt-1 mb-5">
+              <p className="text-xs text-th-text-2 mt-1 mb-5">
                 Ingresá con tu cuenta para administrar la noche, catálogo y códigos.
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
+                  <label htmlFor="email" className="ui-label font-mono uppercase">
                     Email
                   </label>
                   <input
@@ -174,7 +178,7 @@ function LoginForm() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={loading}
-                    className="w-full rounded-xl bg-[#131722] border border-[#232b42] px-4 py-3 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                    className="ui-input h-11 font-mono text-xs"
                     placeholder="demo@poneleplay.com"
                     autoComplete="email"
                     required
@@ -182,7 +186,7 @@ function LoginForm() {
                 </div>
 
                 <div>
-                  <label htmlFor="password" className="block text-xs font-mono text-slate-300 mb-1.5 uppercase font-semibold">
+                  <label htmlFor="password" className="ui-label font-mono uppercase">
                     Contraseña
                   </label>
                   <div className="relative">
@@ -192,7 +196,7 @@ function LoginForm() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={loading}
-                      className="w-full rounded-xl bg-[#131722] border border-[#232b42] px-4 py-3 pr-11 text-white placeholder:text-slate-600 font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                      className="ui-input h-11 pr-11 font-mono text-xs"
                       placeholder="••••••••••••"
                       autoComplete="current-password"
                       required
@@ -202,7 +206,7 @@ function LoginForm() {
                       onClick={() => setShowPassword(!showPassword)}
                       tabIndex={-1}
                       aria-label={showPassword ? "Ocultar contraseña" : "Ver contraseña"}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-th-muted hover:text-th-text p-1 transition-colors cursor-pointer"
                     >
                       <span className="material-symbols-outlined text-lg">
                         {showPassword ? "visibility_off" : "visibility"}
@@ -214,7 +218,7 @@ function LoginForm() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-xs rounded-xl py-3.5 shadow-md shadow-indigo-600/30 active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full mt-2 bg-th-accent hover:bg-th-accent-hover text-white font-semibold text-sm rounded-xl h-11 shadow-sm active:scale-[0.99] transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   {loading ? (
                     <>
@@ -232,10 +236,10 @@ function LoginForm() {
           {/* MODE 2: STAFF QUICK PIN KEYPAD */}
           {authMode === "pin" && (
             <div className="flex flex-col items-center">
-              <h2 className="text-xl font-bold text-white tracking-tight">
+              <h2 className="font-display text-xl font-bold text-th-text tracking-tight">
                 Acceso de Mozo por PIN
               </h2>
-              <p className="text-xs text-slate-400 mt-1 mb-4 text-center">
+              <p className="text-xs text-th-text-2 mt-1 mb-4 text-center">
                 Digitá tu código de 4 dígitos para habilitar la terminal.
               </p>
 
@@ -248,8 +252,8 @@ function LoginForm() {
                       key={idx}
                       className={`size-4 rounded-full border transition-all ${
                         filled
-                          ? "bg-cyan-400 border-cyan-300 shadow-[0_0_10px_#4cd7f6]"
-                          : "bg-[#181b25] border-[#232b42]"
+                          ? "bg-th-teal border-th-teal"
+                          : "bg-th-recessed border-th-border"
                       }`}
                     />
                   );
@@ -267,7 +271,7 @@ function LoginForm() {
                       else if (btn === "⌫") handlePinBackspace();
                       else handlePinPress(btn);
                     }}
-                    className="h-12 rounded-xl bg-[#181b25] hover:bg-[#222738] active:scale-95 border border-[#232b42] text-white font-mono text-lg font-bold transition-all flex items-center justify-center"
+                    className="h-12 rounded-xl bg-th-recessed hover:bg-th-hover active:scale-95 border border-th-border text-th-text font-mono text-lg font-bold transition-all flex items-center justify-center cursor-pointer"
                   >
                     {btn}
                   </button>
@@ -277,38 +281,38 @@ function LoginForm() {
               <button
                 type="button"
                 onClick={() => handlePinSubmit("1234")}
-                className="mt-4 text-xs font-mono text-cyan-400 hover:underline"
+                className="mt-4 text-xs font-mono text-th-teal hover:underline cursor-pointer"
               >
-                ⚡ Ingresar con PIN Demo (1234)
+                Ingresar con PIN Demo (1234)
               </button>
             </div>
           )}
         </div>
 
         {/* Footer shortcuts */}
-        <div className="mt-6 pt-5 border-t border-[#1E2333] flex flex-col gap-3">
+        <div className="mt-6 pt-5 border-t border-th-border flex flex-col gap-3">
           {authMode === "owner" && (
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={fillDemo}
-                className="flex-1 text-xs font-mono text-indigo-300 hover:text-white bg-[#181b25] hover:bg-[#202534] border border-indigo-500/30 rounded-xl py-2 px-3 transition-colors text-center"
+                className="flex-1 text-xs font-medium text-th-text-2 hover:text-th-text bg-th-recessed hover:bg-th-hover border border-th-border rounded-xl py-2.5 px-3 transition-colors text-center cursor-pointer"
               >
-                📝 Llenar demo
+                Llenar demo
               </button>
               <button
                 type="button"
                 onClick={handleDemoLogin}
-                className="flex-1 text-xs font-mono text-white bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/50 rounded-xl py-2 px-3 transition-colors text-center font-bold"
+                className="flex-1 text-xs font-semibold text-th-accent hover:text-white bg-th-accent-soft hover:bg-th-accent border border-th-accent/30 rounded-xl py-2.5 px-3 transition-colors text-center cursor-pointer"
               >
-                ⚡ Entrar 1-Clic Demo
+                Entrar 1-Clic Demo
               </button>
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-500 font-mono">
+          <p className="text-center text-xs text-th-muted font-mono">
             ¿No registraste tu bar o fiesta todavía?{" "}
-            <Link href="/signup" className="text-indigo-400 hover:underline font-semibold inline-block py-2 px-1">
+            <Link href="/signup" className="text-th-accent hover:underline font-semibold inline-block py-2 px-1">
               Crear cuenta
             </Link>
           </p>
@@ -316,49 +320,49 @@ function LoginForm() {
       </div>
 
       {/* RIGHT: Venue & Terminal Telemetry Card (5 cols) */}
-      <div className="hidden lg:flex lg:col-span-5 bg-[#131722] border-t lg:border-t-0 lg:border-l border-[#232b42] p-6 sm:p-8 flex-col justify-between">
+      <div className="hidden lg:flex lg:col-span-5 bg-th-recessed border-t lg:border-t-0 lg:border-l border-th-border p-6 sm:p-8 flex-col justify-between">
         <div className="space-y-6">
           <div className="flex items-center gap-3">
-            <div className="size-10 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
+            <div className="size-10 rounded-xl bg-th-accent flex items-center justify-center text-white shadow-sm">
               <span className="material-symbols-outlined text-xl">sports_bar</span>
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">Terminal Nocturna</h3>
-              <p className="font-mono text-xs text-slate-400">PonelePlay Control Panel</p>
+              <h3 className="font-display font-bold text-th-text text-base">Terminal Nocturna</h3>
+              <p className="font-mono text-xs text-th-text-2">PonelePlay Control Panel</p>
             </div>
           </div>
 
-          <div className="space-y-3 font-mono text-xs text-slate-300 bg-[#0a0e17] p-4 rounded-xl border border-[#232b42]">
-            <div className="flex justify-between items-center py-1 border-b border-[#1E2333]">
-              <span className="text-slate-500">Terminal:</span>
-              <span className="font-bold text-white">Mostrador #01</span>
+          <div className="space-y-3 font-mono text-xs text-th-text-2 card-panel p-4 rounded-xl">
+            <div className="flex justify-between items-center py-1 border-b border-th-border">
+              <span className="text-th-muted">Terminal:</span>
+              <span className="font-bold text-th-text">Mostrador #01</span>
             </div>
-            <div className="flex justify-between items-center py-1 border-b border-[#1E2333]">
-              <span className="text-slate-500">Conectividad:</span>
-              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="flex justify-between items-center py-1 border-b border-th-border">
+              <span className="text-th-muted">Conectividad:</span>
+              <span className="text-th-emerald font-bold flex items-center gap-1.5">
+                <span className="size-1.5 rounded-full bg-th-emerald animate-pulse" />
                 18ms Online
               </span>
             </div>
             <div className="flex justify-between items-center py-1">
-              <span className="text-slate-500">Host Audio:</span>
-              <span className="text-cyan-400 font-bold">HDMI 48kHz Stereo</span>
+              <span className="text-th-muted">Host Audio:</span>
+              <span className="text-th-teal font-bold">HDMI 48kHz Stereo</span>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-slate-300 space-y-1">
-            <div className="font-bold text-indigo-300 flex items-center gap-1.5">
+          <div className="p-3.5 rounded-xl bg-th-accent-soft border border-th-accent/25 text-xs text-th-text space-y-1">
+            <div className="font-bold text-th-accent flex items-center gap-1.5">
               <span className="material-symbols-outlined text-sm">security</span>
               <span>Protocolo Seguro de Salón</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+            <p className="text-[11px] text-th-text-2 leading-relaxed">
               El acceso de mozos por PIN no expone credenciales maestras y limita los permisos a emisión de tickets y moderación.
             </p>
           </div>
         </div>
 
-        <div className="pt-6 font-mono text-[10px] text-slate-500 text-center">
-          PONELEPLAY SYSTEM · V1.0.0 STITCH NOCTURNE
+        <div className="pt-6 font-mono text-[10px] text-th-muted text-center">
+          PONELEPLAY SYSTEM · CABINA & CONTROL
         </div>
       </div>
     </div>
@@ -367,8 +371,8 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-[#090D16] p-4 sm:p-8">
-      <Suspense fallback={<div className="text-slate-400 font-mono text-xs">Cargando...</div>}>
+    <main className="min-h-screen flex items-center justify-center bg-th-canvas tech-bg text-th-text p-4 sm:p-8">
+      <Suspense fallback={<div className="text-th-text-2 font-mono text-xs">Cargando...</div>}>
         <LoginForm />
       </Suspense>
     </main>

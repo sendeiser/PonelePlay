@@ -156,19 +156,19 @@ export function PrintQrModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-[#0c101c] border border-[#232B42] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="relative w-full max-w-2xl card-panel rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#1E2538] flex items-center justify-between bg-[#101524]">
+        <div className="px-6 py-4 border-b border-th-border flex items-center justify-between bg-th-recessed">
           <div className="flex items-center gap-2.5">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-md">
+            <div className="size-9 rounded-xl bg-th-accent flex items-center justify-center text-th-on-accent shadow-sm">
               <Printer className="size-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight">
+              <h3 className="font-display text-base font-bold text-th-text tracking-tight">
                 Imprimir Código QR para Mesas
               </h3>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-th-muted">
                 Cartel listo para imprimir en PDF o descargar en alta resolución
               </p>
             </div>
@@ -177,23 +177,23 @@ export function PrintQrModal({
           <button
             type="button"
             onClick={onClose}
-            className="size-8 rounded-lg bg-[#181F33] text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+            className="size-8 rounded-lg bg-th-card border border-th-border text-th-muted hover:text-th-text flex items-center justify-center transition-colors"
           >
             <X className="size-4" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Printable Preview Sheet */}
+        <div className="flex-1 min-h-0 ui-scroll-container p-6 space-y-6">
+          {/* Printable Preview Sheet (White paper poster always) */}
           <div className="flex justify-center">
             <div
               ref={printAreaRef}
-              className="print-qr-sheet w-full max-w-sm bg-white text-slate-900 rounded-2xl p-6 shadow-xl border-2 border-slate-900 text-center flex flex-col items-center select-none"
+              className="print-qr-sheet w-full max-w-sm bg-white text-slate-900 rounded-2xl p-6 shadow-lg border-2 border-slate-900 text-center flex flex-col items-center select-none"
             >
               {/* Badge */}
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 font-mono text-[10px] font-bold tracking-wider mb-2 border border-indigo-200">
-                <Sparkles className="size-3 text-indigo-600" />
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-700 font-mono text-[10px] font-bold tracking-wider mb-2 border border-blue-200">
+                <Sparkles className="size-3 text-blue-600" />
                 <span>PONELEPLAY · MÚSICA EN VIVO</span>
               </div>
 
@@ -201,7 +201,7 @@ export function PrintQrModal({
               <h2 className="text-2xl font-black text-slate-950 tracking-tight uppercase leading-tight">
                 {venueName}
               </h2>
-              <p className="text-xs font-bold text-indigo-600 mt-0.5 tracking-tight">
+              <p className="text-xs font-bold text-blue-600 mt-0.5 tracking-tight">
                 ¡Elegí la música desde tu mesa!
               </p>
 
@@ -226,15 +226,15 @@ export function PrintQrModal({
               {/* 3 Steps */}
               <div className="w-full space-y-2 text-left bg-slate-50 p-3 rounded-xl border border-slate-200 font-sans text-xs">
                 <div className="flex items-center gap-2 text-slate-800">
-                  <Smartphone className="size-4 text-indigo-600 shrink-0" />
+                  <Smartphone className="size-4 text-blue-600 shrink-0" />
                   <span><strong>1. Escaneá el QR</strong> con tu celular</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-800">
-                  <Music2 className="size-4 text-indigo-600 shrink-0" />
+                  <Music2 className="size-4 text-blue-600 shrink-0" />
                   <span><strong>2. Proponé y votá</strong> canciones de la lista</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-800">
-                  <Tv className="size-4 text-indigo-600 shrink-0" />
+                  <Tv className="size-4 text-blue-600 shrink-0" />
                   <span><strong>3. ¡Escuchalas sonar</strong> en la TV del bar!</span>
                 </div>
               </div>
@@ -247,8 +247,8 @@ export function PrintQrModal({
           </div>
 
           {/* Quick Notice */}
-          <div className="p-3 rounded-xl bg-[#14192a] border border-[#232B42] flex items-center gap-3 text-xs text-slate-300">
-            <span className="material-symbols-outlined text-cyan-400 text-lg">info</span>
+          <div className="p-3.5 rounded-xl bg-th-recessed border border-th-border flex items-center gap-3 text-xs text-th-secondary">
+            <span className="material-symbols-outlined text-th-teal text-lg">info</span>
             <p>
               Al hacer clic en <strong>Imprimir / Guardar en PDF</strong>, seleccioná la opción <em>&ldquo;Guardar como PDF&rdquo;</em> en tu navegador para generar el archivo listo para imprimir en hoja A4 o soporte de mesa.
             </p>
@@ -256,34 +256,34 @@ export function PrintQrModal({
         </div>
 
         {/* Action Footer */}
-        <div className="p-4 border-t border-[#1E2538] bg-[#0c101c] flex flex-wrap items-center justify-between gap-3">
+        <div className="p-4 border-t border-th-border bg-th-recessed flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
             onClick={handleCopyLink}
-            className="px-3.5 py-2 rounded-xl bg-[#181F33] hover:bg-[#202944] text-slate-300 hover:text-white border border-[#232B42] font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
+            className="px-3.5 py-2 rounded-xl bg-th-card hover:bg-th-card-hover text-th-secondary hover:text-th-text border border-th-border font-mono text-xs font-semibold flex items-center gap-1.5 transition-all"
           >
-            {copied ? <Check className="size-4 text-emerald-400" /> : <Copy className="size-4" />}
+            {copied ? <Check className="size-4 text-th-emerald" /> : <Copy className="size-4" />}
             <span>{copied ? "¡Enlace Copiado!" : "Copiar Enlace"}</span>
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={generatingPng}
               onClick={handleDownloadPng}
-              className="px-3.5 py-2 rounded-xl bg-[#181F33] hover:bg-[#202944] text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 font-mono text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
+              className="px-3.5 py-2 rounded-xl bg-th-teal-soft hover:bg-th-teal text-th-teal hover:text-white border border-th-teal/30 font-mono text-xs font-semibold flex items-center gap-1.5 transition-all active:scale-95 disabled:opacity-50"
             >
-              <Download className="size-4 text-cyan-400" />
-              <span>{generatingPng ? "Generando..." : "Descargar Imagen (PNG)"}</span>
+              <Download className="size-4" />
+              <span>{generatingPng ? "Generando..." : "Descargar PNG"}</span>
             </button>
 
             <button
               type="button"
               onClick={handlePrint}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-mono text-xs font-bold shadow-lg shadow-indigo-600/30 flex items-center gap-1.5 transition-all active:scale-95"
+              className="px-4 py-2 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all active:scale-95"
             >
               <Printer className="size-4" />
-              <span>Imprimir / Guardar en PDF</span>
+              <span>Imprimir / PDF</span>
             </button>
           </div>
         </div>

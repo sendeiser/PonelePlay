@@ -82,26 +82,23 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
   return (
     <form
       onSubmit={handleUpload}
-      className="rounded-2xl border border-cream/10 bg-white/[0.02] p-5 space-y-4"
+      className="rounded-2xl border border-th-border bg-th-recessed/50 p-5 space-y-4"
     >
-      <div className="flex items-center gap-2 border-b border-cream/10 pb-3">
-        <Upload className="size-4 text-mint" />
-        <h3 className="font-display text-sm font-bold text-cream">
+      <div className="flex items-center gap-2 border-b border-th-border pb-3">
+        <Upload className="size-4 text-th-teal" />
+        <h3 className="font-mono text-xs font-bold text-th-text uppercase tracking-wider">
           Subir archivo MP3
         </h3>
       </div>
 
       {error ? (
-        <p role="alert" className="text-xs text-coral">
+        <p role="alert" className="text-xs font-mono text-th-danger">
           {error}
         </p>
       ) : null}
 
       <div>
-        <label
-          htmlFor="mp3-file"
-          className="block font-mono text-[10px] uppercase tracking-wider text-cream/50"
-        >
+        <label htmlFor="mp3-file" className="ui-label">
           Archivo de audio (.mp3, máx 25 MB)
         </label>
         <input
@@ -110,7 +107,7 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
           type="file"
           accept=".mp3,audio/mpeg"
           onChange={handleFileSelect}
-          className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 p-2 text-xs text-cream/80 file:mr-3 file:rounded-lg file:border-0 file:bg-mint/15 file:px-3 file:py-1 file:font-mono file:text-[11px] file:text-mint hover:file:bg-mint/25"
+          className="mt-1.5 w-full rounded-xl border border-th-border bg-th-card p-2 text-xs text-th-secondary file:mr-3 file:rounded-lg file:border-0 file:bg-th-teal-soft file:px-3 file:py-1.5 file:font-mono file:text-[11px] file:font-semibold file:text-th-teal hover:file:opacity-90"
           required
         />
       </div>
@@ -119,10 +116,7 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
         <div className="space-y-3 pt-1">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label
-                htmlFor="upload-title"
-                className="block font-mono text-[10px] uppercase tracking-wider text-cream/50"
-              >
+              <label htmlFor="upload-title" className="ui-label">
                 Título
               </label>
               <input
@@ -130,16 +124,13 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 text-xs text-cream placeholder:text-cream/25 focus:border-mint focus:outline-none"
+                className="ui-input mt-1"
                 required
               />
             </div>
 
             <div>
-              <label
-                htmlFor="upload-artist"
-                className="block font-mono text-[10px] uppercase tracking-wider text-cream/50"
-              >
+              <label htmlFor="upload-artist" className="ui-label">
                 Artista
               </label>
               <input
@@ -147,7 +138,7 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
                 type="text"
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-cream/15 bg-white/5 px-3 py-2 text-xs text-cream placeholder:text-cream/25 focus:border-mint focus:outline-none"
+                className="ui-input mt-1"
               />
             </div>
           </div>
@@ -157,9 +148,9 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
               type="checkbox"
               checked={isExplicit}
               onChange={(e) => setIsExplicit(e.target.checked)}
-              className="size-4 rounded border-cream/20 bg-white/5 text-mint focus:ring-0"
+              className="size-4 rounded accent-blue-600 border-th-border bg-th-recessed"
             />
-            <span className="text-xs text-cream/70">
+            <span className="text-xs font-mono text-th-secondary">
               Contenido explícito
             </span>
           </label>
@@ -167,7 +158,7 @@ export function UploadTrack({ venueId, onUploaded }: UploadTrackProps) {
           <button
             type="submit"
             disabled={loading || !title.trim()}
-            className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-mint py-2.5 font-display text-xs font-bold text-[#041611] hover:bg-mint/90 disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-th-teal hover:opacity-90 py-2.5 font-mono text-xs font-bold text-white shadow-sm disabled:opacity-50 transition-opacity"
           >
             {loading ? (
               <RefreshCw className="size-3.5 animate-spin" />

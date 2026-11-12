@@ -23,7 +23,7 @@ describe("PartyModeControlBar component", () => {
     expect(screen.getByText(/Híbrido Turbo/i)).toBeInTheDocument();
     expect(screen.getByText(/Duelos y Ruleta/i)).toBeInTheDocument();
     expect(screen.getByText(/Límite de votos por persona/i)).toBeInTheDocument();
-    expect(screen.getByText(/Votos para que la canción suba/i)).toBeInTheDocument();
+    expect(screen.getByText(/Votos necesarios para ingresar a la cola/i)).toBeInTheDocument();
 
     const reloadBtn = screen.getByRole("button", { name: /Recargar votos a todos/i });
     fireEvent.click(reloadBtn);

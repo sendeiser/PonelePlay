@@ -105,7 +105,7 @@ export function TicketModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
       {/* Click outside backdrop */}
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
@@ -114,19 +114,19 @@ export function TicketModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="ticket-modal-title"
-        className="relative z-10 w-full max-w-xl bg-[#0f1420] border border-[#232b42] rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 text-white my-auto max-h-[90vh] overflow-y-auto"
+        className="relative z-10 w-full max-w-xl card-panel rounded-2xl shadow-2xl p-6 sm:p-8 space-y-6 text-th-text my-auto max-h-[90vh] ui-scroll-container"
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#1E2333]">
+        <div className="flex items-start justify-between gap-4 pb-4 border-b border-th-border">
           <div>
-            <div className="flex items-center gap-2 font-mono text-xs text-indigo-400 font-semibold mb-1">
+            <div className="flex items-center gap-2 font-mono text-xs text-th-accent font-semibold mb-1">
               <span className="material-symbols-outlined text-base">confirmation_number</span>
               <span>TERMINAL DE TICKETS JUKEBOX</span>
             </div>
-            <h2 id="ticket-modal-title" className="text-xl font-bold text-white tracking-tight">
+            <h2 id="ticket-modal-title" className="font-display text-xl font-bold text-th-text tracking-tight">
               {latestCode ? "Ticket Emitido Exitosamente" : "Emitir Ticket de Consumición"}
             </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-th-muted mt-0.5">
               {latestCode
                 ? "Entregá el ticket al cliente para canjear votos en la rockola."
                 : "Generá códigos de un solo uso para habilitar votos desde mesas o barra."}
@@ -136,7 +136,7 @@ export function TicketModal({
           <button
             type="button"
             onClick={onClose}
-            className="size-8 rounded-lg border border-[#232b42] text-slate-400 hover:text-white hover:bg-[#181b25] flex items-center justify-center transition-colors shrink-0"
+            className="size-8 rounded-lg border border-th-border text-th-muted hover:text-th-text hover:bg-th-card-hover flex items-center justify-center transition-colors shrink-0"
             aria-label="Cerrar modal"
           >
             <span className="material-symbols-outlined text-lg">close</span>
@@ -144,8 +144,8 @@ export function TicketModal({
         </div>
 
         {error && (
-          <div className="rounded-xl border border-red-500/40 bg-red-950/60 p-3 text-xs text-red-200 flex items-center gap-2 font-mono">
-            <span className="material-symbols-outlined text-base text-red-400">error</span>
+          <div className="rounded-xl border border-th-danger/35 bg-th-danger-soft p-3 text-xs text-th-danger flex items-center gap-2 font-mono">
+            <span className="material-symbols-outlined text-base">error</span>
             <span>{error}</span>
           </div>
         )}
@@ -155,12 +155,12 @@ export function TicketModal({
           <div className="space-y-5">
             {/* Credit Pack Selector */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                  <span className="material-symbols-outlined text-indigo-400 text-base">toll</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="ui-label flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-th-accent text-base">toll</span>
                   Seleccionar Paquete de Créditos
                 </label>
-                <span className="font-mono text-[10px] text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/25">
+                <span className="font-mono text-[10px] font-semibold text-th-teal bg-th-teal-soft px-2.5 py-0.5 rounded-full border border-th-teal/25">
                   1 Crédito = 1 Voto
                 </span>
               </div>
@@ -179,8 +179,8 @@ export function TicketModal({
                       }}
                       className={`flex flex-col items-center justify-center p-3 rounded-xl border transition-all active:scale-95 ${
                         isSelected
-                          ? "bg-indigo-600 text-white border-indigo-400 shadow-lg shadow-indigo-600/40 font-bold scale-[1.02]"
-                          : "bg-[#141824] text-slate-300 border-[#232b42] hover:border-slate-500 hover:text-white"
+                          ? "bg-th-accent text-th-on-accent border-th-accent shadow-sm font-bold scale-[1.02]"
+                          : "bg-th-recessed text-th-secondary border-th-border hover:border-th-border-strong hover:text-th-text"
                       }`}
                     >
                       <span className="font-mono text-[10px] opacity-75">+{amount}</span>
@@ -197,9 +197,7 @@ export function TicketModal({
             {/* Custom Amount & Table / Destination */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1.5 font-semibold">
-                  Cantidad Manual
-                </label>
+                <label className="ui-label mb-1.5">Cantidad Manual</label>
                 <input
                   type="number"
                   min={1}
@@ -213,18 +211,16 @@ export function TicketModal({
                     }
                   }}
                   placeholder="Otro monto..."
-                  className="w-full h-11 px-3.5 rounded-xl bg-[#0a0e17] border border-[#232b42] text-white font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                  className="ui-input !h-11"
                 />
               </div>
 
               <div>
-                <label className="font-mono text-[10px] text-slate-400 uppercase tracking-wider block mb-1.5 font-semibold">
-                  Mesa / Destino
-                </label>
+                <label className="ui-label mb-1.5">Mesa / Destino</label>
                 <select
                   value={tableLabel}
                   onChange={(e) => setTableLabel(e.target.value)}
-                  className="w-full h-11 px-3.5 rounded-xl bg-[#0a0e17] border border-[#232b42] text-white font-mono text-xs focus:outline-none focus:border-indigo-400 transition-colors"
+                  className="ui-input !h-11"
                 >
                   <option value="Mesa General">Mesa General</option>
                   <option value="Barra Central">Barra Central</option>
@@ -246,7 +242,7 @@ export function TicketModal({
                 type="button"
                 disabled={loading || credits <= 0}
                 onClick={handleGenerate}
-                className="w-full py-4 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-sm tracking-tight shadow-lg shadow-indigo-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 disabled:opacity-50"
+                className="w-full py-3.5 px-5 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono font-bold text-sm tracking-tight shadow-sm active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 disabled:opacity-50"
               >
                 {loading ? (
                   <span className="inline-block size-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -260,9 +256,9 @@ export function TicketModal({
         ) : (
           /* ================= STAGE 2: GENERATED THERMAL RECEIPT ================= */
           <div className="space-y-6">
-            {/* Centered Thermal Ticket with comfortable padding */}
+            {/* Centered Thermal Ticket with comfortable padding (always white thermal paper) */}
             <div className="flex justify-center">
-              <div className="w-full max-w-sm thermal-receipt rounded-2xl p-6 sm:p-7 text-slate-900 border border-slate-300 shadow-2xl relative bg-white">
+              <div className="w-full max-w-sm thermal-receipt rounded-2xl p-6 sm:p-7 text-slate-900 border border-slate-300 shadow-lg relative bg-white">
                 {/* Header */}
                 <div className="text-center pb-3 border-b border-dashed border-slate-400">
                   <h3 className="font-bold text-lg uppercase tracking-tight text-slate-900">
@@ -284,7 +280,7 @@ export function TicketModal({
                   <div className="font-mono text-3xl sm:text-4xl font-black tracking-[0.25em] text-slate-900 bg-slate-100 py-3 px-4 rounded-xl border border-slate-300 select-all">
                     {latestCode.code}
                   </div>
-                  <span className="font-mono text-xs font-bold text-indigo-700 block pt-1">
+                  <span className="font-mono text-xs font-bold text-blue-700 block pt-1">
                     +{latestCode.credits} CRÉDITOS PARA VOTAR
                   </span>
                 </div>
@@ -326,7 +322,7 @@ export function TicketModal({
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-mono font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-indigo-600/30 active:scale-95 transition-all"
+                  className="py-3 px-4 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-mono font-bold text-xs flex items-center justify-center gap-2 shadow-sm active:scale-95 transition-all"
                 >
                   <span className="material-symbols-outlined text-base">print</span>
                   <span>Imprimir</span>
@@ -335,9 +331,9 @@ export function TicketModal({
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="py-3 px-4 rounded-xl bg-[#141824] hover:bg-[#1c2233] border border-[#232b42] text-slate-200 font-mono font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
+                  className="py-3 px-4 rounded-xl bg-th-recessed hover:bg-th-card-hover border border-th-border text-th-text font-mono font-bold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all"
                 >
-                  <span className="material-symbols-outlined text-base text-cyan-400">
+                  <span className="material-symbols-outlined text-base text-th-teal">
                     {copied ? "check" : "content_copy"}
                   </span>
                   <span>{copied ? "¡Copiado!" : "Copiar Código"}</span>
@@ -348,7 +344,7 @@ export function TicketModal({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="text-xs font-mono text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1.5 transition-colors py-2 px-1"
+                  className="text-xs font-mono text-th-accent hover:underline font-semibold flex items-center gap-1.5 transition-colors py-2 px-1"
                 >
                   <span className="material-symbols-outlined text-base">add_circle</span>
                   <span>Emitir otro ticket</span>
@@ -357,7 +353,7 @@ export function TicketModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="text-xs font-mono text-slate-400 hover:text-white transition-colors py-2 px-3 rounded-lg border border-[#232b42] hover:bg-[#181b25]"
+                  className="text-xs font-mono text-th-secondary hover:text-th-text transition-colors py-2 px-3 rounded-lg border border-th-border bg-th-recessed hover:bg-th-card-hover"
                 >
                   Listo / Cerrar
                 </button>

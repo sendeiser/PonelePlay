@@ -13,6 +13,7 @@ import {
   Swords,
 } from "lucide-react";
 import { BrandMark, Wordmark } from "@/components/brand";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { usePwa } from "@/components/pwa-provider";
 import { ensureAnonymousParticipant } from "@/lib/api/anon";
 import { createNightStateSource } from "@/lib/api/night-state";
@@ -516,9 +517,9 @@ export function ClientNight({ slug }: { slug: string }) {
 
   if (loading && !state) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center bg-[#090D16] px-4 text-[#dfe2ef]">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-th-canvas px-4 text-th-text">
         <BrandMark className="size-12 animate-pulse" />
-        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-slate-400">
+        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-th-muted">
           Cargando PonelePlay...
         </p>
       </div>
@@ -529,7 +530,7 @@ export function ClientNight({ slug }: { slug: string }) {
 
   if (!state || phase === "closed") {
     return (
-      <div className="relative min-h-dvh bg-[#090D16] px-4 text-[#dfe2ef]">
+      <div className="relative min-h-dvh bg-th-canvas px-4 text-th-text">
         {offline ? <OfflineBanner /> : null}
         <ClosedState
           venueName={state?.venue.name ?? slug}
@@ -543,13 +544,13 @@ export function ClientNight({ slug }: { slug: string }) {
   const showTurboButtons = isParty && partyConfig.partyMode === "hybrid_turbo";
 
   return (
-    <div className="min-h-screen bg-[#090D16] relative flex flex-col shadow-2xl text-[#dfe2ef]">
+    <div className="min-h-screen bg-th-canvas relative flex flex-col text-th-text">
       {offline ? <OfflineBanner /> : null}
 
       {/* Container Mobile Shell Frame */}
-      <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-[#1E2538]/50 relative pb-32">
+      <div className="w-full max-w-md mx-auto min-h-screen flex flex-col border-x border-th-border relative pb-32">
         {/* TOP APP BAR */}
-        <header className="bg-[#0D1220]/95 backdrop-blur-md border-b border-[#1E2538] sticky top-0 z-40 pt-[env(safe-area-inset-top,0px)]">
+        <header className="bg-th-shell/95 backdrop-blur-md border-b border-th-border sticky top-0 z-40 pt-[env(safe-area-inset-top,0px)]">
           <div className="flex justify-between items-center w-full px-3.5 py-2.5 max-w-md mx-auto">
             {/* Brand & Venue Identity */}
             <div className="flex items-center gap-2 min-w-0">
@@ -559,58 +560,60 @@ export function ClientNight({ slug }: { slug: string }) {
                   <Wordmark className="text-base" />
                   <span
                     className={cn(
-                      "font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0",
+                      "font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded border shrink-0 font-bold",
                       isParty
-                        ? "bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/40"
-                        : "bg-indigo-500/15 text-[#c0c1ff] border border-indigo-500/25",
+                        ? "bg-th-amber-soft text-th-amber border-th-amber/35"
+                        : "bg-th-accent-soft text-th-accent border-th-accent/30",
                     )}
                   >
                     {isParty ? "🎉 Fiesta" : "Live"}
                   </span>
                 </div>
-                <p className="truncate font-mono text-[10px] text-slate-400">
+                <p className="truncate font-mono text-[10px] text-th-muted">
                   {state.venue.name}
                 </p>
               </div>
             </div>
 
-            {/* Live Badges: Install App & Credits / Party Status */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Live Badges: Theme, Install App & Credits / Party Status */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <ThemeToggle variant="compact" />
+
               {isInstallable && !isInstalled && (
                 <button
                   type="button"
                   onClick={() => void promptInstall()}
                   aria-label="Instalar app en tu pantalla de inicio"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-mono text-[11px] font-bold active:scale-95 transition-all shadow-sm"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-th-accent-soft hover:bg-th-accent/20 border border-th-accent/30 text-th-accent font-mono text-[11px] font-bold active:scale-95 transition-all shadow-xs"
                   title="Instalar PonelePlay en tu celular"
                 >
-                  <Download className="size-3 text-indigo-400" />
+                  <Download className="size-3 text-th-accent" />
                   <span className="hidden xs:inline">Instalar</span>
                 </button>
               )}
 
               {isParty ? (
                 partyConfig.partyMode === "democratic" && partyConfig.votesPerGuest > 0 ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-400/40">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-th-teal-soft border border-th-teal/35">
                     <span className="text-xs">🗳️</span>
-                    <span className="font-mono text-xs font-bold text-white">
+                    <span className="font-mono text-xs font-bold text-th-text tabular-nums">
                       {democraticVotesRemaining}
                     </span>
-                    <span className="text-[10px] font-mono uppercase text-cyan-200 font-semibold">
-                      votos disp.
+                    <span className="text-[10px] font-mono uppercase text-th-teal font-semibold">
+                      votos
                     </span>
                   </div>
                 ) : partyConfig.partyMode === "hybrid_turbo" ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/40">
-                    <Flame className="size-3.5 text-amber-400" />
-                    <span className="font-mono text-[11px] font-bold text-amber-200">
-                      {turboCooldownLeft > 0 ? `Turbo ${turboCooldownLeft}s` : "🔥 Turbo Listo"}
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-th-amber-soft border border-th-amber/35">
+                    <Flame className="size-3.5 text-th-amber" />
+                    <span className="font-mono text-[11px] font-bold text-th-amber tabular-nums">
+                      {turboCooldownLeft > 0 ? `Turbo ${turboCooldownLeft}s` : "🔥 Turbo"}
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-fuchsia-500/15 border border-fuchsia-400/40">
-                    <span className="font-mono text-[11px] font-bold text-fuchsia-200">
-                      ♾️ Votos Libres
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-th-accent-soft border border-th-accent/30">
+                    <span className="font-mono text-[11px] font-bold text-th-accent">
+                      ♾️ Libre
                     </span>
                   </div>
                 )
@@ -619,15 +622,15 @@ export function ClientNight({ slug }: { slug: string }) {
                   type="button"
                   onClick={() => setTab("canjear")}
                   aria-label={`Tenés ${credits} créditos de votación. Tocá para canjear más.`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/15 to-violet-500/15 border border-indigo-500/30 hover:border-indigo-400 active:scale-95 transition-all"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-th-accent-soft border border-th-accent/30 hover:border-th-accent active:scale-95 transition-all"
                 >
-                  <span className="material-symbols-outlined text-sm text-indigo-400" style={{ fontVariationSettings: "'FILL' 1" }}>
+                  <span className="material-symbols-outlined text-sm text-th-accent" style={{ fontVariationSettings: "'FILL' 1" }}>
                     token
                   </span>
-                  <span className="font-mono text-xs font-bold text-white">
+                  <span className="font-mono text-xs font-bold text-th-text tabular-nums">
                     {credits}
                   </span>
-                  <span className="text-[10px] font-mono uppercase text-slate-400 font-semibold">
+                  <span className="text-[10px] font-mono uppercase text-th-muted font-semibold">
                     {credits === 1 ? "voto" : "votos"}
                   </span>
                 </button>
@@ -647,25 +650,22 @@ export function ClientNight({ slug }: { slug: string }) {
             >
               <div
                 className={cn(
-                  "rounded-xl px-4 py-3 text-xs font-mono font-medium shadow-2xl flex items-center gap-2.5 border",
-                  toast.tone === "ok" &&
-                    "bg-emerald-950/90 text-emerald-200 border-emerald-500/40",
-                  toast.tone === "error" &&
-                    "bg-rose-950/90 text-rose-200 border-rose-500/40",
-                  toast.tone === "info" &&
-                    "bg-indigo-950/90 text-indigo-200 border-indigo-500/40",
+                  "card-panel rounded-xl px-4 py-3 text-xs font-mono font-medium shadow-xl flex items-center gap-2.5 border",
+                  toast.tone === "ok" && "border-th-emerald/45 text-th-emerald",
+                  toast.tone === "error" && "border-th-danger/45 text-th-danger",
+                  toast.tone === "info" && "border-th-accent/45 text-th-accent",
                 )}
               >
                 {toast.tone === "ok" && (
-                  <BadgeCheck className="size-4 shrink-0 text-emerald-400" />
+                  <BadgeCheck className="size-4 shrink-0 text-th-emerald" />
                 )}
                 {toast.tone === "error" && (
-                  <Info className="size-4 shrink-0 text-rose-400" />
+                  <Info className="size-4 shrink-0 text-th-danger" />
                 )}
                 {toast.tone === "info" && (
-                  <Info className="size-4 shrink-0 text-indigo-400" />
+                  <Info className="size-4 shrink-0 text-th-accent" />
                 )}
-                <span className="flex-1 leading-snug">{toast.message}</span>
+                <span className="flex-1 leading-snug text-th-text">{toast.message}</span>
               </div>
             </motion.div>
           )}
@@ -673,22 +673,22 @@ export function ClientNight({ slug }: { slug: string }) {
 
         {/* LIVE 1v1 DUEL MODAL OVERLAY FOR GUESTS */}
         {activeDuel && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-md rounded-2xl border-2 border-amber-400/60 bg-gradient-to-b from-[#1a132c] to-[#0e121f] p-5 shadow-2xl space-y-4">
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="card-panel w-full max-w-md rounded-2xl border-2 border-th-amber/60 p-5 space-y-4">
               <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 border border-amber-400/40 px-3 py-1 text-xs font-mono font-extrabold text-amber-300">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-th-amber-soft border border-th-amber/40 px-3 py-1 text-xs font-mono font-extrabold text-th-amber">
                   <Swords className="size-3.5" />
                   ⚡ DUELO 1 vs 1 EN VIVO
                 </span>
                 <button
                   type="button"
                   onClick={() => setActiveDuel(null)}
-                  className="text-xs font-mono text-slate-400 hover:text-white"
+                  className="text-xs font-mono text-th-muted hover:text-th-text"
                 >
                   Cerrar ✕
                 </button>
               </div>
-              <p className="text-xs text-slate-300">
+              <p className="text-xs text-th-secondary">
                 ¡Elegí cuál de estos dos temas tiene que sonar ahora en la fiesta!
               </p>
               <div className="grid grid-cols-1 gap-3">
@@ -699,18 +699,18 @@ export function ClientNight({ slug }: { slug: string }) {
                   className={cn(
                     "p-3.5 rounded-xl border text-left transition-all flex items-center justify-between",
                     duelVotedChoice === "A"
-                      ? "border-emerald-400 bg-emerald-500/20 text-white"
-                      : "border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-white",
+                      ? "border-th-emerald bg-th-emerald-soft text-th-text"
+                      : "border-th-teal/40 bg-th-teal-soft hover:border-th-teal text-th-text",
                   )}
                 >
                   <div className="min-w-0 pr-2">
-                    <span className="text-[10px] font-mono font-bold text-cyan-300 uppercase">
+                    <span className="text-[10px] font-mono font-bold text-th-teal uppercase">
                       Esquina A
                     </span>
-                    <h4 className="text-sm font-extrabold truncate">{activeDuel.trackA.title}</h4>
-                    <p className="text-xs text-slate-300 truncate">{activeDuel.trackA.artist}</p>
+                    <h4 className="text-sm font-extrabold truncate text-th-text">{activeDuel.trackA.title}</h4>
+                    <p className="text-xs text-th-muted truncate">{activeDuel.trackA.artist}</p>
                   </div>
-                  <span className="shrink-0 rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-mono font-extrabold text-slate-950">
+                  <span className="shrink-0 rounded-lg bg-th-teal px-3 py-1.5 text-xs font-mono font-extrabold text-white">
                     {duelVotedChoice === "A" ? "✓ Votado" : "Votar A"}
                   </span>
                 </button>
@@ -722,18 +722,18 @@ export function ClientNight({ slug }: { slug: string }) {
                   className={cn(
                     "p-3.5 rounded-xl border text-left transition-all flex items-center justify-between",
                     duelVotedChoice === "B"
-                      ? "border-emerald-400 bg-emerald-500/20 text-white"
-                      : "border-fuchsia-400/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-white",
+                      ? "border-th-emerald bg-th-emerald-soft text-th-text"
+                      : "border-th-accent/40 bg-th-accent-soft hover:border-th-accent text-th-text",
                   )}
                 >
                   <div className="min-w-0 pr-2">
-                    <span className="text-[10px] font-mono font-bold text-fuchsia-300 uppercase">
+                    <span className="text-[10px] font-mono font-bold text-th-accent uppercase">
                       Esquina B
                     </span>
-                    <h4 className="text-sm font-extrabold truncate">{activeDuel.trackB.title}</h4>
-                    <p className="text-xs text-slate-300 truncate">{activeDuel.trackB.artist}</p>
+                    <h4 className="text-sm font-extrabold truncate text-th-text">{activeDuel.trackB.title}</h4>
+                    <p className="text-xs text-th-muted truncate">{activeDuel.trackB.artist}</p>
                   </div>
-                  <span className="shrink-0 rounded-lg bg-fuchsia-400 px-3 py-1.5 text-xs font-mono font-extrabold text-slate-950">
+                  <span className="shrink-0 rounded-lg bg-th-accent px-3 py-1.5 text-xs font-mono font-extrabold text-th-on-accent">
                     {duelVotedChoice === "B" ? "✓ Votado" : "Votar B"}
                   </span>
                 </button>
@@ -746,19 +746,19 @@ export function ClientNight({ slug }: { slug: string }) {
         <main className="flex-1 p-3.5 space-y-4">
           {/* PARTY WELCOME & NICKNAME BAR */}
           {isParty && tab === "vivo" && (
-            <section className="rounded-xl border border-fuchsia-500/35 bg-gradient-to-r from-fuchsia-950/35 via-[#141829] to-amber-950/25 p-3 flex items-center justify-between gap-2.5">
+            <section className="card-panel rounded-xl border-th-accent/30 p-3 flex items-center justify-between gap-2.5">
               <div className="min-w-0 flex-1">
-                <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-fuchsia-300">
+                <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-th-accent">
                   🎉 Modo Fiesta Desbloqueado · Sin Códigos
                 </span>
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-1.5 flex items-center gap-2">
                   <input
                     type="text"
                     maxLength={28}
                     value={guestName}
                     onChange={(e) => handleSaveGuestName(e.target.value)}
                     placeholder="Tu nombre o apodo para la TV..."
-                    className="w-full rounded-lg bg-[#0c101b]/90 border border-white/15 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:border-fuchsia-400 focus:outline-none"
+                    className="ui-input py-1.5 text-xs"
                   />
                 </div>
               </div>
@@ -797,26 +797,26 @@ export function ClientNight({ slug }: { slug: string }) {
               />
 
               {/* PROPOSE SONG CTA BANNER */}
-              <section className="relative bg-[#131826] rounded-xl p-1.5 border border-[#1E2538] shadow-md hover:border-indigo-500/40 transition-colors">
+              <section className="card-panel rounded-xl p-1.5 hover:border-th-accent/45 transition-colors">
                 <button
                   type="button"
                   onClick={() => setTab("proponer")}
-                  className="w-full flex items-center justify-between gap-3 bg-[#181F33] hover:bg-[#1C253D] px-4 py-3 rounded-lg border border-[#232B42] active:scale-[0.98] transition-all text-left"
+                  className="w-full flex items-center justify-between gap-3 bg-th-recessed hover:bg-th-accent-soft px-4 py-3 rounded-lg border border-th-border active:scale-[0.98] transition-all text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-600/30 shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-th-accent text-th-on-accent flex items-center justify-center font-bold shadow-xs shrink-0">
                       <span className="material-symbols-outlined text-[20px]">queue_music</span>
                     </div>
                     <div>
-                      <p className="text-sm text-white font-bold leading-tight">
+                      <p className="text-sm text-th-text font-bold leading-tight">
                         {isParty ? "¿Qué tema querés escuchar o dedicar?" : "¿Querés proponer una canción?"}
                       </p>
                       {!isParty && cooldownSeconds > 0 ? (
-                        <p className="text-xs text-amber-300 mt-0.5 font-mono flex items-center gap-1 font-semibold">
+                        <p className="text-xs text-th-amber mt-0.5 font-mono flex items-center gap-1 font-semibold">
                           <span>⏳ Podrás proponer en {formatRemainingTime(cooldownSeconds)}</span>
                         </p>
                       ) : (
-                        <p className="text-xs text-slate-400 mt-0.5">
+                        <p className="text-xs text-th-muted mt-0.5">
                           {isParty
                             ? effectiveThreshold <= 1
                               ? "Pedí gratis + Dedicatoria en TV y Karaoke 🎤"
@@ -826,7 +826,7 @@ export function ClientNight({ slug }: { slug: string }) {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center justify-center size-7 rounded-full bg-[#131826] text-indigo-400 border border-[#232B42] shrink-0">
+                  <div className="flex items-center justify-center size-7 rounded-full bg-th-card text-th-accent border border-th-border shrink-0">
                     <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                   </div>
                 </button>
@@ -834,27 +834,27 @@ export function ClientNight({ slug }: { slug: string }) {
 
               {/* DEDICATION CTA BANNER (Visible for all, not just party mode) */}
               {partyConfig.allowDedications && (
-                <section className="relative bg-[#131826] rounded-xl p-1.5 border border-[#1E2538] shadow-md hover:border-pink-500/40 transition-colors">
+                <section className="card-panel rounded-xl p-1.5 hover:border-th-teal/45 transition-colors">
                   <button
                     type="button"
                     onClick={() => setShowDedicationModal(true)}
-                    className="w-full flex items-center justify-between gap-3 bg-gradient-to-r from-[#1a1030]/80 via-[#181F33] to-[#1a1030]/80 hover:from-pink-950/40 hover:via-[#1C253D] hover:to-fuchsia-950/40 px-4 py-3 rounded-lg border border-pink-500/20 active:scale-[0.98] transition-all text-left"
+                    className="w-full flex items-center justify-between gap-3 bg-th-recessed hover:bg-th-teal-soft px-4 py-3 rounded-lg border border-th-border active:scale-[0.98] transition-all text-left"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-600 to-fuchsia-700 text-white flex items-center justify-center font-bold shadow-md shadow-pink-600/30 shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-th-teal text-white flex items-center justify-center font-bold shadow-xs shrink-0">
                         <MessageSquareHeart className="size-5" />
                       </div>
                       <div>
-                        <p className="text-sm text-white font-bold leading-tight flex items-center gap-1.5">
+                        <p className="text-sm text-th-text font-bold leading-tight flex items-center gap-1.5">
                           Enviar Dedicatoria a la Pantalla
-                          <Sparkles className="size-3.5 text-pink-400" />
+                          <Sparkles className="size-3.5 text-th-teal" />
                         </p>
-                        <p className="text-xs text-pink-200/70 mt-0.5">
+                        <p className="text-xs text-th-muted mt-0.5">
                           Tu mensaje aparecerá cruzando la TV del salón en vivo
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center justify-center size-7 rounded-full bg-[#131826] text-pink-400 border border-pink-500/30 shrink-0">
+                    <div className="flex items-center justify-center size-7 rounded-full bg-th-card text-th-teal border border-th-border shrink-0">
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                     </div>
                   </button>
@@ -866,30 +866,30 @@ export function ClientNight({ slug }: { slug: string }) {
                 <div className="flex items-center justify-between px-0.5">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-sm text-white font-bold tracking-tight">
+                      <h3 className="font-display text-sm text-th-text font-bold tracking-tight">
                         Cola de Reproducción
                       </h3>
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
+                      <span className="px-1.5 py-0.5 rounded bg-th-emerald-soft text-th-emerald border border-th-emerald/30 font-mono text-[9px] uppercase font-bold tracking-wider">
                         En Salón
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-th-muted">
                       Temas listos para sonar · Votá para que suban de puesto
                     </p>
                   </div>
-                  <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-indigo-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="font-mono text-[11px] bg-th-card px-2.5 py-1 rounded-full text-th-accent border border-th-border flex items-center gap-1.5 shrink-0 tabular-nums">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-th-emerald animate-pulse" />
                     {activeQueue.length} en cola
                   </span>
                 </div>
 
                 {activeQueue.length === 0 ? (
-                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">
-                    <Disc3 className="size-8 text-slate-600 animate-spin-vinyl" aria-hidden="true" />
-                    <p className="mt-2 text-sm font-bold text-white">
+                  <div className="flex flex-col items-center rounded-2xl border border-dashed border-th-border px-6 py-7 text-center bg-th-card/50">
+                    <Disc3 className="size-8 text-th-muted animate-spin-vinyl" aria-hidden="true" />
+                    <p className="mt-2 text-sm font-bold text-th-text">
                       No hay canciones en la cola activa
                     </p>
-                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
+                    <p className="mt-1 max-w-xs text-xs leading-relaxed text-th-muted">
                       {effectiveThreshold <= 1 ? (
                         "Pedí el primer tema de la noche para que empiece la fiesta."
                       ) : (
@@ -900,7 +900,7 @@ export function ClientNight({ slug }: { slug: string }) {
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
+                  <div className="space-y-2.5 max-h-[460px] pr-1 ui-scroll-container">
                     {activeQueue.map((item, index) => (
                       <QueueRow
                         key={item.id}
@@ -922,62 +922,62 @@ export function ClientNight({ slug }: { slug: string }) {
                   <div className="flex items-center justify-between px-0.5">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm text-white font-bold tracking-tight">
+                        <h3 className="font-display text-sm text-th-text font-bold tracking-tight">
                           Propuestas en Votación
                         </h3>
-                        <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono text-[9px] uppercase font-bold tracking-wider">
+                        <span className="px-1.5 py-0.5 rounded bg-th-amber-soft text-th-amber border border-th-amber/30 font-mono text-[9px] uppercase font-bold tracking-wider">
                           Pre-Cola
                         </span>
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-th-muted">
                         Pedidos del público · Con {effectiveThreshold} votos pasan a la cola activa
                       </p>
                     </div>
-                    <span className="font-mono text-[11px] bg-[#131826] px-2.5 py-1 rounded-full text-amber-300 border border-[#1E2538] flex items-center gap-1.5 shrink-0">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="font-mono text-[11px] bg-th-card px-2.5 py-1 rounded-full text-th-amber border border-th-border flex items-center gap-1.5 shrink-0 tabular-nums">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-th-amber" />
                       {candidateProposals.length} {candidateProposals.length === 1 ? "candidata" : "candidatas"}
                     </span>
                   </div>
 
                   {/* Voting Round Live Banner for Customers */}
                   {state?.votingRound?.enabled && (
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-indigo-500/15 border border-amber-500/30 flex items-center justify-between gap-3 text-xs font-mono">
+                    <div className="p-3 rounded-xl bg-th-amber-soft border border-th-amber/30 flex items-center justify-between gap-3 text-xs font-mono">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="material-symbols-outlined text-amber-400 text-lg animate-pulse shrink-0">timer</span>
+                        <span className="material-symbols-outlined text-th-amber text-lg animate-pulse shrink-0">timer</span>
                         <div className="min-w-0">
-                          <span className="font-bold text-white block truncate">
+                          <span className="font-bold text-th-text block truncate">
                             Ronda #{state.votingRound?.roundNumber ?? 1} en Vivo
                           </span>
-                          <span className="text-[10px] text-slate-300 block truncate">
+                          <span className="text-[10px] text-th-secondary block truncate">
                             ¡Votá tu favorita! Al terminar, la más votada entra a sonar en la TV.
                           </span>
                         </div>
                       </div>
-                      <span className="shrink-0 font-bold px-2.5 py-1 rounded-lg bg-amber-500/25 text-amber-300 border border-amber-500/40 text-xs">
+                      <span className="shrink-0 font-bold px-2.5 py-1 rounded-lg bg-th-card text-th-amber border border-th-amber/35 text-xs tabular-nums">
                         {Math.floor(clientRoundSeconds / 60)}:{(clientRoundSeconds % 60).toString().padStart(2, "0")}
                       </span>
                     </div>
                   )}
 
                   {candidateProposals.length === 0 ? (
-                    <div className="flex flex-col items-center rounded-2xl border border-dashed border-[#232b42] px-6 py-7 text-center bg-[#131826]/40">
-                      <span className="material-symbols-outlined text-2xl text-slate-600">how_to_vote</span>
-                      <p className="mt-2 text-sm font-bold text-white">
+                    <div className="flex flex-col items-center rounded-2xl border border-dashed border-th-border px-6 py-7 text-center bg-th-card/50">
+                      <span className="material-symbols-outlined text-2xl text-th-muted">how_to_vote</span>
+                      <p className="mt-2 text-sm font-bold text-th-text">
                         No hay propuestas en votación
                       </p>
-                      <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-400">
+                      <p className="mt-1 max-w-xs text-xs leading-relaxed text-th-muted">
                         ¿Querés escuchar tu música favorita? Proponé una canción para que todos la voten.
                       </p>
                       <button
                         type="button"
                         onClick={() => setTab("proponer")}
-                        className="mt-3 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 px-4 py-2 font-mono text-xs font-bold text-white shadow-md shadow-amber-600/20"
+                        className="mt-3 rounded-xl bg-th-accent hover:bg-th-accent-hover px-4 py-2 font-mono text-xs font-bold text-th-on-accent shadow-xs"
                       >
                         Proponer canción
                       </button>
                     </div>
                   ) : (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2.5 max-h-[420px] pr-1 ui-scroll-container">
                       {candidateProposals.map((item, index) => (
                         <CandidateRow
                           key={item.id}
@@ -1068,7 +1068,7 @@ export function ClientNight({ slug }: { slug: string }) {
         </main>
 
         {/* BOTTOM NAVIGATION BAR */}
-        <nav className="fixed inset-x-0 bottom-0 z-40 bg-[#0D1220]/95 backdrop-blur-md border-t border-[#1E2538] shadow-[0_-4px_20px_rgba(0,0,0,0.5)] pb-[env(safe-area-inset-bottom,0px)]">
+        <nav className="fixed inset-x-0 bottom-0 z-40 bg-th-shell/95 backdrop-blur-md border-t border-th-border shadow-lg pb-[env(safe-area-inset-bottom,0px)]">
           <div
             className={cn(
               "max-w-md mx-auto grid px-2 py-1",
@@ -1086,14 +1086,14 @@ export function ClientNight({ slug }: { slug: string }) {
                   className={cn(
                     "flex flex-col items-center justify-center min-h-[52px] py-1 transition-all duration-150 active:scale-95 touch-manipulation",
                     active
-                      ? "text-indigo-400 font-bold"
-                      : "text-slate-400 hover:text-white",
+                      ? "text-th-accent font-bold"
+                      : "text-th-muted hover:text-th-text",
                   )}
                 >
                   <div
                     className={cn(
                       "size-8 rounded-xl flex items-center justify-center transition-all",
-                      active && "bg-indigo-600/20 text-indigo-300 shadow-sm",
+                      active && "bg-th-accent-soft text-th-accent shadow-xs",
                     )}
                   >
                     <span

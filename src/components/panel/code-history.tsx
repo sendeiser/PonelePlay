@@ -42,13 +42,13 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
 
   return (
     <div className="card-panel rounded-2xl p-6 space-y-4">
-      <div className="flex items-center justify-between pb-3 border-b border-[#1E2333]">
+      <div className="flex items-center justify-between pb-3 border-b border-th-border">
         <div>
-          <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-            <span className="material-symbols-outlined text-indigo-400 text-lg">history</span>
+          <h2 className="font-display text-base font-bold text-th-text tracking-tight flex items-center gap-2">
+            <span className="material-symbols-outlined text-th-accent text-lg">history</span>
             Registro de Tickets Emitidos en la Noche
           </h2>
-          <p className="font-mono text-xs text-slate-400">
+          <p className="font-mono text-xs text-th-muted mt-0.5">
             Histórico y estado de canje de todos los códigos expedidos.
           </p>
         </div>
@@ -57,40 +57,40 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
           type="button"
           onClick={() => setManualTrigger((prev) => prev + 1)}
           aria-label="Refrescar historial"
-          className="size-9 rounded-lg border border-[#232b42] text-slate-400 hover:text-white hover:bg-[#181b25] flex items-center justify-center transition-colors"
+          className="size-9 rounded-lg border border-th-border bg-th-recessed text-th-muted hover:text-th-text hover:bg-th-card-hover flex items-center justify-center transition-colors"
         >
           <span className="material-symbols-outlined text-base">refresh</span>
         </button>
       </div>
 
       {loading && codes.length === 0 ? (
-        <p className="text-center py-10 text-xs font-mono text-slate-500">
+        <p className="text-center py-10 text-xs font-mono text-th-muted">
           Cargando tickets...
         </p>
       ) : codes.length === 0 ? (
-        <div className="text-center py-10 text-slate-500 font-mono space-y-2 text-xs">
-          <span className="material-symbols-outlined text-slate-600 text-3xl">receipt_long</span>
+        <div className="text-center py-10 text-th-muted font-mono space-y-2 text-xs">
+          <span className="material-symbols-outlined text-th-muted/70 text-3xl">receipt_long</span>
           <p>No se generaron códigos todavía en este turno.</p>
         </div>
       ) : (
         <>
-          {/* Mobile Card List (sm:hidden) */}
-          <div className="sm:hidden space-y-2.5">
+          {/* Mobile Card List (sm:hidden) with Bounded Internal Scroll */}
+          <div className="sm:hidden max-h-[420px] min-h-0 rounded-xl bg-th-recessed border border-th-border p-2 space-y-2 ui-scroll-container">
             {codes.map((item) => (
               <div
                 key={item.id}
-                className="p-3 rounded-xl bg-[#141824] border border-[#232b42] flex items-center justify-between gap-3 font-mono"
+                className="p-3 rounded-xl bg-th-card border border-th-border flex items-center justify-between gap-3 font-mono"
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-white font-bold tracking-widest text-sm">
+                    <span className="text-th-text font-bold tracking-widest text-sm">
                       {item.code}
                     </span>
-                    <span className="text-xs text-cyan-300 font-bold">
+                    <span className="text-xs text-th-teal font-bold">
                       +{item.credits}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400">
+                  <div className="flex items-center gap-2 mt-1 text-[10px] text-th-muted">
                     <span>{item.createdByName || "Staff"}</span>
                     <span>•</span>
                     <span>
@@ -100,12 +100,12 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
                       })}
                     </span>
                     <span
-                      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase ${
                         item.status === "active"
-                          ? "bg-emerald-500/10 text-emerald-400"
+                          ? "bg-th-emerald-soft text-th-emerald"
                           : item.status === "redeemed"
-                            ? "bg-slate-800 text-slate-500"
-                            : "bg-red-500/10 text-red-400"
+                            ? "bg-th-recessed text-th-muted"
+                            : "bg-th-danger-soft text-th-danger"
                       }`}
                     >
                       {item.status === "active" ? "Activo" : item.status === "redeemed" ? "Canjeado" : "Vencido"}
@@ -116,7 +116,7 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
                 <button
                   type="button"
                   onClick={() => handleCopy(item.code, item.id)}
-                  className="px-3 py-1.5 rounded-lg bg-[#181b25] border border-[#232b42] text-slate-300 active:text-white text-xs font-semibold shrink-0"
+                  className="px-3 py-1.5 rounded-lg bg-th-recessed border border-th-border text-th-secondary hover:text-th-text text-xs font-semibold shrink-0"
                 >
                   {copiedId === item.id ? "¡Copiado!" : "Copiar"}
                 </button>
@@ -124,11 +124,11 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
             ))}
           </div>
 
-          {/* Desktop Table (hidden sm:block) */}
-          <div className="hidden sm:block overflow-x-auto">
+          {/* Desktop Table (hidden sm:block) with Bounded Internal Scroll */}
+          <div className="hidden sm:block max-h-[420px] min-h-0 rounded-xl border border-th-border bg-th-recessed/50 overflow-x-auto ui-scroll-container">
             <table className="w-full text-left text-xs font-mono">
-              <thead>
-                <tr className="border-b border-[#1E2333] text-slate-500 text-[10px] uppercase">
+              <thead className="sticky top-0 z-10 bg-th-recessed border-b border-th-border">
+                <tr className="text-th-muted text-[10px] uppercase">
                   <th className="py-2.5 px-3">Código</th>
                   <th className="py-2.5 px-3">Créditos</th>
                   <th className="py-2.5 px-3">Estado</th>
@@ -137,28 +137,28 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
                   <th className="py-2.5 px-3 text-right">Acción</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1E2333]/50">
+              <tbody className="divide-y divide-th-border bg-th-card">
                 {codes.map((item) => (
-                  <tr key={item.id} className="hover:bg-[#181b25]/50 transition-colors">
-                    <td className="py-3 px-3 font-bold text-white tracking-wider">
+                  <tr key={item.id} className="hover:bg-th-card-hover transition-colors">
+                    <td className="py-3 px-3 font-bold text-th-text tracking-wider">
                       {item.code}
                     </td>
-                    <td className="py-3 px-3 font-bold text-cyan-300">
+                    <td className="py-3 px-3 font-bold text-th-teal">
                       +{item.credits}
                     </td>
                     <td className="py-3 px-3">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                           item.status === "active"
-                            ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                            ? "bg-th-emerald-soft border border-th-emerald/25 text-th-emerald"
                             : item.status === "redeemed"
-                              ? "bg-slate-800 text-slate-400 border border-slate-700"
-                              : "bg-red-500/10 text-red-400 border border-red-500/20"
+                              ? "bg-th-recessed text-th-muted border border-th-border"
+                              : "bg-th-danger-soft text-th-danger border border-th-danger/25"
                         }`}
                       >
                         <span
                           className={`size-1.5 rounded-full ${
-                            item.status === "active" ? "bg-emerald-400" : "bg-slate-500"
+                            item.status === "active" ? "bg-th-emerald" : "bg-th-muted"
                           }`}
                         />
                         {item.status === "active"
@@ -168,10 +168,10 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
                             : "Vencido"}
                       </span>
                     </td>
-                    <td className="py-3 px-3 text-slate-400">
+                    <td className="py-3 px-3 text-th-secondary">
                       {item.createdByName || "Staff"}
                     </td>
-                    <td className="py-3 px-3 text-slate-500">
+                    <td className="py-3 px-3 text-th-muted">
                       {new Date(item.createdAt).toLocaleTimeString("es-AR", {
                         hour: "2-digit",
                         minute: "2-digit",
@@ -181,7 +181,7 @@ export function CodeHistory({ staffToken, refreshTrigger }: CodeHistoryProps) {
                       <button
                         type="button"
                         onClick={() => handleCopy(item.code, item.id)}
-                        className="px-2.5 py-1 rounded-md bg-[#181b25] border border-[#232b42] text-slate-300 hover:text-white text-[11px] font-semibold transition-colors"
+                        className="px-2.5 py-1 rounded-lg bg-th-recessed border border-th-border text-th-secondary hover:text-th-text hover:bg-th-card-hover text-[11px] font-semibold transition-colors"
                       >
                         {copiedId === item.id ? "¡Copiado!" : "Copiar"}
                       </button>

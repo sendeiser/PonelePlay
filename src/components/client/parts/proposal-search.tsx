@@ -253,26 +253,28 @@ export function ProposalSearch({
       {/* Header */}
       <div className="pt-1">
         <div className="flex items-center justify-between mb-1">
-          <span className="font-mono text-[11px] text-indigo-400 uppercase tracking-wider font-semibold flex items-center gap-1.5">
-            <Sparkles className="size-3 text-indigo-400" />
+          <span className="font-mono text-[11px] text-th-accent uppercase tracking-wider font-semibold flex items-center gap-1.5">
+            <Sparkles className="size-3 text-th-accent" />
             {isPartyMode ? "🎉 Modo Fiesta · Todo Desbloqueado" : "Propuestas Libres"}
           </span>
           {!isPartyMode && (
-            <span className="font-mono text-[11px] text-slate-400">
+            <span className="font-mono text-[11px] text-th-muted">
               {cooldownSeconds > 0 ? (
-                <span className="text-amber-400 font-bold">
+                <span className="text-th-amber font-bold">
                   ⏳ Esperá {formatRemainingTime(cooldownSeconds)}
                 </span>
               ) : (
-                <span className="text-emerald-400 font-medium">
+                <span className="text-th-emerald font-semibold">
                   ✓ Límite de 2 min
                 </span>
               )}
             </span>
           )}
         </div>
-        <h1 className="text-xl font-bold text-white tracking-tight">Buscar y Proponer</h1>
-        <p className="text-xs text-slate-400 mt-1">
+        <h1 className="font-display text-xl font-bold text-th-text tracking-tight">
+          Buscar y Proponer
+        </h1>
+        <p className="text-xs text-th-muted mt-1">
           {isPartyMode ? (
             minVotesToQueue <= 1 ? (
               <>
@@ -293,10 +295,10 @@ export function ProposalSearch({
 
       {/* Guest Name, Dedication & Karaoke Toggle */}
       {(isPartyMode || allowDedications) && (
-        <div className="rounded-xl border border-fuchsia-500/35 bg-gradient-to-br from-fuchsia-950/30 via-[#151928] to-amber-950/20 p-3.5 space-y-3">
+        <div className="card-panel rounded-xl border-th-accent/25 p-3.5 space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="block text-[11px] font-mono font-bold text-fuchsia-200 mb-1">
+              <label className="ui-label">
                 👤 Tu Nombre o Apodo
               </label>
               <input
@@ -305,13 +307,13 @@ export function ProposalSearch({
                 value={guestName}
                 onChange={(e) => setGuestName(e.target.value)}
                 placeholder="Ej: Tincho, La Banda, Mesa VIP..."
-                className="w-full rounded-lg bg-[#0e121d] border border-white/15 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-fuchsia-400 focus:outline-none"
+                className="ui-input text-xs"
               />
             </div>
 
             {allowDedications && (
               <div>
-                <label className="block text-[11px] font-mono font-bold text-amber-200 mb-1">
+                <label className="ui-label">
                   💬 Dedicatoria para la TV (Opcional)
                 </label>
                 <input
@@ -320,17 +322,17 @@ export function ProposalSearch({
                   value={dedication}
                   onChange={(e) => setDedication(e.target.value)}
                   placeholder="¡Feliz cumple! Para bailar todos juntos 🍻"
-                  className="w-full rounded-lg bg-[#0e121d] border border-white/15 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-400 focus:outline-none"
+                  className="ui-input text-xs"
                 />
               </div>
             )}
           </div>
 
           {allowGuestKaraoke && (
-            <label className="flex items-center justify-between gap-3 rounded-lg bg-[#0e121d]/80 border border-pink-500/30 px-3 py-2 cursor-pointer">
+            <label className="flex items-center justify-between gap-3 rounded-lg bg-th-recessed border border-th-accent/25 px-3 py-2 cursor-pointer">
               <div className="flex items-center gap-2">
                 <span className="text-sm">🎤</span>
-                <span className="text-xs font-bold text-pink-200">
+                <span className="text-xs font-bold text-th-accent">
                   Quiero cantarla en Karaoke (Con letra en la TV)
                 </span>
               </div>
@@ -338,7 +340,7 @@ export function ProposalSearch({
                 type="checkbox"
                 checked={isKaraoke}
                 onChange={(e) => setIsKaraoke(e.target.checked)}
-                className="size-4 accent-pink-500 rounded"
+                className="size-4 accent-th-accent rounded cursor-pointer"
               />
             </label>
           )}
@@ -346,8 +348,8 @@ export function ProposalSearch({
       )}
 
       {!isPartyMode && cooldownSeconds > 0 && (
-        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200 flex items-center gap-2.5">
-          <span className="material-symbols-outlined text-lg text-amber-400">timer</span>
+        <div className="p-3 rounded-xl bg-th-amber-soft border border-th-amber/30 text-xs text-th-amber flex items-center gap-2.5">
+          <span className="material-symbols-outlined text-lg text-th-amber">timer</span>
           <div>
             <span className="font-bold">Límite de 2 minutos activo: </span>
             <span>Podrás proponer otra canción en <strong>{formatRemainingTime(cooldownSeconds)}</strong>.</span>
@@ -356,9 +358,9 @@ export function ProposalSearch({
       )}
 
       {!proposalsEnabled && (
-        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 space-y-1">
+        <div className="p-3 rounded-xl bg-th-amber-soft border border-th-amber/30 text-xs text-th-amber space-y-1">
           <p className="font-bold">Propuestas pausadas</p>
-          <p className="text-amber-200/80">La administración pausó temporalmente los nuevos pedidos.</p>
+          <p className="opacity-85">La administración pausó temporalmente los nuevos pedidos.</p>
         </div>
       )}
 
@@ -370,15 +372,16 @@ export function ProposalSearch({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Artista, canción o link de YouTube/playlist..."
           disabled={!proposalsEnabled}
-          className="w-full bg-[#181b25] text-white placeholder-slate-500 text-sm rounded-xl pl-10 pr-24 py-3.5 border border-[#232b42] focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all font-mono"
+          className="ui-input pl-10 pr-24 py-3.5 text-sm font-mono"
         />
-        <Search className="absolute left-3.5 top-4 size-4 text-slate-400 pointer-events-none" />
+        <Search className="absolute left-3.5 top-4 size-4 text-th-muted pointer-events-none" />
         <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
           {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
-              className="text-slate-400 hover:text-white p-1"
+              aria-label="Limpiar búsqueda"
+              className="text-th-muted hover:text-th-text p-1"
             >
               <X className="size-4" />
             </button>
@@ -388,9 +391,9 @@ export function ProposalSearch({
               onClick={() => void handlePaste()}
               disabled={!proposalsEnabled}
               title="Pegar link del portapapeles"
-              className="px-2 py-1 rounded-lg bg-[#232b42] hover:bg-indigo-600/40 text-slate-300 hover:text-white font-mono text-[11px] flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
+              className="px-2 py-1 rounded-lg bg-th-recessed hover:bg-th-accent-soft border border-th-border text-th-secondary hover:text-th-accent font-mono text-[11px] flex items-center gap-1 transition-all active:scale-95 disabled:opacity-50"
             >
-              <ClipboardPaste className="size-3.5 text-indigo-400" />
+              <ClipboardPaste className="size-3.5 text-th-accent" />
               <span>Pegar</span>
             </button>
           )}
@@ -411,10 +414,10 @@ export function ProposalSearch({
                   setQuery((q) => (q ? `${q} karaoke` : "karaoke"));
                 }
               }}
-              className={`px-3 py-1.5 rounded-full text-xs font-mono font-medium whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-full text-xs font-mono font-semibold whitespace-nowrap transition-all ${
                 isActive
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "bg-[#181b25] text-slate-400 hover:text-white hover:bg-[#202534] border border-[#232b42]"
+                  ? "bg-th-accent text-th-on-accent shadow-xs"
+                  : "bg-th-card text-th-secondary hover:text-th-text hover:bg-th-recessed border border-th-border"
               }`}
             >
               {chip}
@@ -425,24 +428,24 @@ export function ProposalSearch({
 
       {/* Search Results */}
       {searching && (
-        <div className="flex items-center justify-center py-10 text-slate-500 font-mono text-xs gap-2">
-          <span className="inline-block size-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center py-10 text-th-muted font-mono text-xs gap-2">
+          <span className="inline-block size-4 border-2 border-th-accent border-t-transparent rounded-full animate-spin" />
           <span>Buscando en YouTube...</span>
         </div>
       )}
 
       {!searching && query.trim() && results.length === 0 && (
-        <div className="text-center py-12 px-4 rounded-xl border border-dashed border-[#232b42] bg-[#181b25]/50">
-          <Music2 className="size-8 mx-auto text-slate-600 mb-2" />
-          <p className="text-sm font-bold text-white">No encontramos resultados</p>
-          <p className="text-xs text-slate-400 mt-1">
+        <div className="text-center py-12 px-4 rounded-xl border border-dashed border-th-border bg-th-card/60">
+          <Music2 className="size-8 mx-auto text-th-muted mb-2" />
+          <p className="text-sm font-bold text-th-text">No encontramos resultados</p>
+          <p className="text-xs text-th-muted mt-1">
             Probá con otro título o pegá el link directo de YouTube.
           </p>
         </div>
       )}
 
       {!searching && results.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[500px] pr-1 ui-scroll-container">
           {results.map((item) => {
             const existingQueueItem = findInQueue(item);
             const existingCandidate = findInCandidates(item);
@@ -452,24 +455,24 @@ export function ProposalSearch({
               return (
                 <article
                   key={item.videoId}
-                  className="bg-[#181b25] rounded-xl p-3.5 border border-cyan-500/40 flex flex-col gap-3 shadow-md"
+                  className="card-panel rounded-xl p-3.5 border-th-teal/40 flex flex-col gap-3"
                 >
-                  <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-2.5 flex items-start gap-2">
-                    <span className="material-symbols-outlined text-cyan-400 text-base mt-0.5">
+                  <div className="bg-th-teal-soft border border-th-teal/30 rounded-lg p-2.5 flex items-start gap-2">
+                    <span className="material-symbols-outlined text-th-teal text-base mt-0.5">
                       check_circle
                     </span>
                     <div className="flex-1">
-                      <p className="text-xs font-bold text-cyan-300">
+                      <p className="text-xs font-bold text-th-teal">
                         ¡Ya está en la cola del salón!
                       </p>
-                      <p className="text-[11px] text-slate-400 leading-snug">
+                      <p className="text-[11px] text-th-secondary leading-snug">
                         Esta canción ya está lista para sonar en la TV. Sumale tu voto para que suene antes.
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-900 border border-[#232b42]">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-th-recessed border border-th-border">
                       {item.thumbnailUrl ? (
                         <Image
                           src={item.thumbnailUrl}
@@ -480,16 +483,16 @@ export function ProposalSearch({
                           unoptimized
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-600">
+                        <div className="w-full h-full flex items-center justify-center text-th-muted">
                           <Music2 className="size-5" />
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-bold text-white truncate">
+                      <h3 className="text-sm font-bold text-th-text truncate">
                         {item.title}
                       </h3>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                      <p className="text-xs text-th-muted truncate mt-0.5">
                         {item.artist} · {formatDuration(item.durationSeconds)}
                       </p>
                     </div>
@@ -499,13 +502,13 @@ export function ProposalSearch({
                     <button
                       type="button"
                       onClick={() => onVoteExisting(existingQueueItem.id)}
-                      className="w-full py-2.5 px-3 rounded-lg bg-[#232b42] hover:bg-[#2e3957] text-cyan-300 border border-cyan-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                      className="w-full py-2.5 px-3 rounded-lg bg-th-teal-soft hover:bg-th-teal/20 text-th-teal border border-th-teal/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                     >
                       <span className="material-symbols-outlined text-sm">thumb_up</span>
                       <span>En la cola · Sumar voto ({existingQueueItem.voteCount})</span>
                     </button>
                   ) : (
-                    <div className="text-center py-2 px-3 rounded-lg bg-[#232b42]/60 text-cyan-300 font-mono text-xs font-bold">
+                    <div className="text-center py-2 px-3 rounded-lg bg-th-teal-soft text-th-teal font-mono text-xs font-bold">
                       En la cola
                     </div>
                   )}
@@ -519,22 +522,22 @@ export function ProposalSearch({
               return (
                 <article
                   key={item.videoId}
-                  className="bg-[#181b25] rounded-xl p-3.5 border border-amber-500/40 flex flex-col gap-3 shadow-md"
+                  className="card-panel rounded-xl p-3.5 border-th-amber/40 flex flex-col gap-3"
                 >
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex items-start gap-2">
-                    <Sparkles className="size-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div className="bg-th-amber-soft border border-th-amber/30 rounded-lg p-2.5 flex items-start gap-2">
+                    <Sparkles className="size-4 text-th-amber mt-0.5 shrink-0" />
                     <div className="flex-1">
-                      <p className="text-xs font-bold text-amber-300">
+                      <p className="text-xs font-bold text-th-amber">
                         ¡Ya está en votación popular ({existingCandidate.voteCount}/{minVotesToQueue} votos)!
                       </p>
-                      <p className="text-[11px] text-slate-400 leading-snug">
+                      <p className="text-[11px] text-th-secondary leading-snug">
                         {needed === 1 ? "¡Falta solo 1 voto para que pase a la cola del salón!" : `Faltan ${needed} votos para que pase a la cola del salón.`}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-900 border border-[#232b42]">
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-th-recessed border border-th-border">
                       {item.thumbnailUrl ? (
                         <Image
                           src={item.thumbnailUrl}
@@ -545,16 +548,16 @@ export function ProposalSearch({
                           unoptimized
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-600">
+                        <div className="w-full h-full flex items-center justify-center text-th-muted">
                           <Music2 className="size-5" />
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h3 className="text-sm font-bold text-white truncate">
+                      <h3 className="text-sm font-bold text-th-text truncate">
                         {item.title}
                       </h3>
-                      <p className="text-xs text-slate-400 truncate mt-0.5">
+                      <p className="text-xs text-th-muted truncate mt-0.5">
                         {item.artist} · {formatDuration(item.durationSeconds)}
                       </p>
                     </div>
@@ -564,13 +567,13 @@ export function ProposalSearch({
                     <button
                       type="button"
                       onClick={() => onVoteExisting(existingCandidate.id)}
-                      className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-amber-600/30 to-indigo-600/30 hover:from-amber-600/40 hover:to-indigo-600/40 text-amber-200 border border-amber-500/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                      className="w-full py-2.5 px-3 rounded-lg bg-th-amber-soft hover:bg-th-amber/20 text-th-amber border border-th-amber/40 font-mono text-xs font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                     >
                       <span className="material-symbols-outlined text-sm">how_to_vote</span>
                       <span>Votar propuesta ({existingCandidate.voteCount}/{minVotesToQueue})</span>
                     </button>
                   ) : (
-                    <div className="text-center py-2 px-3 rounded-lg bg-[#232b42]/60 text-amber-300 font-mono text-xs font-bold">
+                    <div className="text-center py-2 px-3 rounded-lg bg-th-amber-soft text-th-amber font-mono text-xs font-bold">
                       En votación ({existingCandidate.voteCount}/{minVotesToQueue})
                     </div>
                   )}
@@ -584,10 +587,10 @@ export function ProposalSearch({
             return (
               <article
                 key={item.videoId}
-                className="bg-[#181b25] rounded-xl p-3.5 border border-[#232b42] hover:border-indigo-500/40 flex flex-col gap-3 shadow-md transition-all"
+                className="card-panel rounded-xl p-3.5 hover:border-th-accent/45 flex flex-col gap-3 transition-all"
               >
                 <div className="flex items-start gap-3">
-                  <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-slate-900 border border-[#232b42]">
+                  <div className="relative w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-th-recessed border border-th-border">
                     {item.thumbnailUrl ? (
                       <Image
                         src={item.thumbnailUrl}
@@ -598,24 +601,24 @@ export function ProposalSearch({
                         unoptimized
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-600">
+                      <div className="w-full h-full flex items-center justify-center text-th-muted">
                         <Music2 className="size-6" />
                       </div>
                     )}
-                    <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono font-bold text-white px-1 rounded">
+                    <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono font-bold text-white px-1 rounded tabular-nums">
                       {formatDuration(item.durationSeconds)}
                     </span>
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-bold text-white truncate">
+                    <h3 className="text-sm font-bold text-th-text truncate">
                       {item.title}
                     </h3>
-                    <p className="text-xs text-slate-400 truncate mt-0.5">
+                    <p className="text-xs text-th-muted truncate mt-0.5">
                       {item.artist}
                     </p>
-                    <div className="flex items-center gap-2 mt-1.5 font-mono text-[10px] text-slate-400">
-                      <span className="px-1.5 py-0.5 rounded bg-[#232b42] text-cyan-300">
+                    <div className="flex items-center gap-2 mt-1.5 font-mono text-[10px] text-th-muted">
+                      <span className="px-1.5 py-0.5 rounded bg-th-teal-soft text-th-teal font-semibold">
                         HD 1080p
                       </span>
                       <span>YouTube Music</span>
@@ -627,7 +630,7 @@ export function ProposalSearch({
                   type="button"
                   disabled={submittingId === item.videoId || !proposalsEnabled || isBlockedByCooldown}
                   onClick={() => handlePropose(item)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-[0_4px_16px_rgba(99,102,241,0.35)] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-2.5 px-4 rounded-xl bg-th-accent hover:bg-th-accent-hover text-th-on-accent font-bold text-xs flex items-center justify-center gap-2 shadow-sm active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submittingId === item.videoId ? (
                     <span className="inline-block size-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -651,21 +654,21 @@ export function ProposalSearch({
       {/* Default suggestions if no query */}
       {!searching && !query.trim() && (
         <div className="space-y-3 pt-2">
-          <p className="font-mono text-[11px] text-slate-400 uppercase tracking-wider">
+          <p className="font-mono text-[11px] text-th-muted uppercase tracking-wider">
             {isPartyMode ? "Sugerencias fiesteras populares" : "Sugerencias populares en este bar"}
           </p>
           <div className="space-y-2">
             {demoSearchSuggestions.slice(0, 5).map((term) => (
               <div
                 key={term}
-                className="flex items-center justify-between p-3 rounded-xl bg-[#181b25] border border-[#232b42] hover:border-slate-600 transition-colors cursor-pointer"
+                className="flex items-center justify-between p-3 rounded-xl bg-th-card border border-th-border hover:border-th-border-strong transition-colors cursor-pointer"
                 onClick={() => setQuery(term)}
               >
                 <div className="flex items-center gap-3">
-                  <span className="material-symbols-outlined text-sm text-slate-400">trending_up</span>
-                  <span className="text-sm text-white font-medium">{term}</span>
+                  <span className="material-symbols-outlined text-sm text-th-accent">trending_up</span>
+                  <span className="text-sm text-th-text font-medium">{term}</span>
                 </div>
-                <span className="material-symbols-outlined text-sm text-slate-500">north_west</span>
+                <span className="material-symbols-outlined text-sm text-th-muted">north_west</span>
               </div>
             ))}
           </div>
