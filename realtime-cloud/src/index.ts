@@ -22,6 +22,7 @@ interface SocketAttachment {
   slug: string;
   joinedAtMs: number;
   lanEndpoints?: string[];
+  directEnabled?: boolean;
 }
 
 function parseLanEndpointsParam(raw: string | null): string[] | undefined {
@@ -299,6 +300,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
     const role = normalizeRole(url.searchParams.get("role"));
     const deviceId = url.searchParams.get("deviceId") || undefined;
     const lanEndpoints = parseLanEndpointsParam(url.searchParams.get("lanEndpoints"));
+    const directEnabled = url.searchParams.get("direct") === "1" ? true : undefined;
     const clientId =
       url.searchParams.get("clientId")?.trim() || `${role}-${crypto.randomUUID().slice(0, 8)}`;
     const nowMs = Date.now();
@@ -310,6 +312,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
       slug,
       joinedAtMs: nowMs,
       lanEndpoints,
+      directEnabled,
     };
 
     this.ctx.acceptWebSocket(server, [role, slug]);
@@ -322,6 +325,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
       deviceId,
       joinedAtMs: nowMs,
       lanEndpoints,
+      directEnabled,
     });
 
     if (!engine.getSnapshot().tvFeed) {
@@ -386,6 +390,8 @@ export class PoneleSyncRoom extends DurableObject<Env> {
         lanEndpoints: Array.isArray(msg.lanEndpoints)
           ? msg.lanEndpoints
           : meta?.lanEndpoints,
+        directEnabled:
+          typeof msg.directEnabled === "boolean" ? msg.directEnabled : meta?.directEnabled,
       };
       ws.serializeAttachment(nextAttachment);
       const presence = engine.upsertClient(nextAttachment);
@@ -397,6 +403,52 @@ export class PoneleSyncRoom extends DurableObject<Env> {
         } satisfies SyncOutboundMessage),
       );
       this.broadcast([presence], ws);
+      return;
+    }
+
+    if (msg.type === "rtc:signal") {
+      const fromClientId = meta?.clientId;
+      if (!fromClientId) return;
+
+      if (msg.signalType === "direct-ready") {
+        const directFlag = msg.directEnabled !== false;
+        if (meta) {
+          ws.serializeAttachment({
+            ...meta,
+            directEnabled: directFlag,
+          });
+        }
+        const presence = engine.setClientDirectEnabled(fromClientId, directFlag, nowMs);
+        if (presence) {
+          this.broadcast([presence]);
+        }
+        return;
+      }
+
+      const outboundMsg: SyncOutboundMessage = {
+        type: "rtc:signal",
+        fromClientId,
+        fromRole: meta.role,
+        targetClientId: msg.targetClientId,
+        signalType: msg.signalType,
+        sdp: msg.sdp,
+        candidate: msg.candidate,
+        directEnabled: msg.directEnabled,
+        serverNowMs: nowMs,
+      };
+      const serialized = JSON.stringify(outboundMsg);
+      for (const client of this.ctx.getWebSockets()) {
+        if (client === ws || client.readyState !== WebSocket.OPEN) continue;
+        if (msg.targetClientId) {
+          const peerMeta = client.deserializeAttachment() as SocketAttachment | null;
+          if (peerMeta?.clientId !== msg.targetClientId) continue;
+        }
+        try {
+          client.send(serialized);
+        } catch {
+          // Ignore broken pipe
+        }
+      }
       return;
     }
 
@@ -482,11 +534,20 @@ export class PoneleSyncRoom extends DurableObject<Env> {
     }
 
     if (msg.type === "room:snapshot_sync") {
-      if (msg.tvFeed) {
-        const snapshotMsg = engine.mergeExternalTvFeed(msg.tvFeed, nowMs);
+      const outbound = engine.mergeExternalSnapshotSync(
+        {
+          tvFeed: msg.tvFeed,
+          anchor: msg.anchor,
+          forceSeek: msg.forceSeek,
+          source: msg.source,
+        },
+        nowMs,
+      );
+      if (outbound.length > 0) {
         this.persistEngine();
-        this.broadcast([snapshotMsg], ws);
+        this.broadcast(outbound, ws);
       }
+      return;
     }
   }
 

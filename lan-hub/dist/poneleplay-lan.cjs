@@ -7154,13 +7154,30 @@ var SyncRoomEngine = class _SyncRoomEngine {
     const existing = this.clients.get(client.clientId);
     this.clients.set(client.clientId, {
       ...client,
-      lanEndpoints: normalizedEndpoints ?? existing?.lanEndpoints
+      lanEndpoints: normalizedEndpoints ?? existing?.lanEndpoints,
+      directEnabled: typeof client.directEnabled === "boolean" ? client.directEnabled : existing?.directEnabled
     });
     return {
       type: "room:presence",
       connectedClients: this.getPresenceSummary(),
       lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
       serverNowMs: Date.now()
+    };
+  }
+  setClientDirectEnabled(clientId, directEnabled, nowMs = Date.now()) {
+    const existing = this.clients.get(clientId);
+    if (!existing) return null;
+    this.clients.set(clientId, {
+      ...existing,
+      directEnabled
+    });
+    return {
+      type: "room:presence",
+      connectedClients: this.getPresenceSummary(),
+      lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
+      serverNowMs: nowMs
     };
   }
   setClientLanEndpoints(clientId, lanEndpoints, nowMs = Date.now()) {
@@ -7174,8 +7191,17 @@ var SyncRoomEngine = class _SyncRoomEngine {
       type: "room:presence",
       connectedClients: this.getPresenceSummary(),
       lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
       serverNowMs: nowMs
     };
+  }
+  getPeers() {
+    return Array.from(this.clients.values()).map((c) => ({
+      clientId: c.clientId,
+      role: c.role,
+      ...c.deviceId ? { deviceId: c.deviceId } : {},
+      ...c.directEnabled ? { directEnabled: true } : {}
+    }));
   }
   getLanEndpoints() {
     const unique = /* @__PURE__ */ new Set();
@@ -7194,6 +7220,7 @@ var SyncRoomEngine = class _SyncRoomEngine {
         type: "room:presence",
         connectedClients: this.getPresenceSummary(),
         lanEndpoints: this.getLanEndpoints(),
+        peers: this.getPeers(),
         serverNowMs: nowMs
       }
     ];
@@ -7230,7 +7257,8 @@ var SyncRoomEngine = class _SyncRoomEngine {
       updatedAtServerMs: this.updatedAtServerMs,
       activeBarrier: this.activeBarrier ? { ...this.activeBarrier } : null,
       connectedClients: this.getPresenceSummary(),
-      lanEndpoints: this.getLanEndpoints()
+      lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers()
     };
   }
   /**
@@ -7475,7 +7503,7 @@ var SyncRoomEngine = class _SyncRoomEngine {
     const extAnchorPos = Number(extPlayback.anchorPositionSeconds ?? extPlayback.positionSeconds ?? 0);
     const extPaused = Boolean(extPlayback.isPaused);
     const sameTrack = Boolean(this.anchor.track && extNowPlaying) && (this.anchor.track?.youtubeVideoId && this.anchor.track.youtubeVideoId === extNowPlaying?.youtubeVideoId || this.anchor.track?.itemId === extNowPlaying?.itemId);
-    const localTimingIsNewer = sameTrack && this.anchor.anchorServerMs > 0 && (extAnchorMs <= 0 || this.anchor.anchorServerMs > extAnchorMs + 150);
+    const localTimingIsNewer = sameTrack && this.anchor.anchorServerMs > 0 && (extAnchorMs <= 0 || this.anchor.anchorServerMs > extAnchorMs + 150) || !sameTrack && this.anchor.seq > 0 && Boolean(this.anchor.track) && (extAnchorMs > 0 && this.anchor.anchorServerMs > extAnchorMs + 250 && extSeq <= this.anchor.seq || !extNowPlaying && extSeq <= this.anchor.seq);
     if (!localTimingIsNewer) {
       this.anchor = {
         ...this.anchor,
@@ -7650,6 +7678,68 @@ var SyncRoomEngine = class _SyncRoomEngine {
       serverTime: new Date(nowMs).toISOString()
     };
   }
+  /**
+   * Merges peer-relayed snapshot/anchor updates (from LAN Hub or Direct P2P master)
+   * without clobbering newer room state or dropping anchor updates when tvFeed is absent.
+   */
+  mergeExternalSnapshotSync(payload, nowMs = Date.now()) {
+    const outbound = [];
+    const incAnchor = payload.anchor;
+    const isEmptyBootstrap = (!incAnchor || Number(incAnchor.seq ?? 0) <= 0 && !incAnchor.track) && (!payload.tvFeed || !sanitizeSyncTrack(payload.tvFeed.nowPlaying));
+    if (isEmptyBootstrap && (this.anchor.seq > 0 || Boolean(this.anchor.track))) {
+      return [];
+    }
+    if (payload.tvFeed && typeof payload.tvFeed === "object") {
+      if (payload.source === "cloud" && this.anchor.seq > 0) {
+        const cloudSeq = Number(
+          incAnchor?.seq ?? (payload.tvFeed.playback?.commandSeq ?? 0)
+        );
+        if (cloudSeq > this.anchor.seq) {
+          outbound.push(this.mergeExternalTvFeed(payload.tvFeed, nowMs));
+        } else {
+          this.tvFeed = payload.tvFeed;
+          this.syncAnchorIntoTvFeed(nowMs);
+        }
+      } else {
+        outbound.push(this.mergeExternalTvFeed(payload.tvFeed, nowMs));
+      }
+    }
+    if (incAnchor && typeof incAnchor === "object") {
+      const incSeq = typeof incAnchor.seq === "number" ? incAnchor.seq : 0;
+      const incSeekSeq = typeof incAnchor.seekSeq === "number" ? incAnchor.seekSeq : this.anchor.seekSeq;
+      const incTrack = incAnchor.track !== void 0 ? incAnchor.track ? sanitizeSyncTrack(incAnchor.track) : null : this.anchor.track;
+      const isFromAuthoritativePeer = payload.source === "lan" || payload.source === "direct";
+      const shouldApplyAnchor = isFromAuthoritativePeer || this.anchor.seq === 0 || incSeq > this.anchor.seq || incSeq === this.anchor.seq && incSeekSeq > this.anchor.seekSeq;
+      if (shouldApplyAnchor) {
+        const incPos = typeof incAnchor.anchorPositionSec === "number" && Number.isFinite(incAnchor.anchorPositionSec) ? Math.max(0, incAnchor.anchorPositionSec) : this.anchor.anchorPositionSec;
+        const incPaused = typeof incAnchor.isPaused === "boolean" ? incAnchor.isPaused : this.anchor.isPaused;
+        this.anchor = {
+          ...this.anchor,
+          seq: isFromAuthoritativePeer ? Math.max(this.anchor.seq + (incSeq > this.anchor.seq || payload.forceSeek ? 1 : 0), incSeq) : Math.max(this.anchor.seq, incSeq),
+          seekSeq: Math.max(this.anchor.seekSeq, incSeekSeq) + (payload.forceSeek ? 1 : 0),
+          track: incAnchor.track !== void 0 ? incTrack : this.anchor.track,
+          isPaused: incPaused,
+          anchorPositionSec: Math.round(incPos * 1e3) / 1e3,
+          anchorServerMs: nowMs,
+          volume: typeof incAnchor.volume === "number" ? incAnchor.volume : this.anchor.volume,
+          cabinaMuted: typeof incAnchor.cabinaMuted === "boolean" ? incAnchor.cabinaMuted : this.anchor.cabinaMuted,
+          tvMuted: typeof incAnchor.tvMuted === "boolean" ? incAnchor.tvMuted : this.anchor.tvMuted,
+          karaokeMode: typeof incAnchor.karaokeMode === "boolean" ? incAnchor.karaokeMode : this.anchor.karaokeMode,
+          lastCommand: typeof incAnchor.lastCommand === "string" || incAnchor.lastCommand === null ? incAnchor.lastCommand : this.anchor.lastCommand,
+          displayConfig: incAnchor.displayConfig !== void 0 ? incAnchor.displayConfig : this.anchor.displayConfig
+        };
+        this.bumpRevision(nowMs);
+        this.syncAnchorIntoTvFeed(nowMs);
+        outbound.push({
+          type: "sync:anchor",
+          anchor: { ...this.anchor },
+          forceSeek: Boolean(payload.forceSeek),
+          serverNowMs: nowMs
+        });
+      }
+    }
+    return outbound;
+  }
 };
 
 // src/network.ts
@@ -7693,7 +7783,8 @@ function normalizeRole(raw) {
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Access-Control-Request-Private-Network");
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
 }
 function renderStatusHtml(status) {
   const realIps = status.lanIps.filter((i) => !i.isVirtual);
@@ -8109,6 +8200,7 @@ var PoneleLanHub = class {
       const nextRev = room.engine.getSnapshot(nowMs).revision;
       if (nextRev !== prevRev || msg.forceSeek) {
         this.broadcastLocal(room, [anchorMsg], ws);
+        this.relayAnchorToCloud(room, [anchorMsg]);
       }
       return;
     }
@@ -8178,6 +8270,13 @@ var PoneleLanHub = class {
           );
         } catch {
         }
+        const openNowMs = Date.now();
+        const currentSnap = room.engine.getSnapshot(openNowMs);
+        if (currentSnap.anchor.seq > 0) {
+          this.relayAnchorToCloud(room, [
+            { type: "sync:anchor", anchor: currentSnap.anchor, serverNowMs: openNowMs }
+          ]);
+        }
         if (room.cloudPingTimer) clearInterval(room.cloudPingTimer);
         room.cloudPingTimer = setInterval(() => {
           if (cloudWs.readyState === import_websocket.default.OPEN) {
@@ -8209,9 +8308,24 @@ var PoneleLanHub = class {
           return;
         }
         const nowMs = Date.now();
-        if (msg.type === "room:snapshot" && msg.snapshot.tvFeed) {
-          const merged = room.engine.mergeExternalTvFeed(msg.snapshot.tvFeed, nowMs);
-          this.broadcastLocal(room, [merged]);
+        if (msg.type === "room:snapshot") {
+          const mergedOutbound = room.engine.mergeExternalSnapshotSync(
+            {
+              tvFeed: msg.snapshot.tvFeed,
+              anchor: msg.snapshot.anchor,
+              source: "cloud"
+            },
+            nowMs
+          );
+          if (mergedOutbound.length > 0) {
+            this.broadcastLocal(room, mergedOutbound);
+          }
+          const localSnap = room.engine.getSnapshot(nowMs);
+          if (localSnap.anchor.seq > (msg.snapshot.anchor?.seq ?? 0)) {
+            this.relayAnchorToCloud(room, [
+              { type: "sync:anchor", anchor: localSnap.anchor, serverNowMs: nowMs }
+            ]);
+          }
         } else if (msg.type === "party:event") {
           this.broadcastLocal(room, [msg]);
         } else if (msg.type === "sync:anchor") {
@@ -8262,19 +8376,28 @@ var PoneleLanHub = class {
   }
   relayAnchorToCloud(room, outbound) {
     if (!room.cloudWs || room.cloudWs.readyState !== import_websocket.default.OPEN) return;
-    const hasSyncGoOrAnchor = outbound.some(
+    const anchorOrGo = outbound.find(
       (m) => m.type === "sync:go" || m.type === "sync:anchor"
     );
-    if (!hasSyncGoOrAnchor) return;
-    const snap = room.engine.getSnapshot(Date.now());
-    if (snap.tvFeed) {
-      this.sendToCloud(room, {
-        type: "room:snapshot_sync",
-        tvFeed: snap.tvFeed,
-        anchor: snap.anchor,
-        source: "lan"
-      });
-    }
+    const hasSnapshot = outbound.some((m) => m.type === "room:snapshot");
+    if (!anchorOrGo && !hasSnapshot) return;
+    const nowMs = Date.now();
+    const snap = room.engine.getSnapshot(nowMs);
+    const anchorToSync = anchorOrGo?.anchor ?? snap.anchor;
+    const rawElapsedSec = !anchorToSync.isPaused && anchorToSync.anchorServerMs > 0 ? Math.max(0, (nowMs - anchorToSync.anchorServerMs) / 1e3) : 0;
+    const livePos = Math.round((Math.max(0, anchorToSync.anchorPositionSec) + rawElapsedSec) * 1e3) / 1e3;
+    const forceSeek = anchorOrGo?.type === "sync:anchor" ? Boolean(anchorOrGo.forceSeek) : false;
+    this.sendToCloud(room, {
+      type: "room:snapshot_sync",
+      tvFeed: snap.tvFeed ?? null,
+      anchor: {
+        ...anchorToSync,
+        anchorPositionSec: livePos,
+        anchorServerMs: nowMs
+      },
+      forceSeek,
+      source: "lan"
+    });
   }
   sendToCloud(room, msg) {
     if (room.cloudWs && room.cloudWs.readyState === import_websocket.default.OPEN) {

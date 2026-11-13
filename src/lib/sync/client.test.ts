@@ -62,6 +62,13 @@ describe("PoneleSyncClient & server-notify", () => {
 
   beforeEach(() => {
     FakeWebSocket.instances = [];
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage?.clear();
+      } catch {
+        // ignore
+      }
+    }
     vi.stubGlobal("WebSocket", FakeWebSocket as unknown as typeof WebSocket);
     process.env.NEXT_PUBLIC_SYNC_WS_URL = "wss://poneleplay-sync.workers.dev";
     process.env.NEXT_PUBLIC_LAN_HUB_PORT = "4321";
@@ -83,8 +90,8 @@ describe("PoneleSyncClient & server-notify", () => {
     invalidateVenueSyncCache("bar-test");
   });
 
-  it("prioritizes local LAN 127.0.0.1 for master role and passes cloudUrl hint, then fails over to Cloud WS", () => {
-    const client = acquireSyncClient({ slug: "bar-test", role: "master" });
+  it("prioritizes local LAN 127.0.0.1 for master role when LAN mode is selected and passes cloudUrl hint, then fails over to Cloud WS", () => {
+    const client = acquireSyncClient({ slug: "bar-test", role: "master", mode: "lan" });
 
     expect(FakeWebSocket.instances.length).toBe(1);
     const firstUrl = FakeWebSocket.instances[0].url;
@@ -196,6 +203,84 @@ describe("PoneleSyncClient & server-notify", () => {
     expect(client.getStatus().lanEndpoints).toEqual(["ws://192.168.1.44:4321"]);
     vi.useRealTimers();
     releaseSyncClient(client);
+  });
+
+  it("defaults master role to pure Cloud WS without probing 127.0.0.1, keeping Netlify safe", () => {
+    const client = acquireSyncClient({ slug: "bar-cloud", role: "master" });
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).toContain("wss://poneleplay-sync.workers.dev/ws/bar-cloud");
+    expect(FakeWebSocket.instances[0].url).not.toContain("127.0.0.1");
+
+    FakeWebSocket.instances[0].simulateOpen();
+    expect(client.getStatus().transport).toBe("cloud");
+    expect(client.getStatus().preferenceMode).toBe("cloud");
+
+    releaseSyncClient(client);
+  });
+
+  it("runs Direct P2P mode over BroadcastChannel alongside Cloud mirror without leaving Cloud", () => {
+    const channels = new Map<string, Set<{ onmessage: ((ev: { data: unknown }) => void) | null }>>();
+    class FakeBroadcastChannel {
+      name: string;
+      onmessage: ((ev: { data: unknown }) => void) | null = null;
+      constructor(name: string) {
+        this.name = name;
+        if (!channels.has(name)) channels.set(name, new Set());
+        channels.get(name)!.add(this);
+      }
+      postMessage(data: unknown) {
+        for (const peer of channels.get(this.name) ?? []) {
+          if (peer !== this) peer.onmessage?.({ data });
+        }
+      }
+      close() {
+        channels.get(this.name)?.delete(this);
+      }
+    }
+    vi.stubGlobal("BroadcastChannel", FakeBroadcastChannel as unknown as typeof BroadcastChannel);
+
+    const master = acquireSyncClient({ slug: "direct-room", role: "master", mode: "direct" });
+    const tv = acquireSyncClient({ slug: "direct-room", role: "tv", mode: "direct" });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    const masterWs = FakeWebSocket.instances[0];
+    const tvWs = FakeWebSocket.instances[1];
+    masterWs.simulateOpen();
+    tvWs.simulateOpen();
+
+    expect(masterWs.url).toContain("direct=1");
+    expect(master.getStatus().transport).toBe("direct");
+
+    const tvPreloads: string[] = [];
+    const tvGos: string[] = [];
+    tv.on("sync:preload", (m) => {
+      tvPreloads.push(m.barrierId);
+      tv.sendReady(m.barrierId);
+    });
+    tv.on("sync:go", (m) => {
+      tvGos.push(m.barrierId);
+    });
+    master.on("sync:preload", (m) => {
+      master.sendReady(m.barrierId);
+    });
+
+    master.sendCommand("play_now", {
+      track: {
+        itemId: "i1",
+        trackId: "t1",
+        title: "Tema Directo",
+        artist: "PonelePlay",
+        youtubeVideoId: "abc123xyz",
+        durationSeconds: 180,
+      },
+    });
+
+    expect(tvPreloads).toHaveLength(1);
+    expect(tvGos).toEqual(tvPreloads);
+    // Cloud WS stayed open and received a snapshot_sync mirror, never disconnected
+    expect(masterWs.sent.some((m) => m.includes('"room:snapshot_sync"') && m.includes('"direct"'))).toBe(true);
+
+    releaseSyncClient(master);
+    releaseSyncClient(tv);
   });
 });
 

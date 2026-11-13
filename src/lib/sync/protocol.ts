@@ -1,6 +1,15 @@
 export type SyncRole = "master" | "tv" | "client" | "lan-bridge";
 
-export type SyncTransportMode = "lan" | "cloud" | "fallback";
+export type SyncTransportMode = "lan" | "direct" | "cloud" | "fallback";
+
+export type SyncPreferenceMode = "cloud" | "direct" | "lan" | "auto";
+
+export interface SyncPeerInfo {
+  clientId: string;
+  role: SyncRole;
+  deviceId?: string;
+  directEnabled?: boolean;
+}
 
 export interface SyncTrack {
   itemId: string;
@@ -60,6 +69,7 @@ export interface SyncRoomSnapshot {
   activeBarrier: ReadyBarrierState | null;
   connectedClients: RoomPresenceSummary;
   lanEndpoints?: string[];
+  peers?: SyncPeerInfo[];
 }
 
 export type SyncInboundMessage =
@@ -71,8 +81,17 @@ export type SyncInboundMessage =
       clientId: string;
       deviceId?: string;
       lanEndpoints?: string[];
+      directEnabled?: boolean;
     }
   | { type: "lan:announce"; lanEndpoints: string[] }
+  | {
+      type: "rtc:signal";
+      targetClientId?: string;
+      signalType: "offer" | "answer" | "candidate" | "bye" | "direct-ready";
+      sdp?: string;
+      candidate?: Record<string, unknown>;
+      directEnabled?: boolean;
+    }
   | {
       type: "playback:command";
       command: string;
@@ -100,7 +119,8 @@ export type SyncInboundMessage =
       type: "room:snapshot_sync";
       tvFeed?: Record<string, unknown> | null;
       anchor?: Partial<PlaybackAnchor>;
-      source?: "cloud" | "lan" | "api";
+      forceSeek?: boolean;
+      source?: "cloud" | "lan" | "api" | "direct";
     };
 
 export type SyncOutboundMessage =
@@ -129,6 +149,18 @@ export type SyncOutboundMessage =
       type: "room:presence";
       connectedClients: RoomPresenceSummary;
       lanEndpoints?: string[];
+      peers?: SyncPeerInfo[];
+      serverNowMs: number;
+    }
+  | {
+      type: "rtc:signal";
+      fromClientId: string;
+      fromRole: SyncRole;
+      targetClientId?: string;
+      signalType: "offer" | "answer" | "candidate" | "bye" | "direct-ready";
+      sdp?: string;
+      candidate?: Record<string, unknown>;
+      directEnabled?: boolean;
       serverNowMs: number;
     }
   | { type: "sync:error"; code: string; message: string };

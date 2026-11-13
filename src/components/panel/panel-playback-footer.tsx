@@ -120,11 +120,14 @@ export function PanelPlaybackFooter({
   const lastBufferedVideoIdRef = useRef<string>("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusState>({
     transport: "offline",
+    preferenceMode: "cloud",
     connected: false,
     rttMs: null,
     offsetMs: 0,
     presence: null,
     lanEndpoints: [],
+    peers: [],
+    directStats: null,
   });
   const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
   currentTrackRef.current = currentTrack;
@@ -571,6 +574,13 @@ export function PanelPlaybackFooter({
       if (anchor.seq > 0) {
         if (anchor.seq < lastCommandSeqRef.current) return;
         lastCommandSeqRef.current = anchor.seq;
+      } else if (
+        !anchor.track ||
+        lastCommandSeqRef.current > 0 ||
+        Boolean(currentTrackRef.current)
+      ) {
+        // Ignore unsequenced empty room bootstrap (e.g. fresh LAN Hub) over an active Cabina
+        return;
       }
       setIsPaused(anchor.isPaused);
       setVolume(anchor.volume);
@@ -1564,38 +1574,50 @@ export function PanelPlaybackFooter({
                 type="button"
                 onClick={() => setLanSyncModalOpen(true)}
                 className={`flex h-8 shrink-0 items-center gap-1.5 px-2.5 rounded-xl text-[11px] font-semibold whitespace-nowrap border transition-all active:scale-95 cursor-pointer ${
-                  syncStatus.transport === "lan"
-                    ? "bg-th-emerald-soft border-th-emerald/35 text-th-emerald hover:bg-th-emerald hover:text-white"
-                    : syncStatus.transport === "cloud"
-                      ? "bg-th-accent-soft border-th-accent/35 text-th-accent hover:bg-th-accent hover:text-white"
-                      : "bg-th-amber-soft border-th-amber/35 text-th-amber hover:bg-th-amber hover:text-white"
+                  syncStatus.transport === "direct"
+                    ? "bg-th-teal-soft border-th-teal/35 text-th-teal hover:bg-th-teal hover:text-white"
+                    : syncStatus.transport === "lan"
+                      ? "bg-th-emerald-soft border-th-emerald/35 text-th-emerald hover:bg-th-emerald hover:text-white"
+                      : syncStatus.transport === "cloud"
+                        ? "bg-th-accent-soft border-th-accent/35 text-th-accent hover:bg-th-accent hover:text-white"
+                        : "bg-th-amber-soft border-th-amber/35 text-th-amber hover:bg-th-amber hover:text-white"
                 }`}
                 title={
-                  syncStatus.transport === "lan"
-                    ? `Sincronización LAN ultrarrápida (${syncStatus.rttMs ?? "<2"}ms) — Clic para ver detalles`
-                    : syncStatus.transport === "cloud"
-                      ? `Modo Internet Cloud (${syncStatus.rttMs ?? "--"}ms) — Clic para activar Modo LAN (<2ms)`
-                      : "Clic para configurar sincronización LAN o diagnosticar conexión"
+                  syncStatus.transport === "direct"
+                    ? `Modo Directo P2P activo (${syncStatus.rttMs ?? "~2"}ms) con respaldo Cloud — Clic para configurar`
+                    : syncStatus.transport === "lan"
+                      ? `Sincronización Hub LAN (${syncStatus.rttMs ?? "<2"}ms) — Clic para ver detalles`
+                      : syncStatus.transport === "cloud"
+                        ? syncStatus.preferenceMode === "direct"
+                          ? `Directo P2P listo (usando respaldo Cloud ${syncStatus.rttMs ?? "--"}ms hasta conectar Pantalla Web)`
+                          : `Modo Cloud Estable (${syncStatus.rttMs ?? "--"}ms) — Clic para elegir modo Directo o LAN`
+                        : "Clic para configurar modo de sincronización o diagnosticar conexión"
                 }
               >
                 <span
                   className={`size-2 rounded-full shrink-0 ${
-                    syncStatus.transport === "lan"
-                      ? "bg-th-emerald animate-pulse"
-                      : syncStatus.transport === "cloud"
-                        ? "bg-th-accent animate-pulse"
-                        : "bg-th-amber"
+                    syncStatus.transport === "direct"
+                      ? "bg-th-teal animate-pulse"
+                      : syncStatus.transport === "lan"
+                        ? "bg-th-emerald animate-pulse"
+                        : syncStatus.transport === "cloud"
+                          ? "bg-th-accent animate-pulse"
+                          : "bg-th-amber"
                   }`}
                 />
                 <Wifi className="size-3.5 shrink-0 hidden xl:inline" />
                 <span>
-                  {syncStatus.transport === "lan"
-                    ? `LAN${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
-                    : syncStatus.transport === "cloud"
-                      ? `Cloud${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
-                      : syncStatus.transport === "connecting"
-                        ? "Sync..."
-                        : "Sync LAN"}
+                  {syncStatus.transport === "direct"
+                    ? `Directo${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                    : syncStatus.transport === "lan"
+                      ? `LAN${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                      : syncStatus.transport === "cloud"
+                        ? syncStatus.preferenceMode === "direct"
+                          ? `Directo·Cloud`
+                          : `Cloud${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                        : syncStatus.transport === "connecting"
+                          ? "Sync..."
+                          : "Modo Sync"}
                 </span>
               </button>
             )}
@@ -1803,12 +1825,15 @@ export function PanelPlaybackFooter({
         }}
       />
 
-      {/* LAN & Cloud Sync Diagnostic / Newbie Setup Modal */}
+      {/* Sync Mode Selector (Cloud / Direct P2P / LAN Hub) */}
       <LanSyncModal
         isOpen={lanSyncModalOpen}
         onClose={() => setLanSyncModalOpen(false)}
         slug={slug}
         syncStatus={syncStatus}
+        onSelectMode={(mode) => {
+          syncClientRef.current?.setPreferenceMode(mode);
+        }}
         onProbeLan={async () => {
           if (!syncClientRef.current) return false;
           return syncClientRef.current.probeLocalLanHubOnce();

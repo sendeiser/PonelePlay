@@ -6,6 +6,7 @@ import {
   type ReadyBarrierState,
   type RoomPresenceSummary,
   type SyncOutboundMessage,
+  type SyncPeerInfo,
   type SyncRole,
   type SyncRoomSnapshot,
   type SyncTrack,
@@ -17,6 +18,7 @@ export interface ConnectedRoomClient {
   deviceId?: string;
   joinedAtMs: number;
   lanEndpoints?: string[];
+  directEnabled?: boolean;
 }
 
 export interface RoomEngineConfig {
@@ -101,12 +103,37 @@ export class SyncRoomEngine {
     this.clients.set(client.clientId, {
       ...client,
       lanEndpoints: normalizedEndpoints ?? existing?.lanEndpoints,
+      directEnabled:
+        typeof client.directEnabled === "boolean"
+          ? client.directEnabled
+          : existing?.directEnabled,
     });
     return {
       type: "room:presence",
       connectedClients: this.getPresenceSummary(),
       lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
       serverNowMs: Date.now(),
+    };
+  }
+
+  setClientDirectEnabled(
+    clientId: string,
+    directEnabled: boolean,
+    nowMs = Date.now(),
+  ): SyncOutboundMessage | null {
+    const existing = this.clients.get(clientId);
+    if (!existing) return null;
+    this.clients.set(clientId, {
+      ...existing,
+      directEnabled,
+    });
+    return {
+      type: "room:presence",
+      connectedClients: this.getPresenceSummary(),
+      lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
+      serverNowMs: nowMs,
     };
   }
 
@@ -125,8 +152,18 @@ export class SyncRoomEngine {
       type: "room:presence",
       connectedClients: this.getPresenceSummary(),
       lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
       serverNowMs: nowMs,
     };
+  }
+
+  getPeers(): SyncPeerInfo[] {
+    return Array.from(this.clients.values()).map((c) => ({
+      clientId: c.clientId,
+      role: c.role,
+      ...(c.deviceId ? { deviceId: c.deviceId } : {}),
+      ...(c.directEnabled ? { directEnabled: true } : {}),
+    }));
   }
 
   getLanEndpoints(): string[] {
@@ -148,6 +185,7 @@ export class SyncRoomEngine {
         type: "room:presence",
         connectedClients: this.getPresenceSummary(),
         lanEndpoints: this.getLanEndpoints(),
+        peers: this.getPeers(),
         serverNowMs: nowMs,
       },
     ];
@@ -192,6 +230,7 @@ export class SyncRoomEngine {
       activeBarrier: this.activeBarrier ? { ...this.activeBarrier } : null,
       connectedClients: this.getPresenceSummary(),
       lanEndpoints: this.getLanEndpoints(),
+      peers: this.getPeers(),
     };
   }
 
@@ -475,9 +514,14 @@ export class SyncRoomEngine {
         this.anchor.track?.itemId === extNowPlaying?.itemId);
 
     const localTimingIsNewer =
-      sameTrack &&
-      this.anchor.anchorServerMs > 0 &&
-      (extAnchorMs <= 0 || this.anchor.anchorServerMs > extAnchorMs + 150);
+      (sameTrack &&
+        this.anchor.anchorServerMs > 0 &&
+        (extAnchorMs <= 0 || this.anchor.anchorServerMs > extAnchorMs + 150)) ||
+      (!sameTrack &&
+        this.anchor.seq > 0 &&
+        Boolean(this.anchor.track) &&
+        ((extAnchorMs > 0 && this.anchor.anchorServerMs > extAnchorMs + 250 && extSeq <= this.anchor.seq) ||
+          (!extNowPlaying && extSeq <= this.anchor.seq)));
 
     if (!localTimingIsNewer) {
       this.anchor = {
@@ -717,6 +761,118 @@ export class SyncRoomEngine {
       },
       serverTime: new Date(nowMs).toISOString(),
     };
+  }
+
+  /**
+   * Merges peer-relayed snapshot/anchor updates (from LAN Hub or Direct P2P master)
+   * without clobbering newer room state or dropping anchor updates when tvFeed is absent.
+   */
+  mergeExternalSnapshotSync(
+    payload: {
+      tvFeed?: Record<string, unknown> | null;
+      anchor?: Partial<PlaybackAnchor>;
+      forceSeek?: boolean;
+      source?: "cloud" | "lan" | "api" | "direct";
+    },
+    nowMs = Date.now(),
+  ): SyncOutboundMessage[] {
+    const outbound: SyncOutboundMessage[] = [];
+    const incAnchor = payload.anchor;
+
+    // Never let an empty/stale Cloud bootstrap overwrite an active LAN/Direct room
+    const isEmptyBootstrap =
+      (!incAnchor || (Number(incAnchor.seq ?? 0) <= 0 && !incAnchor.track)) &&
+      (!payload.tvFeed || !sanitizeSyncTrack(payload.tvFeed.nowPlaying));
+
+    if (isEmptyBootstrap && (this.anchor.seq > 0 || Boolean(this.anchor.track))) {
+      return [];
+    }
+
+    if (payload.tvFeed && typeof payload.tvFeed === "object") {
+      if (payload.source === "cloud" && this.anchor.seq > 0) {
+        // When local LAN already holds active commands, only refresh queue/feed metadata
+        const cloudSeq = Number(
+          incAnchor?.seq ??
+            ((payload.tvFeed.playback as Record<string, unknown> | undefined)?.commandSeq ?? 0),
+        );
+        if (cloudSeq > this.anchor.seq) {
+          outbound.push(this.mergeExternalTvFeed(payload.tvFeed, nowMs));
+        } else {
+          this.tvFeed = payload.tvFeed;
+          this.syncAnchorIntoTvFeed(nowMs);
+        }
+      } else {
+        outbound.push(this.mergeExternalTvFeed(payload.tvFeed, nowMs));
+      }
+    }
+
+    if (incAnchor && typeof incAnchor === "object") {
+      const incSeq = typeof incAnchor.seq === "number" ? incAnchor.seq : 0;
+      const incSeekSeq = typeof incAnchor.seekSeq === "number" ? incAnchor.seekSeq : this.anchor.seekSeq;
+      const incTrack =
+        incAnchor.track !== undefined
+          ? incAnchor.track
+            ? sanitizeSyncTrack(incAnchor.track)
+            : null
+          : this.anchor.track;
+
+      const isFromAuthoritativePeer = payload.source === "lan" || payload.source === "direct";
+      const shouldApplyAnchor =
+        isFromAuthoritativePeer ||
+        this.anchor.seq === 0 ||
+        incSeq > this.anchor.seq ||
+        (incSeq === this.anchor.seq && incSeekSeq > this.anchor.seekSeq);
+
+      if (shouldApplyAnchor) {
+        const incPos =
+          typeof incAnchor.anchorPositionSec === "number" && Number.isFinite(incAnchor.anchorPositionSec)
+            ? Math.max(0, incAnchor.anchorPositionSec)
+            : this.anchor.anchorPositionSec;
+        const incPaused =
+          typeof incAnchor.isPaused === "boolean" ? incAnchor.isPaused : this.anchor.isPaused;
+
+        this.anchor = {
+          ...this.anchor,
+          seq: isFromAuthoritativePeer
+            ? Math.max(this.anchor.seq + (incSeq > this.anchor.seq || payload.forceSeek ? 1 : 0), incSeq)
+            : Math.max(this.anchor.seq, incSeq),
+          seekSeq: Math.max(this.anchor.seekSeq, incSeekSeq) + (payload.forceSeek ? 1 : 0),
+          track: incAnchor.track !== undefined ? incTrack : this.anchor.track,
+          isPaused: incPaused,
+          anchorPositionSec: Math.round(incPos * 1000) / 1000,
+          anchorServerMs: nowMs,
+          volume: typeof incAnchor.volume === "number" ? incAnchor.volume : this.anchor.volume,
+          cabinaMuted:
+            typeof incAnchor.cabinaMuted === "boolean"
+              ? incAnchor.cabinaMuted
+              : this.anchor.cabinaMuted,
+          tvMuted: typeof incAnchor.tvMuted === "boolean" ? incAnchor.tvMuted : this.anchor.tvMuted,
+          karaokeMode:
+            typeof incAnchor.karaokeMode === "boolean"
+              ? incAnchor.karaokeMode
+              : this.anchor.karaokeMode,
+          lastCommand:
+            typeof incAnchor.lastCommand === "string" || incAnchor.lastCommand === null
+              ? incAnchor.lastCommand
+              : this.anchor.lastCommand,
+          displayConfig:
+            incAnchor.displayConfig !== undefined
+              ? incAnchor.displayConfig
+              : this.anchor.displayConfig,
+        };
+
+        this.bumpRevision(nowMs);
+        this.syncAnchorIntoTvFeed(nowMs);
+        outbound.push({
+          type: "sync:anchor",
+          anchor: { ...this.anchor },
+          forceSeek: Boolean(payload.forceSeek),
+          serverNowMs: nowMs,
+        });
+      }
+    }
+
+    return outbound;
   }
 }
 

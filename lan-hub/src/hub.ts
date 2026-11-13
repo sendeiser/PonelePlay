@@ -50,7 +50,8 @@ function normalizeRole(raw: string | null): SyncRole {
 function setCorsHeaders(res: http.ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Access-Control-Request-Private-Network");
+  res.setHeader("Access-Control-Allow-Private-Network", "true");
 }
 
 function renderStatusHtml(status: ReturnType<PoneleLanHub["getStatusSnapshot"]>): string {
@@ -549,6 +550,7 @@ export class PoneleLanHub {
       const nextRev = room.engine.getSnapshot(nowMs).revision;
       if (nextRev !== prevRev || msg.forceSeek) {
         this.broadcastLocal(room, [anchorMsg], ws);
+        this.relayAnchorToCloud(room, [anchorMsg]);
       }
       return;
     }
@@ -630,6 +632,13 @@ export class PoneleLanHub {
         } catch {
           // ignore
         }
+        const openNowMs = Date.now();
+        const currentSnap = room.engine.getSnapshot(openNowMs);
+        if (currentSnap.anchor.seq > 0) {
+          this.relayAnchorToCloud(room, [
+            { type: "sync:anchor", anchor: currentSnap.anchor, serverNowMs: openNowMs },
+          ]);
+        }
         if (room.cloudPingTimer) clearInterval(room.cloudPingTimer);
         room.cloudPingTimer = setInterval(() => {
           if (cloudWs.readyState === WebSocket.OPEN) {
@@ -665,9 +674,25 @@ export class PoneleLanHub {
         }
 
         const nowMs = Date.now();
-        if (msg.type === "room:snapshot" && msg.snapshot.tvFeed) {
-          const merged = room.engine.mergeExternalTvFeed(msg.snapshot.tvFeed, nowMs);
-          this.broadcastLocal(room, [merged]);
+        if (msg.type === "room:snapshot") {
+          const mergedOutbound = room.engine.mergeExternalSnapshotSync(
+            {
+              tvFeed: msg.snapshot.tvFeed,
+              anchor: msg.snapshot.anchor,
+              source: "cloud",
+            },
+            nowMs,
+          );
+          if (mergedOutbound.length > 0) {
+            this.broadcastLocal(room, mergedOutbound);
+          }
+          // If LAN Hub already has newer live commands than Cloud's snapshot, push LAN state up to Cloud
+          const localSnap = room.engine.getSnapshot(nowMs);
+          if (localSnap.anchor.seq > (msg.snapshot.anchor?.seq ?? 0)) {
+            this.relayAnchorToCloud(room, [
+              { type: "sync:anchor", anchor: localSnap.anchor, serverNowMs: nowMs },
+            ]);
+          }
         } else if (msg.type === "party:event") {
           this.broadcastLocal(room, [msg]);
         } else if (msg.type === "sync:anchor") {
@@ -727,20 +752,36 @@ export class PoneleLanHub {
 
   private relayAnchorToCloud(room: LanRoomRuntime, outbound: SyncOutboundMessage[]): void {
     if (!room.cloudWs || room.cloudWs.readyState !== WebSocket.OPEN) return;
-    const hasSyncGoOrAnchor = outbound.some(
-      (m) => m.type === "sync:go" || m.type === "sync:anchor",
+    const anchorOrGo = outbound.find(
+      (m): m is Extract<SyncOutboundMessage, { type: "sync:go" | "sync:anchor" }> =>
+        m.type === "sync:go" || m.type === "sync:anchor",
     );
-    if (!hasSyncGoOrAnchor) return;
+    const hasSnapshot = outbound.some((m) => m.type === "room:snapshot");
+    if (!anchorOrGo && !hasSnapshot) return;
 
-    const snap: SyncRoomSnapshot = room.engine.getSnapshot(Date.now());
-    if (snap.tvFeed) {
-      this.sendToCloud(room, {
-        type: "room:snapshot_sync",
-        tvFeed: snap.tvFeed,
-        anchor: snap.anchor as Partial<PlaybackAnchor>,
-        source: "lan",
-      });
-    }
+    const nowMs = Date.now();
+    const snap: SyncRoomSnapshot = room.engine.getSnapshot(nowMs);
+    const anchorToSync = anchorOrGo?.anchor ?? snap.anchor;
+    const rawElapsedSec =
+      !anchorToSync.isPaused && anchorToSync.anchorServerMs > 0
+        ? Math.max(0, (nowMs - anchorToSync.anchorServerMs) / 1000)
+        : 0;
+    const livePos =
+      Math.round((Math.max(0, anchorToSync.anchorPositionSec) + rawElapsedSec) * 1000) / 1000;
+    const forceSeek =
+      anchorOrGo?.type === "sync:anchor" ? Boolean(anchorOrGo.forceSeek) : false;
+
+    this.sendToCloud(room, {
+      type: "room:snapshot_sync",
+      tvFeed: snap.tvFeed ?? null,
+      anchor: {
+        ...anchorToSync,
+        anchorPositionSec: livePos,
+        anchorServerMs: nowMs,
+      },
+      forceSeek,
+      source: "lan",
+    });
   }
 
   private sendToCloud(room: LanRoomRuntime, msg: SyncInboundMessage): void {

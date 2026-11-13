@@ -111,9 +111,17 @@ test("PoneleLanHub coordinates clock sync and Ready-Barrier across LAN sockets",
     assert.equal(masterGo.barrierId, tvGo.barrierId);
     assert.equal(masterGo.startAtServerMs, tvGo.startAtServerMs);
 
-    // 3. Health HTTP check
+    // 3. Health HTTP check + Chrome Private Network Access CORS headers for Netlify HTTPS
+    const preflightRes = await fetch(`http://127.0.0.1:${port}/health`, {
+      method: "OPTIONS",
+      headers: { "Access-Control-Request-Private-Network": "true" },
+    });
+    assert.equal(preflightRes.status, 204);
+    assert.equal(preflightRes.headers.get("access-control-allow-private-network"), "true");
+
     const healthRes = await fetch(`http://127.0.0.1:${port}/health`);
     assert.equal(healthRes.status, 200);
+    assert.equal(healthRes.headers.get("access-control-allow-private-network"), "true");
     const healthJson = (await healthRes.json()) as { ok: boolean; rooms: Array<{ slug: string }> };
     assert.equal(healthJson.ok, true);
     assert.equal(healthJson.rooms[0]?.slug, "juntada");
@@ -137,6 +145,107 @@ test("PoneleLanHub coordinates clock sync and Ready-Barrier across LAN sockets",
     master.close();
     tv.close();
     await hub.stop();
+  }
+});
+
+test("PoneleLanHub relays anchors and seeks to Cloud bridge even when tvFeed is null", async () => {
+  const { WebSocketServer } = await import("ws");
+  const cloudWss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+  await new Promise<void>((resolve) => cloudWss.once("listening", resolve));
+  const cloudAddr = cloudWss.address();
+  const cloudPort = typeof cloudAddr === "object" && cloudAddr ? cloudAddr.port : 0;
+  assert.ok(cloudPort > 0);
+
+  const cloudReceived: Array<Record<string, unknown>> = [];
+  cloudWss.on("connection", (ws) => {
+    // Simulate empty stale Cloud room snapshot on initial bridge connect
+    ws.send(
+      JSON.stringify({
+        type: "room:snapshot",
+        serverNowMs: Date.now(),
+        snapshot: {
+          slug: "cloud-test",
+          revision: 0,
+          anchor: {
+            seq: 0,
+            seekSeq: 0,
+            track: null,
+            isPaused: true,
+            anchorPositionSec: 0,
+            anchorServerMs: 1000,
+            volume: 85,
+            cabinaMuted: false,
+            tvMuted: false,
+            karaokeMode: false,
+            lastCommand: null,
+            displayConfig: null,
+          },
+          tvFeed: null,
+          updatedAtServerMs: 1000,
+          activeBarrier: null,
+          connectedClients: { masterCount: 0, tvCount: 0, clientCount: 0, bridgeCount: 1 },
+        },
+      }),
+    );
+
+    ws.on("message", (raw) => {
+      const text = typeof raw === "string" ? raw : raw.toString("utf8");
+      try {
+        cloudReceived.push(JSON.parse(text) as Record<string, unknown>);
+      } catch {
+        // ignore
+      }
+    });
+  });
+
+  const hub = new PoneleLanHub({
+    port: 0,
+    enableMdns: false,
+    defaultCloudWsUrl: `ws://127.0.0.1:${cloudPort}`,
+  });
+  await hub.start();
+  const port = hub.getListeningPort();
+  const master = await connectWs(`ws://127.0.0.1:${port}/ws/cloud-test?role=master&clientId=m-cloud`);
+
+  try {
+    master.send(
+      JSON.stringify({
+        type: "playback:command",
+        command: "play_now",
+        useBarrier: false,
+        payload: {
+          track: {
+            itemId: "i-c",
+            trackId: "t-c",
+            title: "Tema Cloud Relay",
+            artist: "PonelePlay",
+            youtubeVideoId: "abcCloud123",
+            durationSeconds: 200,
+          },
+        },
+      }),
+    );
+
+    const deadline = Date.now() + 1500;
+    while (
+      Date.now() < deadline &&
+      !cloudReceived.some((m) => m.type === "room:snapshot_sync")
+    ) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    const snapshotSyncs = cloudReceived.filter((m) => m.type === "room:snapshot_sync");
+    assert.ok(snapshotSyncs.length >= 1, "expected anchor relayed to Cloud even without tvFeed");
+    const lastSync = snapshotSyncs[snapshotSyncs.length - 1] as {
+      anchor?: { track?: { youtubeVideoId?: string }; isPaused?: boolean };
+      source?: string;
+    };
+    assert.equal(lastSync.source, "lan");
+    assert.equal(lastSync.anchor?.track?.youtubeVideoId, "abcCloud123");
+    assert.equal(lastSync.anchor?.isPaused, false);
+  } finally {
+    master.close();
+    await hub.stop();
+    await new Promise<void>((resolve) => cloudWss.close(() => resolve()));
   }
 });
 

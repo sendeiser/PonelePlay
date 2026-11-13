@@ -279,5 +279,51 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
     expect(interpolatePlaybackPositionSec(10.2, 5000, 5180, true)).toBeCloseTo(10.38, 3);
     expect(interpolatePlaybackPositionSec(10.2, 5000, 5180, false)).toBe(10.2);
   });
+
+  it("merges peer snapshot sync without tvFeed and prevents stale Cloud bootstrap from clobbering active LAN room", () => {
+    const cloudEngine = new SyncRoomEngine("juntada", undefined, 1000);
+    const relayed = cloudEngine.mergeExternalSnapshotSync(
+      {
+        tvFeed: null,
+        anchor: {
+          seq: 3,
+          seekSeq: 2,
+          track: SAMPLE_TRACK,
+          isPaused: false,
+          anchorPositionSec: 48.25,
+          anchorServerMs: 9_000,
+          volume: 90,
+          lastCommand: "seek",
+        },
+        forceSeek: true,
+        source: "lan",
+      },
+      9_500,
+    );
+
+    expect(relayed).toHaveLength(1);
+    expect(relayed[0].type).toBe("sync:anchor");
+    if (relayed[0].type !== "sync:anchor") throw new Error("expected sync:anchor");
+    expect(relayed[0].forceSeek).toBe(true);
+    expect(relayed[0].anchor.anchorPositionSec).toBe(48.25);
+    expect(cloudEngine.getSnapshot(9_500).anchor.track?.youtubeVideoId).toBe(
+      SAMPLE_TRACK.youtubeVideoId,
+    );
+
+    // Empty Cloud bootstrap (seq 0, track null) must never overwrite an active LAN room
+    const clobberAttempt = cloudEngine.mergeExternalSnapshotSync(
+      {
+        tvFeed: { nowPlaying: null, playback: { commandSeq: 0 } },
+        anchor: { seq: 0, track: null, isPaused: true, anchorPositionSec: 0, anchorServerMs: 9_600 },
+        source: "cloud",
+      },
+      9_600,
+    );
+    expect(clobberAttempt).toHaveLength(0);
+    expect(cloudEngine.getSnapshot(9_600).anchor.isPaused).toBe(false);
+    expect(cloudEngine.getSnapshot(9_600).anchor.track?.youtubeVideoId).toBe(
+      SAMPLE_TRACK.youtubeVideoId,
+    );
+  });
 });
 
