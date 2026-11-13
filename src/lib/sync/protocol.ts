@@ -84,6 +84,7 @@ export type SyncInboundMessage =
   | {
       type: "sync:progress";
       currentTime: number;
+      reportedAtServerMs?: number;
       duration?: number;
       isPaused?: boolean;
       isFromAdminAudio?: boolean;
@@ -168,8 +169,9 @@ export function mergeClockOffset(
     };
   }
 
-  // Always prefer lower-RTT samples immediately; blend normal low-jitter samples smoothly
-  if (sample.rttMs <= prev.bestRttMs + 8) {
+  // Favor lowest-RTT samples cleanly; proportional jitter window keeps LAN ultra-tight while adapting on Cloud
+  const jitterAllowanceMs = Math.max(3, Math.round(prev.bestRttMs * 0.15));
+  if (sample.rttMs <= prev.bestRttMs + jitterAllowanceMs) {
     const nextBest = Math.min(prev.bestRttMs, sample.rttMs);
     const weight = sample.rttMs <= prev.bestRttMs ? 0.65 : 0.35;
     return {
@@ -179,15 +181,58 @@ export function mergeClockOffset(
     };
   }
 
-  // Slowly decay bestRttMs upward over many samples in case network baseline permanently shifted
-  const decayedBest = Math.round(prev.bestRttMs * 1.08);
+  // Slowly decay bestRttMs upward only modestly, ignoring severe RTT outlier spikes
+  const decayedBest = Math.max(prev.bestRttMs + 1, Math.round(prev.bestRttMs * 1.06));
+  const acceptModerateSample = sample.rttMs <= prev.bestRttMs * 2 + 25 && sample.rttMs <= decayedBest;
   return {
-    offsetMs: sample.rttMs <= decayedBest
+    offsetMs: acceptModerateSample
       ? Math.round(prev.offsetMs * 0.85 + sample.offsetMs * 0.15)
       : prev.offsetMs,
     bestRttMs: decayedBest,
     sampleCount: prev.sampleCount + 1,
   };
+}
+
+export const MIN_ADAPTIVE_SEEK_LEAD_SEC = 0.04;
+export const MAX_ADAPTIVE_SEEK_LEAD_SEC = 0.38;
+
+export function clampAdaptiveSeekLeadSec(leadSec: number): number {
+  if (!Number.isFinite(leadSec)) return 0.16;
+  return Math.round(Math.min(MAX_ADAPTIVE_SEEK_LEAD_SEC, Math.max(MIN_ADAPTIVE_SEEK_LEAD_SEC, leadSec)) * 1000) / 1000;
+}
+
+/**
+ * Updates per-device seek lead compensation from measured post-seek residual error.
+ * postSeekDriftSec = expectedSec - actualSec (positive = landed behind -> increase lead).
+ */
+export function computeAdaptiveSeekLeadSec(
+  prevLeadSec: number,
+  postSeekDriftSec: number,
+  alpha = 0.45,
+): number {
+  const safePrev = clampAdaptiveSeekLeadSec(prevLeadSec);
+  if (!Number.isFinite(postSeekDriftSec) || Math.abs(postSeekDriftSec) > 1.2) {
+    return safePrev;
+  }
+  return clampAdaptiveSeekLeadSec(safePrev + postSeekDriftSec * alpha);
+}
+
+/**
+ * Interpolates live playback position using elapsed monotonic/wall time since the last player sample.
+ */
+export function interpolatePlaybackPositionSec(
+  lastKnownSec: number,
+  capturedAtMs: number,
+  nowMs: number,
+  isPlaying: boolean,
+  maxExtrapolateSec = 2.0,
+): number {
+  const base = Number.isFinite(lastKnownSec) ? Math.max(0, lastKnownSec) : 0;
+  if (!isPlaying || capturedAtMs <= 0 || nowMs <= capturedAtMs) {
+    return base;
+  }
+  const deltaSec = Math.min(maxExtrapolateSec, Math.max(0, (nowMs - capturedAtMs) / 1000));
+  return base + deltaSec;
 }
 
 /**

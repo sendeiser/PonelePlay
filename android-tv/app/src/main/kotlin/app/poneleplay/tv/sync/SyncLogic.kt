@@ -92,17 +92,33 @@ object SyncClockEstimator {
     }
 
     fun merge(current: ClockSyncEstimate?, sample: ClockSyncSample): ClockSyncEstimate {
-        if (current == null || current.sampleCount == 0 || sample.rttMs <= (current.rttMs * 1.15).roundToLong()) {
+        if (current == null || current.sampleCount == 0) {
             return ClockSyncEstimate(
                 offsetMs = sample.offsetMs,
                 rttMs = sample.rttMs,
                 sampleCount = (current?.sampleCount ?: 0) + 1
             )
         }
-        val blendedOffset = (current.offsetMs * 0.8 + sample.offsetMs * 0.2).roundToLong()
+        val jitterAllowanceMs = max(3L, (current.rttMs * 0.15).roundToLong())
+        if (sample.rttMs <= current.rttMs + jitterAllowanceMs) {
+            val nextBest = kotlin.math.min(current.rttMs, sample.rttMs)
+            val weight = if (sample.rttMs <= current.rttMs) 0.65 else 0.35
+            return ClockSyncEstimate(
+                offsetMs = (current.offsetMs * (1.0 - weight) + sample.offsetMs * weight).roundToLong(),
+                rttMs = nextBest,
+                sampleCount = current.sampleCount + 1
+            )
+        }
+        val decayedBest = max(current.rttMs + 1L, (current.rttMs * 1.06).roundToLong())
+        val acceptModerate = sample.rttMs <= (current.rttMs * 2L + 25L) && sample.rttMs <= decayedBest
+        val blendedOffset = if (acceptModerate) {
+            (current.offsetMs * 0.85 + sample.offsetMs * 0.15).roundToLong()
+        } else {
+            current.offsetMs
+        }
         return ClockSyncEstimate(
             offsetMs = blendedOffset,
-            rttMs = current.rttMs,
+            rttMs = decayedBest,
             sampleCount = current.sampleCount + 1
         )
     }
@@ -128,8 +144,36 @@ object SyncClockEstimator {
         isEarlyWindow: Boolean
     ): Boolean {
         if (isPaused || currentVideoSec < 0.0 || expectedSec < 0.0) return false
-        val threshold = if (isEarlyWindow) 0.22 else 0.38
+        val threshold = if (isEarlyWindow) 0.10 else 0.16
         return abs(currentVideoSec - expectedSec) > threshold
+    }
+
+    fun interpolatePositionSec(
+        lastKnownSec: Double,
+        capturedElapsedMs: Long,
+        nowElapsedMs: Long,
+        isPlaying: Boolean,
+        maxExtrapolateSec: Double = 2.0
+    ): Double {
+        val base = if (lastKnownSec.isFinite()) max(0.0, lastKnownSec) else 0.0
+        if (!isPlaying || capturedElapsedMs <= 0L || nowElapsedMs <= capturedElapsedMs) {
+            return base
+        }
+        val deltaSec = ((nowElapsedMs - capturedElapsedMs) / 1000.0).coerceIn(0.0, maxExtrapolateSec)
+        return base + deltaSec
+    }
+
+    fun updateAdaptiveSeekLeadSec(
+        prevLeadSec: Double,
+        postSeekDriftSec: Double,
+        alpha: Double = 0.45
+    ): Double {
+        val safePrev = if (prevLeadSec.isFinite()) prevLeadSec.coerceIn(0.04, 0.38) else 0.20
+        if (!postSeekDriftSec.isFinite() || abs(postSeekDriftSec) > 1.2) {
+            return safePrev
+        }
+        val updated = (safePrev + postSeekDriftSec * alpha).coerceIn(0.04, 0.38)
+        return kotlin.math.round(updated * 1000.0) / 1000.0
     }
 
     fun normalizeCloudBaseUrl(rawUrl: String?): String {

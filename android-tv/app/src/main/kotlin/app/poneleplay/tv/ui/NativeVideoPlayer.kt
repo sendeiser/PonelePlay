@@ -79,6 +79,7 @@ class VideoPlayerController {
     internal var currentVideoId: String? = null
     @Volatile var activeBarrierVideoId: String? = null
     @Volatile var currentPositionSec: Float = 0f
+    @Volatile var positionCapturedElapsedMs: Long = 0L
     @Volatile var currentPlayerState: Int = -1
     var onVideoCuedCallback: ((String) -> Unit)? = null
     var onFirstFramePlayingCallback: ((String, Float) -> Unit)? = null
@@ -134,6 +135,7 @@ class VideoPlayerController {
     fun seekTo(seconds: Float) {
         val safeSec = seconds.coerceAtLeast(0f)
         currentPositionSec = safeSec
+        positionCapturedElapsedMs = android.os.SystemClock.elapsedRealtime()
         webView?.evaluateJavascript("seekTo($safeSec);", null)
     }
 
@@ -255,11 +257,13 @@ fun NativeVideoPlayer(
                         },
                         onFirstFramePlaying = { playingId, posSec ->
                             controller.currentPositionSec = posSec
+                            controller.positionCapturedElapsedMs = android.os.SystemClock.elapsedRealtime()
                             controller.currentPlayerState = 1
                             controller.onFirstFramePlayingCallback?.invoke(playingId, posSec)
                         },
                         onTimeUpdate = { posSec, state ->
                             controller.currentPositionSec = posSec
+                            controller.positionCapturedElapsedMs = android.os.SystemClock.elapsedRealtime()
                             controller.currentPlayerState = state
                         }
                     ),
@@ -384,7 +388,8 @@ private fun buildPlayerHtml(
               } catch(_) {}
             }
 
-            // Continuously request infoDelivery + direct widget getCurrentTime polling every 250ms
+            // Continuously request infoDelivery + direct widget getCurrentTime polling every 120ms
+            var seekLockUntilMs = 0;
             setInterval(pingListening, 1500);
             setTimeout(pingListening, 250);
             setInterval(function() {
@@ -396,6 +401,7 @@ private fun buildPlayerHtml(
                     currentTvState = st;
                   }
                 }
+                if (Date.now() < seekLockUntilMs) return;
                 if (typeof player.getCurrentTime === 'function') {
                   var pt = player.getCurrentTime();
                   if (typeof pt === 'number' && !isNaN(pt) && pt >= 0) {
@@ -404,7 +410,7 @@ private fun buildPlayerHtml(
                   }
                 }
               } catch(_) {}
-            }, 250);
+            }, 120);
 
             // Anti-freeze watchdog: if the video should be playing but YouTube stays
             // PAUSED / CUED / UNSTARTED (pause icon frozen on screen after a skip), resume it.
@@ -481,7 +487,7 @@ private fun buildPlayerHtml(
               currentVolume = currentMuted ? 0 : targetVol;
               if (!currentMuted) originalVolume = targetVol;
               lastLoadAt = Date.now();
-              lastSyncSeekAt = Date.now() + 350;
+              lastSyncSeekAt = Date.now() + 200;
 
               if (id && id !== currentVideoId) {
                 currentVideoId = id;
@@ -491,8 +497,9 @@ private fun buildPlayerHtml(
                 hasSyncedFirstFrame = false;
                 currentTvTime = sec;
                 sendCommand('loadVideoById', [{ videoId: id, startSeconds: sec }]);
-              } else if ((sec <= 0.15 && (currentTvTime || 0) > 0.22) || Math.abs((currentTvTime || 0) - sec) > 0.25) {
+              } else if ((sec <= 0.15 && (currentTvTime || 0) > 0.22) || Math.abs((currentTvTime || 0) - sec) > 0.16) {
                 currentTvTime = sec;
+                seekLockUntilMs = Date.now() + 450;
                 sendCommand('seekTo', [sec, true]);
               }
 
@@ -509,7 +516,8 @@ private fun buildPlayerHtml(
             function reportBridgeTime(forcePush) {
               try {
                 var now = Date.now();
-                if (!forcePush && now - lastTimePushAt < 250) return;
+                if (!forcePush && now < seekLockUntilMs) return;
+                if (!forcePush && now - lastTimePushAt < 120) return;
                 lastTimePushAt = now;
                 if (window.AndroidBridge && window.AndroidBridge.onTimeUpdate) {
                   window.AndroidBridge.onTimeUpdate(Number(currentTvTime) || 0, Number(currentTvState));
@@ -564,6 +572,7 @@ private fun buildPlayerHtml(
             function seekTo(sec) {
               var clamped = Math.max(0, Number(sec) || 0);
               lastSyncSeekAt = Date.now();
+              seekLockUntilMs = lastSyncSeekAt + 450;
               currentTvTime = clamped;
               sendCommand('seekTo', [clamped, true]);
             }
@@ -698,7 +707,7 @@ private fun buildPlayerHtml(
                 if (!data || typeof data !== 'object') return;
 
                 if (data.event === 'infoDelivery' && data.info) {
-                  if (typeof data.info.currentTime === 'number') {
+                  if (typeof data.info.currentTime === 'number' && Date.now() >= seekLockUntilMs) {
                     currentTvTime = data.info.currentTime;
                   }
                   if (typeof data.info.duration === 'number' && data.info.duration > 0) {

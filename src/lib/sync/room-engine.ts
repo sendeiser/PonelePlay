@@ -541,6 +541,7 @@ export class SyncRoomEngine {
   applyProgressReport(
     report: {
       currentTime: number;
+      reportedAtServerMs?: number;
       duration?: number;
       isPaused?: boolean;
       seekSeq?: number;
@@ -558,9 +559,17 @@ export class SyncRoomEngine {
         (reportedTrack.youtubeVideoId &&
           reportedTrack.youtubeVideoId !== this.anchor.track.youtubeVideoId));
 
+    const transitSec =
+      !report.isPaused &&
+      typeof report.reportedAtServerMs === "number" &&
+      Number.isFinite(report.reportedAtServerMs)
+        ? Math.max(0, Math.min(800, nowMs - report.reportedAtServerMs)) / 1000
+        : 0;
+    const effectiveCurrentTime = Math.max(0, report.currentTime + transitSec);
+
     const prevComputed = computeTargetPositionSec(this.anchor, nowMs);
-    const timeDiff = Math.abs(prevComputed - report.currentTime);
-    const driftThresholdSec = report.currentTime < 8 ? 0.18 : 0.3;
+    const timeDiff = Math.abs(prevComputed - effectiveCurrentTime);
+    const driftThresholdSec = effectiveCurrentTime < 8 ? 0.06 : 0.1;
     const shouldReanchor =
       Boolean(report.forceSeek) ||
       Boolean(isTrackDifferent) ||
@@ -578,7 +587,7 @@ export class SyncRoomEngine {
         track: reportedTrack ?? this.anchor.track,
         isPaused:
           typeof report.isPaused === "boolean" ? report.isPaused : this.anchor.isPaused,
-        anchorPositionSec: Math.max(0, Math.round(report.currentTime * 100) / 100),
+        anchorPositionSec: Math.max(0, Math.round(effectiveCurrentTime * 1000) / 1000),
         anchorServerMs: nowMs,
         tvMuted: typeof report.tvMuted === "boolean" ? report.tvMuted : this.anchor.tvMuted,
         volume: typeof report.volume === "number" ? report.volume : this.anchor.volume,

@@ -287,6 +287,7 @@ export class PoneleSyncClient {
 
   sendProgress(report: {
     currentTime: number;
+    reportedAtServerMs?: number;
     duration?: number;
     isPaused?: boolean;
     isFromAdminAudio?: boolean;
@@ -296,9 +297,13 @@ export class PoneleSyncClient {
     volume?: number;
     track?: SyncTrack | null;
   }): boolean {
+    const observedServerMs =
+      report.reportedAtServerMs ??
+      (this.clockEstimate ? this.estimatedServerMs() : undefined);
     return this.send({
       type: "sync:progress",
       ...report,
+      ...(observedServerMs !== undefined ? { reportedAtServerMs: observedServerMs } : {}),
     });
   }
 
@@ -525,16 +530,17 @@ export class PoneleSyncClient {
       this.send({ type: "clock:ping", clientSentMs: Date.now() });
     };
     sendPing();
-    this.clockBurstTimers.push(setTimeout(sendPing, 80));
-    this.clockBurstTimers.push(setTimeout(sendPing, 180));
-    this.clockBurstTimers.push(setTimeout(sendPing, 320));
-    this.clockBurstTimers.push(setTimeout(sendPing, 550));
+    this.clockBurstTimers.push(setTimeout(sendPing, 60));
+    this.clockBurstTimers.push(setTimeout(sendPing, 140));
+    this.clockBurstTimers.push(setTimeout(sendPing, 260));
+    this.clockBurstTimers.push(setTimeout(sendPing, 450));
+    this.clockBurstTimers.push(setTimeout(sendPing, 800));
     this.pingTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send("ping");
         sendPing();
       }
-    }, 12_000);
+    }, 10_000);
   }
 
   private stopClockSync(): void {

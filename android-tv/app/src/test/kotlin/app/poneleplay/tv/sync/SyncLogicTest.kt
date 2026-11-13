@@ -79,7 +79,7 @@ class SyncLogicTest {
         assertFalse(
             SyncClockEstimator.shouldCorrectDrift(
                 currentVideoSec = 1.2,
-                expectedSec = 1.35,
+                expectedSec = 1.28,
                 isPaused = false,
                 isEarlyWindow = true
             )
@@ -87,7 +87,7 @@ class SyncLogicTest {
         assertTrue(
             SyncClockEstimator.shouldCorrectDrift(
                 currentVideoSec = 1.2,
-                expectedSec = 1.50,
+                expectedSec = 1.35,
                 isPaused = false,
                 isEarlyWindow = true
             )
@@ -95,7 +95,7 @@ class SyncLogicTest {
         assertFalse(
             SyncClockEstimator.shouldCorrectDrift(
                 currentVideoSec = 45.0,
-                expectedSec = 45.30,
+                expectedSec = 45.12,
                 isPaused = false,
                 isEarlyWindow = false
             )
@@ -103,7 +103,7 @@ class SyncLogicTest {
         assertTrue(
             SyncClockEstimator.shouldCorrectDrift(
                 currentVideoSec = 45.0,
-                expectedSec = 45.45,
+                expectedSec = 45.22,
                 isPaused = false,
                 isEarlyWindow = false
             )
@@ -116,6 +116,20 @@ class SyncLogicTest {
                 isEarlyWindow = true
             )
         )
+
+        assertEquals(
+            12.64,
+            SyncClockEstimator.interpolatePositionSec(12.50, 1000L, 1140L, true),
+            0.001
+        )
+        assertEquals(
+            12.50,
+            SyncClockEstimator.interpolatePositionSec(12.50, 1000L, 1140L, false),
+            0.001
+        )
+        assertEquals(0.236, SyncClockEstimator.updateAdaptiveSeekLeadSec(0.20, 0.08), 0.001)
+        assertEquals(0.173, SyncClockEstimator.updateAdaptiveSeekLeadSec(0.20, -0.06), 0.001)
+        assertEquals(0.20, SyncClockEstimator.updateAdaptiveSeekLeadSec(0.20, 2.5), 0.001)
     }
 }
 

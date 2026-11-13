@@ -80,6 +80,9 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const lastReportedTimeRef = useRef<number>(0);
     const trackLoadedAtRef = useRef<number>(0);
     const seekLockUntilRef = useRef<number>(0);
+    const seekStartedAtRef = useRef<number>(0);
+    const seekAnchorSecRef = useRef<number>(0);
+    const lastPollAtRef = useRef<number>(Date.now());
     const startHoldUntilRef = useRef<number>(0);
     const startHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const barrierStartSecRef = useRef<number>(0);
@@ -115,7 +118,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
             Date.now() >= seekLockUntilRef.current &&
             Date.now() >= startHoldUntilRef.current
           ) {
-            lastReportedTimeRef.current = Math.round(info.currentTime * 10) / 10;
+            lastReportedTimeRef.current = Math.round(info.currentTime * 1000) / 1000;
           }
         }
       }
@@ -409,6 +412,17 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                   }
                 } else if (event.data === 1) {
                   onTrackBufferedRef.current?.(currentVideoIdRef.current);
+                  if (Date.now() >= seekLockUntilRef.current && playerRef.current) {
+                    try {
+                      const t = playerRef.current.getCurrentTime();
+                      const d = Math.floor(playerRef.current.getDuration() || 0);
+                      if (typeof t === "number" && !Number.isNaN(t) && t >= 0) {
+                        const preciseT = Math.round(t * 1000) / 1000;
+                        lastReportedTimeRef.current = preciseT;
+                        onProgressRef.current?.(preciseT, d > 0 ? d : null);
+                      }
+                    } catch {}
+                  }
                 }
                 // event.data === 0 is YT.PlayerState.ENDED
                 // Ignore spurious ENDED events that occur within 6s of loading a track
@@ -494,9 +508,15 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     useEffect(() => {
       if (typeof window === "undefined") return;
 
+      lastPollAtRef.current = Date.now();
       const timer = setInterval(() => {
-        if (isPausedRef.current) return;
+        if (isPausedRef.current) {
+          lastPollAtRef.current = Date.now();
+          return;
+        }
         const now = Date.now();
+        const dtSec = Math.max(0.01, Math.min(0.5, (now - lastPollAtRef.current) / 1000));
+        lastPollAtRef.current = now;
 
         // While holding at 0:00 waiting for TV to buffer the new track, keep currentTime at 0
         if (now < startHoldUntilRef.current) {
@@ -505,11 +525,15 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           return;
         }
 
-        // Right after an operator seek, hold the exact sought time for 1.6s so stale pre-seek
-        // YouTube readings never snap the scrubber or TV back to the old position
+        // Right after an operator seek, extrapolate smoothly from sought position during short decoder flush
+        // so stale pre-seek readings don't snap back without freezing the clock at soughtSec
         if (now < seekLockUntilRef.current) {
+          const extrapolated =
+            seekAnchorSecRef.current + Math.max(0, (now - seekStartedAtRef.current) / 1000);
+          const preciseExtrap = Math.round(extrapolated * 1000) / 1000;
+          lastReportedTimeRef.current = preciseExtrap;
           onProgressRef.current?.(
-            lastReportedTimeRef.current,
+            preciseExtrap,
             currentTrackRef.current?.durationSeconds ?? 210,
           );
           return;
@@ -519,7 +543,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         let duration = currentTrackRef.current?.durationSeconds ?? 210;
 
         if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
-          currentTime = Math.round((html5AudioRef.current.currentTime || 0) * 10) / 10;
+          currentTime = Math.round((html5AudioRef.current.currentTime || 0) * 1000) / 1000;
           const d = Math.floor(html5AudioRef.current.duration || 0);
           if (d > 0) duration = d;
         } else if (playerRef.current && ytInitializedRef.current) {
@@ -529,11 +553,11 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
             const loadedId = vd?.video_id;
             const isStale =
               (loadedId && currentVideoIdRef.current && loadedId !== currentVideoIdRef.current) ||
-              now - trackLoadedAtRef.current < 300;
+              now - trackLoadedAtRef.current < 260;
             if (!isStale) {
               const t = playerRef.current.getCurrentTime() || 0;
               const d = Math.floor(playerRef.current.getDuration() || 0);
-              if (t >= 0) currentTime = Math.round(t * 10) / 10;
+              if (t >= 0) currentTime = Math.round(t * 1000) / 1000;
               if (d > 0) duration = d;
             }
           } catch {
@@ -544,7 +568,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         if (currentTime >= 0) {
           lastReportedTimeRef.current = currentTime;
         } else {
-          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.25) * 10) / 10;
+          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + dtSec) * 1000) / 1000;
           currentTime = lastReportedTimeRef.current;
         }
 
@@ -559,7 +583,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         }
 
         onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
-      }, 250);
+      }, 120);
 
       return () => {
         clearInterval(timer);
@@ -587,7 +611,22 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
 
       if (playerRef.current) {
         try {
-          playerRef.current.seekTo(targetSec, true);
+          let needsSeek = true;
+          try {
+            const currentYt = playerRef.current.getCurrentTime();
+            if (
+              barrierBufferedFiredRef.current &&
+              typeof currentYt === "number" &&
+              !Number.isNaN(currentYt) &&
+              Math.abs(barrierStartSecRef.current - targetSec) <= 0.15 &&
+              Math.abs(currentYt - targetSec) <= 0.18
+            ) {
+              needsSeek = false;
+            }
+          } catch {}
+          if (needsSeek) {
+            playerRef.current.seekTo(targetSec, true);
+          }
           if (isMutedRef.current) {
             playerRef.current.mute();
             playerRef.current.setVolume(0);
@@ -710,9 +749,12 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     // Expose imperative handle for seeking and unlocking
     useImperativeHandle(ref, () => ({
       seekTo: (seconds: number) => {
-        const clamped = Math.max(0, seconds);
+        const clamped = Math.max(0, Math.round(seconds * 1000) / 1000);
+        const now = Date.now();
         lastReportedTimeRef.current = clamped;
-        seekLockUntilRef.current = Date.now() + 1600;
+        seekAnchorSecRef.current = clamped;
+        seekStartedAtRef.current = now;
+        seekLockUntilRef.current = now + 700;
         startHoldUntilRef.current = 0;
         if (startHoldTimerRef.current) {
           clearTimeout(startHoldTimerRef.current);

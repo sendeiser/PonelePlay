@@ -661,7 +661,7 @@ export function PanelPlaybackFooter({
           clearTimeout(startBarrierTimerRef.current);
           startBarrierTimerRef.current = null;
         }
-        fastProgressUntilRef.current = Date.now() + 6500;
+        fastProgressUntilRef.current = Date.now() + 8500;
         const delayMs = syncClient.msUntilServerTime(startAtServerMs);
         audioEngineRef.current?.scheduleStartAt(delayMs, startPositionSec);
       });
@@ -1153,7 +1153,7 @@ export function PanelPlaybackFooter({
   const handleSeek = async (newSec: number) => {
     const clamped = Math.max(0, Math.min(duration, Math.floor(newSec)));
     const seekSeq = Date.now();
-    fastProgressUntilRef.current = seekSeq + 6500;
+    fastProgressUntilRef.current = seekSeq + 8500;
     lastProgressBroadcastRef.current = seekSeq;
     setElapsed(clamped);
     audioEngineRef.current?.seekTo(clamped);
@@ -1708,7 +1708,7 @@ export function PanelPlaybackFooter({
           }
 
           const now = Date.now();
-          const progressIntervalMs = now < fastProgressUntilRef.current ? 600 : 1800;
+          const progressIntervalMs = now < fastProgressUntilRef.current ? 280 : 1200;
           if (
             syncClientRef.current?.isConnected() &&
             currentTrack &&

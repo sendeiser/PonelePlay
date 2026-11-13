@@ -224,25 +224,60 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
     expect(engine.getSnapshot(3600).anchor.track?.youtubeVideoId).toBe("newTrack999");
   });
 
-  it("re-anchors progress only when drift exceeds tightened thresholds (0.18s early, 0.30s steady)", () => {
+  it("re-anchors progress only when drift exceeds tightened thresholds (0.06s early, 0.10s steady)", () => {
     const engine = new SyncRoomEngine("juntada", undefined, 1000);
     // With useBarrier: false, anchorServerMs starts at nowMs + 80ms = 10_080ms
     engine.applyPlaybackCommand("play_now", { track: SAMPLE_TRACK }, 10_000, { useBarrier: false });
 
-    // At 11_500ms, computed track time = 1.42s. 1.54s is within 0.18s -> revision stays unchanged
+    // At 11_500ms, computed track time = 1.42s. 1.46s is within 0.06s -> revision stays unchanged
     const minorEarly = engine.applyProgressReport(
-      { currentTime: 1.54, isPaused: false, track: SAMPLE_TRACK },
+      { currentTime: 1.46, isPaused: false, track: SAMPLE_TRACK },
       11_500,
     );
     expect(minorEarly.type).toBe("sync:anchor");
     const revBefore = engine.getSnapshot(11_500).revision;
 
-    // At 11_500ms, 1.70s differs by 0.28s >= 0.18s -> bumps revision
+    // At 11_500ms, 1.505s differs by 0.085s >= 0.06s -> bumps revision with 1ms precision
     engine.applyProgressReport(
-      { currentTime: 1.7, isPaused: false, track: SAMPLE_TRACK },
+      { currentTime: 1.505, isPaused: false, track: SAMPLE_TRACK },
       11_500,
     );
-    expect(engine.getSnapshot(11_500).revision).toBeGreaterThan(revBefore);
+    const snap = engine.getSnapshot(11_500);
+    expect(snap.revision).toBeGreaterThan(revBefore);
+    expect(snap.anchor.anchorPositionSec).toBe(1.505);
+  });
+
+  it("compensates one-way network transit delay when reportedAtServerMs is present", () => {
+    const engine = new SyncRoomEngine("juntada", undefined, 1000);
+    engine.applyPlaybackCommand("play_now", { track: SAMPLE_TRACK }, 10_000, { useBarrier: false });
+
+    // At T=11_400 Cabina samples currentTime=1.320s (which matches anchor at 11_400),
+    // and packet arrives at server T=11_490 (90ms cloud transit delay).
+    const revBefore = engine.getSnapshot(11_490).revision;
+    engine.applyProgressReport(
+      { currentTime: 1.32, reportedAtServerMs: 11_400, isPaused: false, track: SAMPLE_TRACK },
+      11_490,
+    );
+    // Transit compensation adds +0.090s -> 1.410s matches computed 1.410s at 11_490 -> no spurious re-anchor!
+    expect(engine.getSnapshot(11_490).revision).toBe(revBefore);
+  });
+
+  it("computes adaptive seek lead and interpolates live playback position accurately", async () => {
+    const {
+      computeAdaptiveSeekLeadSec,
+      interpolatePlaybackPositionSec,
+    } = await import("@/lib/sync/protocol");
+
+    // TV landed 0.08s behind expected -> increase seek lead toward true hardware latency
+    expect(computeAdaptiveSeekLeadSec(0.16, 0.08)).toBe(0.196);
+    // TV landed 0.06s ahead -> trim seek lead
+    expect(computeAdaptiveSeekLeadSec(0.2, -0.06)).toBe(0.173);
+    // Clamped safely within [0.04, 0.38] and ignores huge buffering outliers
+    expect(computeAdaptiveSeekLeadSec(0.16, 2.5)).toBe(0.16);
+    expect(computeAdaptiveSeekLeadSec(0.36, 0.2)).toBe(0.38);
+
+    expect(interpolatePlaybackPositionSec(10.2, 5000, 5180, true)).toBeCloseTo(10.38, 3);
+    expect(interpolatePlaybackPositionSec(10.2, 5000, 5180, false)).toBe(10.2);
   });
 });
 

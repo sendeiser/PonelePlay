@@ -213,7 +213,7 @@ export function createIframeEngine(
         pendingSeekSeconds = null;
         currentTime = s;
         lastTimeUpdateAt = Date.now();
-        seekLockUntil = Date.now() + 1500;
+        seekLockUntil = Date.now() + 650;
         if (ytReady && ytPlayer) {
           try {
             ytPlayer.seekTo(s, true);
@@ -521,10 +521,10 @@ export function createIframeEngine(
     },
 
     seekTo(seconds: number): void {
-      const target = Math.max(0, Math.round(seconds * 10) / 10);
+      const target = Math.max(0, Math.round(seconds * 1000) / 1000);
       currentTime = target;
       lastTimeUpdateAt = Date.now();
-      seekLockUntil = Date.now() + 1800;
+      seekLockUntil = Date.now() + 650;
 
       // If the player hasn't started playing yet, queue the seek for when YT_PLAYING fires
       // NEVER rewrite iframe.src inside seekTo (that destroys & reloads the iframe in a loop!)
@@ -590,6 +590,10 @@ export function createIframeEngine(
 
     getCurrentTime(): number {
       if (Date.now() < seekLockUntil) {
+        if ((desiredPlaying || lastPlayerState === YT_PLAYING) && lastTimeUpdateAt > 0) {
+          const deltaSec = Math.max(0, Math.min(0.65, (Date.now() - lastTimeUpdateAt) / 1000));
+          return currentTime + deltaSec;
+        }
         return currentTime;
       }
       if (ytReady && ytPlayer) {

@@ -7521,9 +7521,11 @@ var SyncRoomEngine = class _SyncRoomEngine {
   applyProgressReport(report, nowMs = Date.now()) {
     const reportedTrack = report.track ? sanitizeSyncTrack(report.track) : null;
     const isTrackDifferent = reportedTrack && (!this.anchor.track || reportedTrack.youtubeVideoId && reportedTrack.youtubeVideoId !== this.anchor.track.youtubeVideoId);
+    const transitSec = !report.isPaused && typeof report.reportedAtServerMs === "number" && Number.isFinite(report.reportedAtServerMs) ? Math.max(0, Math.min(800, nowMs - report.reportedAtServerMs)) / 1e3 : 0;
+    const effectiveCurrentTime = Math.max(0, report.currentTime + transitSec);
     const prevComputed = computeTargetPositionSec(this.anchor, nowMs);
-    const timeDiff = Math.abs(prevComputed - report.currentTime);
-    const driftThresholdSec = report.currentTime < 8 ? 0.18 : 0.3;
+    const timeDiff = Math.abs(prevComputed - effectiveCurrentTime);
+    const driftThresholdSec = effectiveCurrentTime < 8 ? 0.06 : 0.1;
     const shouldReanchor = Boolean(report.forceSeek) || Boolean(isTrackDifferent) || typeof report.isPaused === "boolean" && report.isPaused !== this.anchor.isPaused || timeDiff >= driftThresholdSec;
     if (shouldReanchor) {
       this.anchor = {
@@ -7532,7 +7534,7 @@ var SyncRoomEngine = class _SyncRoomEngine {
         seekSeq: typeof report.seekSeq === "number" ? Math.max(this.anchor.seekSeq, report.seekSeq) : this.anchor.seekSeq + (report.forceSeek ? 1 : 0),
         track: reportedTrack ?? this.anchor.track,
         isPaused: typeof report.isPaused === "boolean" ? report.isPaused : this.anchor.isPaused,
-        anchorPositionSec: Math.max(0, Math.round(report.currentTime * 100) / 100),
+        anchorPositionSec: Math.max(0, Math.round(effectiveCurrentTime * 1e3) / 1e3),
         anchorServerMs: nowMs,
         tvMuted: typeof report.tvMuted === "boolean" ? report.tvMuted : this.anchor.tvMuted,
         volume: typeof report.volume === "number" ? report.volume : this.anchor.volume

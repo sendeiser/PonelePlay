@@ -27,6 +27,7 @@ import {
   type PoneleSyncClient,
 } from "@/lib/sync/client";
 import {
+  computeAdaptiveSeekLeadSec,
   computeTargetPositionSec,
   type PlaybackAnchor,
   type SyncTrack,
@@ -1287,6 +1288,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     const latest = syncClient.getLatestSnapshot();
     if (latest?.anchor) applyAnchorToTv(latest.anchor, false);
 
+    let prebufferedVideoId: string | null = null;
+    let prebufferedStartSec: number | null = null;
+    let adaptiveSeekLeadSec = 0.16;
+    let pendingSeekVerification: {
+      seekAtMs: number;
+      verifyAtMs: number;
+      baselineLeadSec: number;
+    } | null = null;
+    let lastDriftCheckAtMs = 0;
+
     unsubSnap = syncClient.on("room:snapshot", ({ snapshot }) => {
       if (!activeBarrierRef.current) {
         applyAnchorToTv(snapshot.anchor, false);
@@ -1300,9 +1311,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     unsubPreload = syncClient.on("sync:preload", ({ barrierId, track, startPositionSec }) => {
       if (!active) return;
       const incoming = toPlayerTrack(track);
+      const preloadVideoId = resolveVideoId(incoming);
+      prebufferedVideoId = preloadVideoId;
+      prebufferedStartSec = startPositionSec;
+      pendingSeekVerification = null;
       activeBarrierRef.current = {
         barrierId,
-        videoId: resolveVideoId(incoming),
+        videoId: preloadVideoId,
       };
       if (startScheduleTimerRef.current) {
         clearTimeout(startScheduleTimerRef.current);
@@ -1359,8 +1374,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
       const startNow = () => {
         if (!active) return;
+        const incomingVideoId = resolveVideoId(incoming);
+        const alreadyPrebufferedSpot =
+          prebufferedStartSec !== null &&
+          prebufferedVideoId === incomingVideoId &&
+          Math.abs(prebufferedStartSec - startPositionSec) <= 0.15;
+        prebufferedVideoId = null;
+        prebufferedStartSec = null;
+        pendingSeekVerification = null;
         lastTvSeekAtRef.current = Date.now();
-        if (startPositionSec > 0.05) {
+        if (!alreadyPrebufferedSpot && startPositionSec > 0.05) {
           engine.seekTo?.(startPositionSec);
         }
         if (anchor.tvMuted) engine.mute?.();
@@ -1390,22 +1413,50 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       applyPartyEventPayload(payload);
     });
 
-    // Continuous tight drift guard driven by NTP-lite server clock anchor
+    // Continuous tight drift guard driven by NTP-lite server clock anchor + adaptive seek-lead EMA
     driftTimer = setInterval(() => {
       const anchor = syncAnchorRef.current;
-      if (!anchor || anchor.isPaused || activeBarrierRef.current || !syncClient.isConnected()) return;
+      if (!anchor || anchor.isPaused || activeBarrierRef.current || !syncClient.isConnected()) {
+        pendingSeekVerification = null;
+        return;
+      }
       if (!engine.hasLiveTime?.()) return;
+
+      const now = Date.now();
       const expected = computeTargetPositionSec(anchor, syncClient.estimatedServerMs());
       const actual = engine.getCurrentTime?.() ?? elapsedRef.current;
-      const drift = Math.abs(actual - expected);
-      const isEarlyWindow = expected < 8;
-      const thresholdSec = isEarlyWindow ? 0.28 : 0.45;
-      const cooldownMs = isEarlyWindow ? 1800 : 3000;
-      if (drift >= thresholdSec && Date.now() - lastTvSeekAtRef.current > cooldownMs) {
-        lastTvSeekAtRef.current = Date.now();
-        engine.seekTo?.(expected + 0.2);
+
+      if (pendingSeekVerification) {
+        if (lastTvSeekAtRef.current > pendingSeekVerification.seekAtMs + 25) {
+          pendingSeekVerification = null;
+        } else if (now >= pendingSeekVerification.verifyAtMs) {
+          const postSeekDriftSec = expected - actual;
+          adaptiveSeekLeadSec = computeAdaptiveSeekLeadSec(
+            pendingSeekVerification.baselineLeadSec,
+            postSeekDriftSec,
+          );
+          pendingSeekVerification = null;
+        }
       }
-    }, 450);
+
+      const isEarlyWindow = expected < 10;
+      const minCheckIntervalMs = isEarlyWindow ? 200 : 500;
+      if (now - lastDriftCheckAtMs < minCheckIntervalMs) return;
+      lastDriftCheckAtMs = now;
+
+      const drift = Math.abs(actual - expected);
+      const thresholdSec = isEarlyWindow ? 0.1 : 0.16;
+      const cooldownMs = isEarlyWindow ? 950 : 1800;
+      if (drift >= thresholdSec && now - lastTvSeekAtRef.current > cooldownMs) {
+        lastTvSeekAtRef.current = now;
+        const seekLead = expected > 0.25 ? adaptiveSeekLeadSec : 0;
+        engine.seekTo?.(expected + seekLead);
+        pendingSeekVerification =
+          expected > 0.25
+            ? { seekAtMs: now, verifyAtMs: now + 780, baselineLeadSec: adaptiveSeekLeadSec }
+            : null;
+      }
+    }, 200);
 
     startLegacySupabaseFallback = () => {
       if (legacyFallbackStarted || !active) return;
