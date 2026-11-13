@@ -15,14 +15,49 @@ async function main() {
   const originUrl =
     readArg("origin") || process.env.NEXT_APP_ORIGIN || "https://poneleplay.netlify.app";
 
+  const targetPort = Number.isFinite(port) && port > 0 ? port : 4321;
   const hub = new PoneleLanHub({
-    port: Number.isFinite(port) && port > 0 ? port : 4321,
+    port: targetPort,
     defaultCloudWsUrl: cloudWsUrl,
     defaultOriginUrl: originUrl,
     enableMdns: true,
   });
 
-  await hub.start();
+  try {
+    await hub.start();
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "EADDRINUSE") {
+      try {
+        const res = await fetch(`http://127.0.0.1:${targetPort}/health`);
+        if (res.ok) {
+          const info = (await res.json()) as {
+            service?: string;
+            primaryIp?: string | null;
+          };
+          if (info.service === "poneleplay-lan-hub") {
+            console.log("\n========================================================");
+            console.log("  ✅ PONELEPLAY LAN HUB YA ESTA ACTIVO EN ESTA PC!");
+            console.log("========================================================");
+            console.log(`  El puerto ${targetPort} ya esta en uso por otra ventana de`);
+            console.log("  PonelePlay LAN Hub funcionando correctamente.");
+            if (info.primaryIp) {
+              console.log(`  IP Wi-Fi/LAN activa: ${info.primaryIp}:${targetPort}`);
+            }
+            console.log(`  Estado en navegador: http://localhost:${targetPort}`);
+            console.log("========================================================\n");
+            return;
+          }
+        }
+      } catch {
+        // Ignore probe failure and fall through to generic conflict message
+      }
+      console.error(`\n[!] El puerto ${targetPort} ya esta ocupado por otro programa en esta PC.`);
+      console.error(`    Cerra el programa que usa el puerto ${targetPort} o inicia con --port=4322.\n`);
+      process.exit(1);
+    }
+    throw err;
+  }
   const status = hub.getStatusSnapshot();
 
   console.log("\n========================================================");

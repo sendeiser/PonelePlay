@@ -7652,7 +7652,11 @@ var SyncRoomEngine = class _SyncRoomEngine {
 
 // src/network.ts
 var import_node_os = __toESM(require("node:os"), 1);
-var VIRTUAL_IFACE_PATTERN = /(vethernet|wsl|docker|virtualbox|vmware|vbox|hyper-v|loopback|teredo|isatap|tailscale|zerotier)/i;
+var VIRTUAL_IFACE_PATTERN = /(vethernet|wsl|docker|virtualbox|vmware|vbox|hyper-v|loopback|teredo|isatap|tailscale|zerotier|radmin|hamachi|wireguard|openvpn|wintun|npcap|\bvpn\b|\btun\d*\b|\btap\d*\b)/i;
+function isPrivateLanIpv4(ip) {
+  if (ip.startsWith("192.168.") || ip.startsWith("10.")) return true;
+  return /^172\.(1[6-9]|2\d|3[01])\./.test(ip);
+}
 function getLocalLanAddresses() {
   const ifaces = import_node_os.default.networkInterfaces();
   const candidates = [];
@@ -7670,7 +7674,7 @@ function getLocalLanAddresses() {
   }
   return candidates.sort((a, b) => {
     if (a.isVirtual !== b.isVirtual) return a.isVirtual ? 1 : -1;
-    const score = (ip) => ip.startsWith("192.168.") ? 0 : ip.startsWith("10.") ? 1 : ip.startsWith("172.") ? 2 : 3;
+    const score = (ip) => ip.startsWith("192.168.") ? 0 : ip.startsWith("10.") ? 1 : isPrivateLanIpv4(ip) ? 2 : 3;
     return score(a.address) - score(b.address);
   });
 }
@@ -8329,13 +8333,46 @@ async function main() {
   const port = Number(readArg("port") || process.env.LAN_HUB_PORT || 4321);
   const cloudWsUrl = readArg("cloud") || process.env.CLOUD_WS_URL || "wss://poneleplay-sync.martinsgons709.workers.dev";
   const originUrl = readArg("origin") || process.env.NEXT_APP_ORIGIN || "https://poneleplay.netlify.app";
+  const targetPort = Number.isFinite(port) && port > 0 ? port : 4321;
   const hub = new PoneleLanHub({
-    port: Number.isFinite(port) && port > 0 ? port : 4321,
+    port: targetPort,
     defaultCloudWsUrl: cloudWsUrl,
     defaultOriginUrl: originUrl,
     enableMdns: true
   });
-  await hub.start();
+  try {
+    await hub.start();
+  } catch (err) {
+    const code = err?.code;
+    if (code === "EADDRINUSE") {
+      try {
+        const res = await fetch(`http://127.0.0.1:${targetPort}/health`);
+        if (res.ok) {
+          const info = await res.json();
+          if (info.service === "poneleplay-lan-hub") {
+            console.log("\n========================================================");
+            console.log("  \u2705 PONELEPLAY LAN HUB YA ESTA ACTIVO EN ESTA PC!");
+            console.log("========================================================");
+            console.log(`  El puerto ${targetPort} ya esta en uso por otra ventana de`);
+            console.log("  PonelePlay LAN Hub funcionando correctamente.");
+            if (info.primaryIp) {
+              console.log(`  IP Wi-Fi/LAN activa: ${info.primaryIp}:${targetPort}`);
+            }
+            console.log(`  Estado en navegador: http://localhost:${targetPort}`);
+            console.log("========================================================\n");
+            return;
+          }
+        }
+      } catch {
+      }
+      console.error(`
+[!] El puerto ${targetPort} ya esta ocupado por otro programa en esta PC.`);
+      console.error(`    Cerra el programa que usa el puerto ${targetPort} o inicia con --port=4322.
+`);
+      process.exit(1);
+    }
+    throw err;
+  }
   const status = hub.getStatusSnapshot();
   console.log("\n========================================================");
   console.log("  \u26A1 PONELEPLAY LAN HUB ACTIVO (< 2ms en red Wi-Fi/LAN)");

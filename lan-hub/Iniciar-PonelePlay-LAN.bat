@@ -49,6 +49,8 @@ powershell -NoProfile -Command "$d=[Environment]::GetFolderPath('Desktop'); $lnk
 
 echo [2/2] Iniciando servidor LAN local + Puente Cloud...
 echo.
+powershell -NoProfile -Command "try { $r = Invoke-RestMethod -Uri 'http://127.0.0.1:4321/health' -TimeoutSec 1; if ($r.service -eq 'poneleplay-lan-hub') { Write-Host '[i] Ya habia una instancia de PonelePlay LAN Hub abierta; actualizando a esta ventana...' -ForegroundColor Yellow; Get-NetTCPConnection -LocalPort 4321 -State Listen -ErrorAction SilentlyContinue | Where-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).ProcessName -match '^node' } | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; Start-Sleep -Milliseconds 600 } } catch {}"
+
 if exist "%~dp0poneleplay-lan.cjs" (
   node "%~dp0poneleplay-lan.cjs"
 ) else if exist "%~dp0dist\poneleplay-lan.cjs" (
