@@ -8,7 +8,10 @@ function readArg(flag: string): string | undefined {
 
 async function main() {
   const port = Number(readArg("port") || process.env.LAN_HUB_PORT || 4321);
-  const cloudWsUrl = readArg("cloud") || process.env.CLOUD_WS_URL || "";
+  const cloudWsUrl =
+    readArg("cloud") ||
+    process.env.CLOUD_WS_URL ||
+    "wss://poneleplay-sync.martinsgons709.workers.dev";
   const originUrl =
     readArg("origin") || process.env.NEXT_APP_ORIGIN || "https://poneleplay.netlify.app";
 
@@ -22,21 +25,22 @@ async function main() {
   await hub.start();
   const status = hub.getStatusSnapshot();
 
-  console.log("\n⚡ PonelePlay LAN Hub Local iniciado");
-  console.log(`   Panel local:    http://localhost:${status.port}`);
-  console.log(`   Cabina (HTTPS): ws://127.0.0.1:${status.port}`);
+  console.log("\n========================================================");
+  console.log("  ⚡ PONELEPLAY LAN HUB ACTIVO (< 2ms en red Wi-Fi/LAN)");
+  console.log("========================================================");
+  console.log(`  Panel local:    http://localhost:${status.port}`);
+  console.log(`  Cabina (HTTPS): ws://127.0.0.1:${status.port}`);
   if (status.primaryIp) {
-    console.log(`   Android TV LAN: ws://${status.primaryIp}:${status.port}`);
+    console.log(`  IP Wi-Fi/LAN:   ${status.primaryIp}:${status.port}`);
   }
   console.log(
-    `   mDNS Broadcast: ${status.mdnsPublished ? "_poneleplay._tcp.local. (activo)" : "no disponible"}`,
+    `  mDNS Broadcast: ${status.mdnsPublished ? "_poneleplay._tcp.local. (activo)" : "no disponible"}`,
   );
-  if (cloudWsUrl) {
-    console.log(`   Cloud Bridge:   ${cloudWsUrl}`);
-  } else {
-    console.log("   Cloud Bridge:   Auto-detectado al conectar Cabina");
-  }
-  console.log("\nPresioná Ctrl+C para detener.\n");
+  console.log(`  Bridge Cloud:   ${cloudWsUrl} (auto-anuncia tu IP a las TVs)`);
+  console.log("--------------------------------------------------------");
+  console.log("  No cierres esta ventana mientras uses las pantallas.");
+  console.log("  Podés minimizarla; presioná Ctrl+C cuando termines.");
+  console.log("========================================================\n");
 
   const shutdown = async () => {
     await hub.stop();

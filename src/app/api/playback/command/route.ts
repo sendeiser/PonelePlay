@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabase } from "@/lib/api/supabase/admin";
 import { loadVenuePartyConfigFromDb } from "@/lib/api/party-server";
 import { resolveEffectiveQueueThreshold } from "@/lib/domain/party";
-import { notifySyncRoom } from "@/lib/sync/server-notify";
+import { invalidateVenueSyncCache, notifySyncRoom } from "@/lib/sync/server-notify";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       slug?: string;
       command?: string;
       payload?: Record<string, unknown>;
+      skipSyncNotify?: boolean;
     };
 
     const slug = body.slug?.trim();
@@ -144,7 +145,7 @@ export async function POST(req: NextRequest) {
       newPaused = false;
       const incoming = (payload.track || {}) as Record<string, unknown>;
       const startSeconds = Math.max(0, Number(payload.seconds ?? 0));
-      const startDelayMs = Math.max(0, Number(payload.startDelayMs ?? 1200));
+      const startDelayMs = Math.max(0, Number(payload.startDelayMs ?? 0));
 
       if (incoming.title) {
         let trackId = incoming.trackId ? String(incoming.trackId) : null;
@@ -686,7 +687,7 @@ export async function POST(req: NextRequest) {
               voteCount: Number(chosen.vote_count ?? 0),
               tvMuted: curTrack.tvMuted ?? false,
               positionSeconds: 0,
-              anchorTimestampMs: nowMs + 1200,
+              anchorTimestampMs: nowMs,
               startedAtMs: nowMs,
               seekSeq: prevSeekSeq + 1,
             };
@@ -736,7 +737,7 @@ export async function POST(req: NextRequest) {
             voteCount: 0,
             tvMuted: curTrack.tvMuted ?? false,
             positionSeconds: 0,
-            anchorTimestampMs: nowMs + 1200,
+            anchorTimestampMs: nowMs,
             startedAtMs: nowMs,
             seekSeq: prevSeekSeq + 1,
           };
@@ -774,9 +775,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    void notifySyncRoom(slug, {
-      refreshFromOrigin: true,
-    });
+    if (body.skipSyncNotify === true) {
+      invalidateVenueSyncCache(slug);
+    } else {
+      void notifySyncRoom(slug, {
+        refreshFromOrigin: true,
+      });
+    }
 
     return NextResponse.json({
       ok: true,

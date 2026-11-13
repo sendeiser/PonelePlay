@@ -20,6 +20,7 @@ export interface PanelAudioEngineProps {
   isPaused: boolean;
   volume: number; // 0 - 100
   isMuted: boolean;
+  syncConnected?: boolean;
   onTrackEnded: () => void;
   onProgress?: (currentTime: number, duration: number | null) => void;
   onAudioBlockedChange?: (isBlocked: boolean) => void;
@@ -31,6 +32,7 @@ export interface PanelAudioEngineRef {
   unlockAudio: () => void;
   releaseStartHold: () => void;
   holdUntilSynced: (maxWaitMs?: number) => void;
+  prepareBarrier: (videoId: string, startSec?: number, maxWaitMs?: number) => void;
   scheduleStartAt: (delayMs: number, startSec?: number) => void;
   isUnlocked: boolean;
 }
@@ -42,6 +44,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       isPaused,
       volume,
       isMuted,
+      syncConnected = false,
       onTrackEnded,
       onProgress,
       onAudioBlockedChange,
@@ -66,6 +69,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     volumeRef.current = volume;
     const isMutedRef = useRef(isMuted);
     isMutedRef.current = isMuted;
+    const syncConnectedRef = useRef(syncConnected);
+    syncConnectedRef.current = syncConnected;
     const onTrackEndedRef = useRef(onTrackEnded);
     onTrackEndedRef.current = onTrackEnded;
     const onProgressRef = useRef(onProgress);
@@ -77,6 +82,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const seekLockUntilRef = useRef<number>(0);
     const startHoldUntilRef = useRef<number>(0);
     const startHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const barrierStartSecRef = useRef<number>(0);
+    const barrierBufferedFiredRef = useRef<boolean>(false);
     const capturedWidgetIdRef = useRef<number | string | null>(null);
 
     // Reset elapsed timer on track change
@@ -284,43 +291,35 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         currentVideoIdRef.current = videoId;
         trackLoadedAtRef.current = Date.now();
         lastReportedTimeRef.current = 0;
+        barrierStartSecRef.current = 0;
+        barrierBufferedFiredRef.current = false;
         if (startHoldTimerRef.current) {
           clearTimeout(startHoldTimerRef.current);
           startHoldTimerRef.current = null;
         }
-        // Hold Cabina playback at 0:00 for up to 1100ms (or until TV sends tv_ready)
-        // so the TV finishes loading/buffering and starts at 0:00 in lockstep with Cabina
-        startHoldUntilRef.current = Date.now() + 1100;
+        // Hold silently while YouTube pre-buffers frame 1 (2400ms max when WS barrier is active)
+        const holdMs = syncConnectedRef.current ? 2400 : 220;
+        startHoldUntilRef.current = Date.now() + holdMs;
         try {
-          // Silence & stop the previous song immediately so it can never leak
+          playerRef.current.mute();
           playerRef.current.setVolume(0);
           try {
             playerRef.current.stopVideo();
           } catch {}
-          playerRef.current.loadVideoById(videoId);
-          playerRef.current.seekTo(0, true);
-          playerRef.current.setVolume(0);
-          playerRef.current.pauseVideo();
+          playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
 
           startHoldTimerRef.current = setTimeout(() => {
             startHoldTimerRef.current = null;
             startHoldUntilRef.current = 0;
+            barrierBufferedFiredRef.current = true;
             if (!playerRef.current) return;
             try {
-              playerRef.current.seekTo(0, true);
+              playerRef.current.seekTo(barrierStartSecRef.current, true);
               if (isMutedRef.current) {
                 playerRef.current.mute();
               } else {
                 playerRef.current.unMute();
-                const targetVol = volumeRef.current;
-                const steps = 5;
-                for (let s = 1; s <= steps; s++) {
-                  setTimeout(() => {
-                    if (!isMutedRef.current && playerRef.current) {
-                      playerRef.current.setVolume(Math.round((targetVol / steps) * s));
-                    }
-                  }, s * 250);
-                }
+                playerRef.current.setVolume(volumeRef.current);
               }
               if (isPausedRef.current) {
                 playerRef.current.pauseVideo();
@@ -328,7 +327,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                 playerRef.current.playVideo();
               }
             } catch {}
-          }, 1100);
+          }, holdMs);
         } catch (e) {
           console.warn("Error loading video in existing YT player:", e);
         }
@@ -391,7 +390,24 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
               },
               onStateChange: (event) => {
                 // event.data: 5=CUED, 2=PAUSED, 1=PLAYING, 0=ENDED
-                if (event.data === 5 || event.data === 2 || event.data === 1) {
+                const isHoldingForBarrier = Date.now() < startHoldUntilRef.current;
+                if (isHoldingForBarrier) {
+                  if (event.data === 1 && !barrierBufferedFiredRef.current) {
+                    barrierBufferedFiredRef.current = true;
+                    try {
+                      playerRef.current?.pauseVideo();
+                      playerRef.current?.seekTo(barrierStartSecRef.current, true);
+                    } catch {}
+                    onTrackBufferedRef.current?.(currentVideoIdRef.current);
+                  } else if (
+                    event.data === 2 &&
+                    !barrierBufferedFiredRef.current &&
+                    Date.now() - trackLoadedAtRef.current > 220
+                  ) {
+                    barrierBufferedFiredRef.current = true;
+                    onTrackBufferedRef.current?.(currentVideoIdRef.current);
+                  }
+                } else if (event.data === 1) {
                   onTrackBufferedRef.current?.(currentVideoIdRef.current);
                 }
                 // event.data === 0 is YT.PlayerState.ENDED
@@ -446,6 +462,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         return;
       }
 
+      if (!isPaused && Date.now() < startHoldUntilRef.current) {
+        return;
+      }
+
       sendIframeCommand(isPaused ? "pauseVideo" : "playVideo");
     }, [isPaused, currentTrack?.source, onAudioBlockedChange]);
 
@@ -454,6 +474,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       if (currentTrack?.source === "upload" && html5AudioRef.current) {
         html5AudioRef.current.volume = isMuted ? 0 : volume / 100;
         html5AudioRef.current.muted = isMuted;
+        return;
+      }
+
+      if (Date.now() < startHoldUntilRef.current) {
         return;
       }
 
@@ -505,7 +529,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
             const loadedId = vd?.video_id;
             const isStale =
               (loadedId && currentVideoIdRef.current && loadedId !== currentVideoIdRef.current) ||
-              now - trackLoadedAtRef.current < 1200;
+              now - trackLoadedAtRef.current < 300;
             if (!isStale) {
               const t = playerRef.current.getCurrentTime() || 0;
               const d = Math.floor(playerRef.current.getDuration() || 0);
@@ -520,7 +544,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         if (currentTime >= 0) {
           lastReportedTimeRef.current = currentTime;
         } else {
-          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.5) * 10) / 10;
+          lastReportedTimeRef.current = Math.round((lastReportedTimeRef.current + 0.25) * 10) / 10;
           currentTime = lastReportedTimeRef.current;
         }
 
@@ -535,7 +559,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         }
 
         onProgressRef.current?.(currentTime, duration > 0 ? duration : null);
-      }, 500);
+      }, 250);
 
       return () => {
         clearInterval(timer);
@@ -544,8 +568,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
 
     const startAtPosition = useCallback((startSec: number) => {
       startHoldUntilRef.current = 0;
+      barrierBufferedFiredRef.current = true;
       const targetSec = Math.max(0, startSec);
       lastReportedTimeRef.current = targetSec;
+      onProgressRef.current?.(targetSec, currentTrackRef.current?.durationSeconds ?? 210);
 
       if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
         try {
@@ -564,6 +590,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           playerRef.current.seekTo(targetSec, true);
           if (isMutedRef.current) {
             playerRef.current.mute();
+            playerRef.current.setVolume(0);
           } else {
             playerRef.current.unMute();
             playerRef.current.setVolume(volumeRef.current);
@@ -586,7 +613,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         startHoldTimerRef.current = null;
       }
       if (startHoldUntilRef.current > Date.now()) {
-        startAtPosition(0);
+        startAtPosition(barrierStartSecRef.current);
       }
     }, [startAtPosition]);
 
@@ -597,26 +624,66 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           startHoldTimerRef.current = null;
         }
         startHoldUntilRef.current = Date.now() + Math.max(250, maxWaitMs);
-        lastReportedTimeRef.current = 0;
+        lastReportedTimeRef.current = barrierStartSecRef.current;
 
         if (currentTrackRef.current?.source === "upload" && html5AudioRef.current) {
           try {
             html5AudioRef.current.pause();
-            html5AudioRef.current.currentTime = 0;
+            html5AudioRef.current.currentTime = barrierStartSecRef.current;
           } catch {}
           return;
         }
 
-        if (playerRef.current) {
+        if (playerRef.current && barrierBufferedFiredRef.current) {
           try {
             playerRef.current.pauseVideo();
-            playerRef.current.seekTo(0, true);
+            playerRef.current.seekTo(barrierStartSecRef.current, true);
           } catch {}
-        } else {
-          sendIframeCommand("pauseVideo");
         }
       },
-      [sendIframeCommand],
+      [],
+    );
+
+    const prepareBarrier = useCallback(
+      (videoId: string, startSec = 0, maxWaitMs = 2400) => {
+        barrierStartSecRef.current = Math.max(0, startSec);
+        lastReportedTimeRef.current = barrierStartSecRef.current;
+        if (startHoldTimerRef.current) {
+          clearTimeout(startHoldTimerRef.current);
+          startHoldTimerRef.current = null;
+        }
+        startHoldUntilRef.current = Date.now() + Math.max(400, maxWaitMs);
+        startHoldTimerRef.current = setTimeout(() => {
+          startHoldTimerRef.current = null;
+          startAtPosition(barrierStartSecRef.current);
+        }, Math.max(400, maxWaitMs));
+
+        if (!videoId || currentTrackRef.current?.source === "upload") {
+          onTrackBufferedRef.current?.(videoId);
+          return;
+        }
+
+        if (playerRef.current && ytInitializedRef.current) {
+          if (currentVideoIdRef.current !== videoId) {
+            currentVideoIdRef.current = videoId;
+            trackLoadedAtRef.current = Date.now();
+            barrierBufferedFiredRef.current = false;
+            try {
+              playerRef.current.mute();
+              playerRef.current.setVolume(0);
+              playerRef.current.stopVideo();
+              playerRef.current.loadVideoById({ videoId, startSeconds: barrierStartSecRef.current });
+            } catch {}
+          } else if (barrierBufferedFiredRef.current) {
+            try {
+              playerRef.current.pauseVideo();
+              playerRef.current.seekTo(barrierStartSecRef.current, true);
+            } catch {}
+            onTrackBufferedRef.current?.(videoId);
+          }
+        }
+      },
+      [startAtPosition],
     );
 
     const scheduleStartAt = useCallback(
@@ -663,6 +730,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       unlockAudio,
       releaseStartHold,
       holdUntilSynced,
+      prepareBarrier,
       scheduleStartAt,
       isUnlocked: isUnlockedRef.current,
     }));

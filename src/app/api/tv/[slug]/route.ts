@@ -359,7 +359,18 @@ export async function GET(
       }),
       clientUrl,
       syncConfig: {
-        cloudWsUrl: (process.env.NEXT_PUBLIC_SYNC_WS_URL || "").trim().replace(/\/+$/, "") || null,
+        cloudWsUrl:
+          (
+            process.env.NEXT_PUBLIC_SYNC_WS_URL ||
+            process.env.SYNC_HTTP_URL ||
+            (process.env.NODE_ENV === "production"
+              ? "https://poneleplay-sync.martinsgons709.workers.dev"
+              : "")
+          )
+            .trim()
+            .replace(/\/+$/, "")
+            .replace(/^https:\/\//i, "wss://")
+            .replace(/^http:\/\//i, "ws://") || null,
         lanPort: Number(process.env.NEXT_PUBLIC_LAN_HUB_PORT || 4321) || 4321,
       },
       serverTime: new Date().toISOString(),

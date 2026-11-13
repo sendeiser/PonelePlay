@@ -170,5 +170,32 @@ describe("PoneleSyncClient & server-notify", () => {
     expect(url).toBe("https://poneleplay-sync.workers.dev/internal/room/bar-test/notify");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer secret-xyz");
   });
+
+  it("accepts runtime cloudWsUrl when env var is missing and stores lanEndpoints from room:presence", () => {
+    delete process.env.NEXT_PUBLIC_SYNC_WS_URL;
+    vi.stubGlobal("location", new URL("https://poneleplay.netlify.app/tv/disco-vip"));
+    vi.useFakeTimers();
+
+    const client = acquireSyncClient({ slug: "disco-vip", role: "tv" });
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    client.setRuntimeCloudWsUrl("https://poneleplay-sync.martinsgons709.workers.dev/");
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    expect(FakeWebSocket.instances[0].url).toContain(
+      "wss://poneleplay-sync.martinsgons709.workers.dev/ws/disco-vip",
+    );
+
+    FakeWebSocket.instances[0].simulateOpen();
+    FakeWebSocket.instances[0].simulateMessage({
+      type: "room:presence",
+      connectedClients: { total: 2, master: 1, tv: 1, guest: 0 },
+      lanEndpoints: ["ws://192.168.1.44:4321"],
+      serverNowMs: Date.now(),
+    });
+
+    expect(client.getStatus().lanEndpoints).toEqual(["ws://192.168.1.44:4321"]);
+    vi.useRealTimers();
+    releaseSyncClient(client);
+  });
 });
 

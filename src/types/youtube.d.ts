@@ -52,7 +52,15 @@ export interface YTPlayerInstance {
   getCurrentTime(): number;
   getDuration(): number;
   seekTo(seconds: number, allowSeekAhead?: boolean): void;
-  loadVideoById(videoId: string): void;
+  loadVideoById(videoId: string, startSeconds?: number, suggestedQuality?: string): void;
+  loadVideoById(options: {
+    videoId: string;
+    startSeconds?: number;
+    endSeconds?: number;
+    suggestedQuality?: string;
+  }): void;
+  cueVideoById?(videoId: string, startSeconds?: number): void;
+  cueVideoById?(options: { videoId: string; startSeconds?: number; endSeconds?: number }): void;
   mute(): void;
   unMute(): void;
   isMuted(): boolean;

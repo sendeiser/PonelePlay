@@ -117,6 +117,22 @@ test("PoneleLanHub coordinates clock sync and Ready-Barrier across LAN sockets",
     const healthJson = (await healthRes.json()) as { ok: boolean; rooms: Array<{ slug: string }> };
     assert.equal(healthJson.ok, true);
     assert.equal(healthJson.rooms[0]?.slug, "juntada");
+
+    // 4. Only material progress drift (> 0.18s) broadcasts sync:anchor
+    let tvAnchorCount = 0;
+    const countHandler = (raw: WebSocket.RawData) => {
+      const text = typeof raw === "string" ? raw : raw.toString("utf8");
+      if (text.includes('"sync:anchor"')) tvAnchorCount += 1;
+    };
+    tv.on("message", countHandler);
+
+    master.send(JSON.stringify({ type: "sync:progress", currentTime: 0.05, isPaused: false }));
+    await new Promise((r) => setTimeout(r, 60));
+    assert.equal(tvAnchorCount, 0);
+
+    master.send(JSON.stringify({ type: "sync:progress", currentTime: 5.5, forceSeek: true, isPaused: false }));
+    await waitForMessage<{ type: string }>(tv, (m) => m.type === "sync:anchor");
+    tv.off("message", countHandler);
   } finally {
     master.close();
     tv.close();

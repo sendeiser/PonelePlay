@@ -60,6 +60,9 @@ export function createIframeEngine(
   let desiredVolume: number | null = 85;
   let desiredMuted: boolean | null = true;
   let desiredPlaying = true;
+  let isPrebuffering = false;
+  let prebufferStartSec = 0;
+  let cueStartedAt = 0;
 
   function buildEmbedUrl(videoId: string, startSeconds = 0, autoplay = true): string {
     const cleanId = parseYoutubeVideoId(videoId) || videoId || "T_FkEw27XJ0";
@@ -98,6 +101,18 @@ export function createIframeEngine(
   }
 
   function reapplyAudioAndPlayState() {
+    if (isPrebuffering) {
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.mute();
+          ytPlayer.setVolume(0);
+        } catch {}
+      } else {
+        post("mute");
+        post("setVolume", [0]);
+      }
+      return;
+    }
     if (desiredVolume !== null) {
       if (ytReady && ytPlayer) {
         try {
@@ -144,6 +159,40 @@ export function createIframeEngine(
   }
 
   function handlePlayerState(state: number) {
+    if (isPrebuffering) {
+      if (state === YT_PLAYING) {
+        isPrebuffering = false;
+        desiredPlaying = false;
+        pendingSeekSeconds = null;
+        lastTimeUpdateAt = 0;
+        if (ytReady && ytPlayer) {
+          try {
+            ytPlayer.pauseVideo();
+            ytPlayer.seekTo(prebufferStartSec, true);
+          } catch {}
+        } else {
+          post("pauseVideo");
+          post("seekTo", [prebufferStartSec, true]);
+        }
+        if (currentVideoId && cuedNotifiedVideoId !== currentVideoId) {
+          cuedNotifiedVideoId = currentVideoId;
+          cuedCallbacks.forEach((cb) => cb(currentVideoId));
+        }
+        return;
+      }
+      if (
+        state === YT_PAUSED &&
+        currentVideoId &&
+        cuedNotifiedVideoId !== currentVideoId &&
+        Date.now() - cueStartedAt > 250
+      ) {
+        isPrebuffering = false;
+        cuedNotifiedVideoId = currentVideoId;
+        cuedCallbacks.forEach((cb) => cb(currentVideoId));
+      }
+      return;
+    }
+
     if (
       (state === YT_CUED || state === YT_PAUSED || state === YT_PLAYING) &&
       currentVideoId &&
@@ -318,6 +367,7 @@ export function createIframeEngine(
 
     async load(track: PlayerTrack): Promise<void> {
       const nextVideoId = resolveVideoId(track);
+      isPrebuffering = false;
       if (nextVideoId === currentVideoId && currentVideoId !== "") {
         return;
       }
@@ -372,19 +422,15 @@ export function createIframeEngine(
       pendingSeekSeconds = startSec > 0 ? startSec : null;
       seekLockUntil = Date.now() + 1800;
       desiredPlaying = false;
+      isPrebuffering = true;
+      prebufferStartSec = startSec;
+      cueStartedAt = Date.now();
 
       if (ytReady && ytPlayer) {
         try {
-          const cueFn = (ytPlayer as unknown as {
-            cueVideoById?: (arg: { videoId: string; startSeconds?: number } | string) => void;
-          }).cueVideoById;
-          if (typeof cueFn === "function") {
-            cueFn.call(ytPlayer, { videoId: nextVideoId, startSeconds: startSec });
-          } else {
-            ytPlayer.loadVideoById(nextVideoId);
-            ytPlayer.pauseVideo();
-            if (startSec > 0) ytPlayer.seekTo(startSec, true);
-          }
+          ytPlayer.mute();
+          ytPlayer.setVolume(0);
+          ytPlayer.loadVideoById({ videoId: nextVideoId, startSeconds: startSec });
           return;
         } catch {}
       }
@@ -392,10 +438,12 @@ export function createIframeEngine(
       const iframe = getIframe();
       if (iframe) {
         if (hasLiveBridge && iframe.src && iframe.src.includes("youtube.com/embed")) {
-          post("cueVideoById", [{ videoId: nextVideoId, startSeconds: startSec }]);
+          post("mute");
+          post("setVolume", [0]);
+          post("loadVideoById", [{ videoId: nextVideoId, startSeconds: startSec }]);
           return;
         }
-        const targetSrc = buildEmbedUrl(nextVideoId, startSec, false);
+        const targetSrc = buildEmbedUrl(nextVideoId, startSec, true);
         if (!iframe.src || !iframe.src.includes(nextVideoId)) {
           boundIframe = null;
           iframe.src = targetSrc;
@@ -404,17 +452,31 @@ export function createIframeEngine(
     },
 
     async play(): Promise<void> {
+      isPrebuffering = false;
       desiredPlaying = true;
       if (ytReady && ytPlayer) {
         try {
+          if (desiredMuted === true) {
+            ytPlayer.mute();
+          } else {
+            ytPlayer.unMute();
+            if (desiredVolume !== null) ytPlayer.setVolume(desiredVolume);
+          }
           ytPlayer.playVideo();
           return;
         } catch {}
+      }
+      if (desiredMuted === true) {
+        post("mute");
+      } else {
+        post("unMute");
+        if (desiredVolume !== null) post("setVolume", [desiredVolume]);
       }
       post("playVideo");
     },
 
     pause(): void {
+      isPrebuffering = false;
       desiredPlaying = false;
       if (ytReady && ytPlayer) {
         try {

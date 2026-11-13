@@ -247,30 +247,68 @@ fun TvScreen(
         }
     }
 
-    // Continuous 1s clock-locked drift guard when connected to LAN or Cloud WS
+    // Continuous clock-locked drift guard when connected to LAN or Cloud WS.
+    // liveAnchor/feed/estimatedServerMs are captured via rememberUpdatedState so frequent progress updates
+    // do NOT cancel the polling loop (previous bug canceled delay on every anchor tick!).
+    val latestAnchor by rememberUpdatedState(liveAnchor)
+    val latestFeed by rememberUpdatedState(feed)
+    val latestEstimatedServerMs by rememberUpdatedState(estimatedServerMs)
     var lastDriftCorrectionAt by remember { mutableStateOf(0L) }
     var lastDriftTrackStartAt by remember(currentVideoId) { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(currentVideoId, liveAnchor, feed.playback.isPaused, syncStatus?.connected) {
-        val estClock = estimatedServerMs ?: return@LaunchedEffect
-        val anchor = liveAnchor ?: return@LaunchedEffect
+    var firstFrameTick by remember(currentVideoId) { mutableStateOf(0) }
+
+    DisposableEffect(videoController, currentVideoId) {
+        val cb: (String, Float) -> Unit = { playingVideoId, _ ->
+            if (playingVideoId == currentVideoId) {
+                firstFrameTick += 1
+            }
+        }
+        videoController.onFirstFramePlayingCallback = cb
+        onDispose {
+            if (videoController.onFirstFramePlayingCallback == cb) {
+                videoController.onFirstFramePlayingCallback = null
+            }
+        }
+    }
+
+    LaunchedEffect(currentVideoId, feed.playback.isPaused, syncStatus?.connected, firstFrameTick) {
         if (syncStatus?.connected != true) return@LaunchedEffect
 
+        // Run an immediate drift check right after first-frame decode, then tight periodic ticks
+        var skipInitialDelay = firstFrameTick > 0
         while (isActive) {
-            delay(1000L)
+            val anchor = latestAnchor
+            val estClock = latestEstimatedServerMs
+            val nowLocal = System.currentTimeMillis()
+            val expectedQuick = if (anchor != null && estClock != null) {
+                SyncClockEstimator.computeExpectedPositionSec(anchor, estClock())
+            } else {
+                0.0
+            }
+            val earlyTick = expectedQuick < 8.0 || (nowLocal - lastDriftTrackStartAt < 8000L)
+            if (skipInitialDelay) {
+                skipInitialDelay = false
+            } else {
+                delay(if (earlyTick) 400L else 900L)
+            }
+
+            val curAnchor = latestAnchor ?: continue
+            val curEstClock = latestEstimatedServerMs ?: continue
+            val curFeed = latestFeed
             if (videoController.activeBarrierVideoId == currentVideoId) continue
-            if (anchor.isPaused || feed.playback.isPaused) continue
-            if (anchor.track?.youtubeVideoId != currentVideoId) continue
+            if (curAnchor.isPaused || curFeed.playback.isPaused) continue
+            if (curAnchor.track?.youtubeVideoId != currentVideoId) continue
             if (videoController.currentPlayerState != 1) continue
 
-            val nowLocal = System.currentTimeMillis()
-            val expectedSec = SyncClockEstimator.computeExpectedPositionSec(anchor, estClock())
-            val durationLimit = (feed.nowPlaying?.durationSeconds ?: 0).takeIf { it > 0 }?.toDouble()
+            val checkNowLocal = System.currentTimeMillis()
+            val expectedSec = SyncClockEstimator.computeExpectedPositionSec(curAnchor, curEstClock())
+            val durationLimit = (curFeed.nowPlaying?.durationSeconds ?: 0).takeIf { it > 0 }?.toDouble()
             if (durationLimit != null && expectedSec > durationLimit - 1.5) continue
 
             val currentPos = videoController.currentPositionSec.toDouble()
-            val isEarlyWindow = expectedSec < 6.0 || (nowLocal - lastDriftTrackStartAt < 6500L)
-            val cooldownMs = if (isEarlyWindow) 1200L else 2800L
-            if (nowLocal - lastDriftCorrectionAt < cooldownMs) continue
+            val isEarlyWindow = expectedSec < 8.0 || (checkNowLocal - lastDriftTrackStartAt < 8000L)
+            val cooldownMs = if (isEarlyWindow) 1100L else 2200L
+            if (checkNowLocal - lastDriftCorrectionAt < cooldownMs) continue
 
             if (
                 SyncClockEstimator.shouldCorrectDrift(
@@ -280,8 +318,10 @@ fun TvScreen(
                     isEarlyWindow = isEarlyWindow
                 ) && abs(currentPos - expectedSec) < 25.0
             ) {
-                lastDriftCorrectionAt = nowLocal
-                videoController.seekTo(expectedSec.toFloat())
+                lastDriftCorrectionAt = checkNowLocal
+                // Compensate ~200ms YouTube IFrame seek latency when snapping forward
+                val seekLeadSec = if (expectedSec > 0.25) 0.20 else 0.0
+                videoController.seekTo((expectedSec + seekLeadSec).toFloat())
             }
         }
     }

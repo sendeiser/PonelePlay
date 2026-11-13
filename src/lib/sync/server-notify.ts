@@ -74,7 +74,10 @@ export async function notifySyncRoom(
     process.env.SYNC_HTTP_URL?.trim() ||
     process.env.NEXT_PUBLIC_SYNC_WS_URL?.trim()
       ?.replace(/^wss:/i, "https:")
-      .replace(/^ws:/i, "http:");
+      .replace(/^ws:/i, "http:") ||
+    (process.env.NODE_ENV === "production"
+      ? "https://poneleplay-sync.martinsgons709.workers.dev"
+      : "");
 
   if (!rawBase) return;
 

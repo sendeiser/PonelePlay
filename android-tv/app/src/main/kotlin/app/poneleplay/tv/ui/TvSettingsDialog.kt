@@ -29,11 +29,14 @@ fun TvSettingsDialog(
     currentSlug: String,
     currentMode: TvScreenMode,
     isMuted: Boolean,
-    currentVersionName: String = "2.9.0",
+    currentVersionName: String = "2.9.1",
     syncStatus: SyncStatusState = SyncStatusState(),
     manualLanHost: String = "",
+    isScanningLan: Boolean = false,
+    lanScanStatusText: String? = null,
     onToggleMode: () -> Unit,
     onToggleMute: () -> Unit,
+    onAutoScanLan: () -> Unit = {},
     onSaveManualLanHost: (String) -> Unit = {},
     onForceReconnectSync: () -> Unit = {},
     onUnpair: () -> Unit,
@@ -153,12 +156,12 @@ fun TvSettingsDialog(
                     }
                 }
 
-                // Live LAN / Cloud Sync Status Box
+                // Live LAN / Cloud Sync Status Box (Newbie-Friendly)
                 val transportLabel = when (syncStatus.transport) {
-                    SyncTransportMode.LAN -> "⚡ LAN DIRECTO"
-                    SyncTransportMode.CLOUD -> "☁️ NUBE WEBSOCKET"
+                    SyncTransportMode.LAN -> "⚡ LAN DIRECTO (Sin delay)"
+                    SyncTransportMode.CLOUD -> "☁️ NUBE TIEMPO REAL"
                     SyncTransportMode.CONNECTING -> "🔄 CONECTANDO..."
-                    SyncTransportMode.OFFLINE -> "📡 HTTP FALLBACK"
+                    SyncTransportMode.OFFLINE -> "📡 HTTP RESPUESTA LENTA"
                 }
                 val transportColor = when (syncStatus.transport) {
                     SyncTransportMode.LAN -> Color(0xFF22D3EE)
@@ -172,16 +175,16 @@ fun TvSettingsDialog(
                         .fillMaxWidth()
                         .background(Color(0xFF141A2E), RoundedCornerShape(12.dp))
                         .border(1.dp, Color(0xFF263252), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "SINCRONIZACIÓN EN TIEMPO REAL:",
+                                text = "SINCRONIZACIÓN:",
                                 color = Color(0xFF94A3B8),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -197,9 +200,14 @@ fun TvSettingsDialog(
                         }
                         val hostInfo = when {
                             manualLanHost.isNotBlank() -> "IP manual Cabina: $manualLanHost"
-                            !syncStatus.discoveredLanHost.isNullOrBlank() -> "Auto mDNS: ${syncStatus.discoveredLanHost}"
+                            syncStatus.transport == SyncTransportMode.LAN && syncStatus.activeHostLabel.isNotBlank() ->
+                                "Conectado a PC en ${syncStatus.activeHostLabel}"
+                            !syncStatus.discoveredLanHost.isNullOrBlank() ->
+                                "Cabina detectada: ${syncStatus.discoveredLanHost}"
+                            syncStatus.cloudDiscoveredLanHosts.isNotEmpty() ->
+                                "Red detectada vía nube: ${syncStatus.cloudDiscoveredLanHosts.first()}"
                             syncStatus.activeHostLabel.isNotBlank() -> syncStatus.activeHostLabel
-                            else -> "Auto mDNS activo (puerto 4321)"
+                            else -> "Modo automático activo (Nube + auto-búsqueda Wi-Fi)"
                         }
                         Text(
                             text = hostInfo,
@@ -207,11 +215,30 @@ fun TvSettingsDialog(
                             fontSize = 10.5.sp,
                             fontFamily = FontFamily.Monospace
                         )
+                        if (!lanScanStatusText.isNullOrBlank()) {
+                            Text(
+                                text = lanScanStatusText,
+                                color = if (lanScanStatusText.startsWith("✅")) Color(0xFF34D399) else Color(0xFFFBBF24),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 
+                // 1-Click Zero-Config Wi-Fi Subnet Finder for Newbies
                 TVButton(
-                    text = if (showLanEditor) "🔽 Ocultar IP LAN de Cabina" else "🌐 Configurar IP LAN de Cabina (Opcional)",
+                    text = if (isScanningLan) {
+                        "⏳ Buscando PC de Cabina en tu Wi-Fi..."
+                    } else {
+                        "🔍 Buscar Cabina en Wi-Fi automáticamente"
+                    },
+                    onClick = onAutoScanLan,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                TVButton(
+                    text = if (showLanEditor) "🔽 Ocultar opciones avanzadas (IP manual)" else "🛠️ Opciones avanzadas (IP manual / Reconectar)",
                     onClick = { showLanEditor = !showLanEditor },
                     modifier = Modifier.fillMaxWidth()
                 )

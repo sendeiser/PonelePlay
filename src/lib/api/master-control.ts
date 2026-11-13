@@ -56,24 +56,75 @@ export async function fetchPlaybackState(slug: string): Promise<PlaybackState> {
   return res;
 }
 
+export interface SendPlaybackCommandOptions {
+  skipWsBroadcast?: boolean;
+  useBarrier?: boolean;
+  skipSyncNotify?: boolean;
+}
+
+const recentSyncCommandCache = new Map<string, number>();
+
 export async function sendPlaybackCommand(
   slug: string,
   command: PlaybackCommand,
   payload: Record<string, unknown> = {},
+  options?: SendPlaybackCommandOptions,
 ): Promise<PlaybackState> {
   const supabase = createBrowserSupabase();
   const isTestEnv = typeof process !== "undefined" && process.env?.NODE_ENV === "test";
 
+  // 1. Dispatch immediately over LAN/Cloud WebSocket Sync BEFORE blocking HTTP persistence
+  let wsDispatched = false;
+  const canSkipSyncNotify =
+    options?.skipSyncNotify === true ||
+    (command !== "enqueue_top" &&
+      command !== "enqueue_playlist" &&
+      command !== "activate_playlist" &&
+      command !== "reload" &&
+      (command !== "play_playlist" || Boolean(payload.track)) &&
+      (command !== "skip" || Boolean(payload.track)));
+
+  if (!options?.skipWsBroadcast) {
+    try {
+      const activeSync = findActiveSyncClient(slug);
+      if (activeSync) {
+        const sig = `${slug}:${command}:${JSON.stringify(payload || {})}`;
+        const now = Date.now();
+        const lastSent = recentSyncCommandCache.get(sig) ?? 0;
+        if (recentSyncCommandCache.size > 60) {
+          recentSyncCommandCache.clear();
+        }
+        if (now - lastSent > 350) {
+          recentSyncCommandCache.set(sig, now);
+          wsDispatched = activeSync.sendCommand(command, payload, {
+            useBarrier:
+              options?.useBarrier ??
+              ((command === "play_now" || command === "skip" || command === "play_playlist") &&
+                Boolean(payload.track)),
+          });
+        } else {
+          wsDispatched = true;
+        }
+      }
+    } catch {
+      // Non-blocking WS dispatch
+    }
+  }
+
   let res: PlaybackState | null = null;
 
-  // 1. In production browser runtime, use the authoritative server route (/api/playback/command)
-  // which atomically persists positionSeconds, anchorTimestampMs, seekSeq, tvMuted, and fallback rotation.
+  // 2. Persist state via authoritative server route (/api/playback/command)
   if (!isTestEnv && typeof fetch === "function") {
     try {
       const apiRes = await fetch("/api/playback/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug, command, payload }),
+        body: JSON.stringify({
+          slug,
+          command,
+          payload,
+          skipSyncNotify: Boolean((wsDispatched || options?.skipSyncNotify) && canSkipSyncNotify),
+        }),
       });
       if (apiRes.ok) {
         const json = (await apiRes.json()) as PlaybackState;
@@ -86,7 +137,7 @@ export async function sendPlaybackCommand(
     }
   }
 
-  // 2. Fallback to Supabase RPC (also used by unit tests mocking supabase.rpc)
+  // 3. Fallback to Supabase RPC (also used by unit tests mocking supabase.rpc)
   if (!res) {
     const { data, error } = await supabase.rpc("send_playback_command" as never, {
       p_venue_slug: slug,
@@ -104,23 +155,8 @@ export async function sendPlaybackCommand(
     }
   }
 
-const recentSyncCommandCache = new Map<string, number>();
-
-  // 3. Push over LAN/Cloud WebSocket Sync if active, else fallback to Supabase broadcast
+  // 4. Fallback Supabase broadcast for legacy/passive channels
   try {
-    const activeSync = findActiveSyncClient(slug);
-    if (activeSync) {
-      const sig = `${slug}:${command}:${JSON.stringify(payload || {})}`;
-      const now = Date.now();
-      const lastSent = recentSyncCommandCache.get(sig) ?? 0;
-      if (now - lastSent > 350) {
-        recentSyncCommandCache.set(sig, now);
-        activeSync.sendCommand(command, payload, {
-          useBarrier:
-            command === "play_now" || command === "skip" || command === "play_playlist",
-        });
-      }
-    }
 
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
     const existing = channels.find(
@@ -194,39 +230,61 @@ const recentSyncCommandCache = new Map<string, number>();
   return res;
 }
 
-export async function pausePlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "pause");
+export async function pausePlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "pause", {}, options);
 }
 
-export async function resumePlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "resume");
+export async function resumePlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "resume", {}, options);
 }
 
-export async function togglePausePlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "toggle_pause");
+export async function togglePausePlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "toggle_pause", {}, options);
 }
 
 export async function setPlaybackVolume(
   slug: string,
   volume: number,
+  options?: SendPlaybackCommandOptions,
 ): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "set_volume", { volume });
+  return sendPlaybackCommand(slug, "set_volume", { volume }, options);
 }
 
-export async function mutePlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "mute");
+export async function mutePlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "mute", {}, options);
 }
 
-export async function unmutePlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "unmute");
+export async function unmutePlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "unmute", {}, options);
 }
 
-export async function toggleMutePlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "toggle_mute");
+export async function toggleMutePlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "toggle_mute", {}, options);
 }
 
-export async function skipPlayback(slug: string): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "skip");
+export async function skipPlayback(
+  slug: string,
+  options?: SendPlaybackCommandOptions,
+): Promise<PlaybackState> {
+  return sendPlaybackCommand(slug, "skip", {}, options);
 }
 
 export async function reloadPlayback(slug: string): Promise<PlaybackState> {
@@ -236,15 +294,17 @@ export async function reloadPlayback(slug: string): Promise<PlaybackState> {
 export async function setKaraokeMode(
   slug: string,
   enabled: boolean,
+  options?: SendPlaybackCommandOptions,
 ): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "set_karaoke_mode", { enabled });
+  return sendPlaybackCommand(slug, "set_karaoke_mode", { enabled }, options);
 }
 
 export async function seekPlayback(
   slug: string,
   seconds: number,
+  options?: SendPlaybackCommandOptions,
 ): Promise<PlaybackState> {
-  return sendPlaybackCommand(slug, "seek", { seconds });
+  return sendPlaybackCommand(slug, "seek", { seconds }, options);
 }
 
 export async function toggleFullscreenPlayback(slug: string): Promise<PlaybackState> {

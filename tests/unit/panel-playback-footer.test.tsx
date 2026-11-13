@@ -51,6 +51,44 @@ vi.mock("@/lib/api/supabase/browser", () => ({
   },
 }));
 
+vi.mock("@/lib/sync/client", () => {
+  const idleStatus = {
+    transport: "offline" as const,
+    connected: false,
+    rttMs: null,
+    offsetMs: 0,
+    presence: {
+      total: 0,
+      master: 0,
+      tv: 0,
+      guest: 0,
+    },
+    lanEndpoints: [] as string[],
+  };
+  return {
+    acquireSyncClient: () => ({
+      isConnected: () => false,
+      hasTargetsConfigured: () => false,
+      getLatestSnapshot: () => null,
+      getStatus: () => idleStatus,
+      onStatus: (cb: (status: typeof idleStatus) => void) => {
+        cb(idleStatus);
+        return () => {};
+      },
+      on: () => () => {},
+      setRuntimeCloudWsUrl: vi.fn(),
+      sendCommand: vi.fn(),
+      sendProgress: vi.fn(),
+      sendReady: vi.fn(),
+      probeLocalLanHubOnce: vi.fn().mockResolvedValue(false),
+      reconnectNow: vi.fn(),
+      estimatedServerMs: () => Date.now(),
+      msUntilServerTime: () => 0,
+    }),
+    releaseSyncClient: vi.fn(),
+  };
+});
+
 describe("PanelPlaybackFooter with Expandable Queue Drawer", () => {
   afterEach(() => {
     cleanup();

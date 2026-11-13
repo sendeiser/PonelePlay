@@ -16,6 +16,7 @@ export interface ConnectedRoomClient {
   role: SyncRole;
   deviceId?: string;
   joinedAtMs: number;
+  lanEndpoints?: string[];
 }
 
 export interface RoomEngineConfig {
@@ -32,8 +33,20 @@ export interface SerializedRoomEngineState {
   activeBarrier: ReadyBarrierState | null;
 }
 
-const DEFAULT_BARRIER_TIMEOUT_MS = 1600;
-const DEFAULT_START_LEAD_MS = 220;
+const DEFAULT_BARRIER_TIMEOUT_MS = 2200;
+const DEFAULT_START_LEAD_MS = 180;
+
+function normalizeLanEndpoints(endpoints?: string[]): string[] | undefined {
+  if (!Array.isArray(endpoints)) return undefined;
+  const clean = Array.from(
+    new Set(
+      endpoints
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => entry.length > 0 && entry.length <= 120),
+    ),
+  ).slice(0, 12);
+  return clean;
+}
 
 /**
  * Pure, runtime-agnostic room coordinator shared between Cloudflare Durable Objects
@@ -83,12 +96,48 @@ export class SyncRoomEngine {
   }
 
   upsertClient(client: ConnectedRoomClient): SyncOutboundMessage {
-    this.clients.set(client.clientId, client);
+    const normalizedEndpoints = normalizeLanEndpoints(client.lanEndpoints);
+    const existing = this.clients.get(client.clientId);
+    this.clients.set(client.clientId, {
+      ...client,
+      lanEndpoints: normalizedEndpoints ?? existing?.lanEndpoints,
+    });
     return {
       type: "room:presence",
       connectedClients: this.getPresenceSummary(),
+      lanEndpoints: this.getLanEndpoints(),
       serverNowMs: Date.now(),
     };
+  }
+
+  setClientLanEndpoints(
+    clientId: string,
+    lanEndpoints: string[],
+    nowMs = Date.now(),
+  ): SyncOutboundMessage | null {
+    const existing = this.clients.get(clientId);
+    if (!existing) return null;
+    this.clients.set(clientId, {
+      ...existing,
+      lanEndpoints: normalizeLanEndpoints(lanEndpoints) ?? [],
+    });
+    return {
+      type: "room:presence",
+      connectedClients: this.getPresenceSummary(),
+      lanEndpoints: this.getLanEndpoints(),
+      serverNowMs: nowMs,
+    };
+  }
+
+  getLanEndpoints(): string[] {
+    const unique = new Set<string>();
+    for (const c of this.clients.values()) {
+      if (!Array.isArray(c.lanEndpoints)) continue;
+      for (const endpoint of c.lanEndpoints) {
+        if (endpoint) unique.add(endpoint);
+      }
+    }
+    return Array.from(unique);
   }
 
   removeClient(clientId: string, nowMs = Date.now()): SyncOutboundMessage[] {
@@ -98,6 +147,7 @@ export class SyncRoomEngine {
       {
         type: "room:presence",
         connectedClients: this.getPresenceSummary(),
+        lanEndpoints: this.getLanEndpoints(),
         serverNowMs: nowMs,
       },
     ];
@@ -141,6 +191,7 @@ export class SyncRoomEngine {
       updatedAtServerMs: this.updatedAtServerMs,
       activeBarrier: this.activeBarrier ? { ...this.activeBarrier } : null,
       connectedClients: this.getPresenceSummary(),
+      lanEndpoints: this.getLanEndpoints(),
     };
   }
 
@@ -153,6 +204,18 @@ export class SyncRoomEngine {
     nowMs = Date.now(),
     options?: { useBarrier?: boolean },
   ): { outbound: SyncOutboundMessage[]; nextAlarmMs: number | null } {
+    if (
+      command === "skip" &&
+      typeof payload.expectedVideoId === "string" &&
+      payload.expectedVideoId.trim().length > 0
+    ) {
+      const currentVideoId = this.anchor.track?.youtubeVideoId;
+      if (currentVideoId && currentVideoId !== payload.expectedVideoId.trim()) {
+        this.syncAnchorIntoTvFeed(nowMs);
+        return { outbound: [], nextAlarmMs: null };
+      }
+    }
+
     const livePos = computeTargetPositionSec(this.anchor, nowMs);
     const outbound: SyncOutboundMessage[] = [];
     let nextAlarmMs: number | null = null;
@@ -414,8 +477,7 @@ export class SyncRoomEngine {
     const localTimingIsNewer =
       sameTrack &&
       this.anchor.anchorServerMs > 0 &&
-      (extAnchorMs <= 0 || this.anchor.anchorServerMs > extAnchorMs + 150) &&
-      this.anchor.seq >= extSeq;
+      (extAnchorMs <= 0 || this.anchor.anchorServerMs > extAnchorMs + 150);
 
     if (!localTimingIsNewer) {
       this.anchor = {
@@ -498,11 +560,12 @@ export class SyncRoomEngine {
 
     const prevComputed = computeTargetPositionSec(this.anchor, nowMs);
     const timeDiff = Math.abs(prevComputed - report.currentTime);
+    const driftThresholdSec = report.currentTime < 8 ? 0.18 : 0.3;
     const shouldReanchor =
       Boolean(report.forceSeek) ||
       Boolean(isTrackDifferent) ||
       (typeof report.isPaused === "boolean" && report.isPaused !== this.anchor.isPaused) ||
-      timeDiff >= 0.45;
+      timeDiff >= driftThresholdSec;
 
     if (shouldReanchor) {
       this.anchor = {

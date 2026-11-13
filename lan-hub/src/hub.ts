@@ -54,15 +54,17 @@ function setCorsHeaders(res: http.ServerResponse): void {
 }
 
 function renderStatusHtml(status: ReturnType<PoneleLanHub["getStatusSnapshot"]>): string {
+  const realIps = status.lanIps.filter((i) => !i.isVirtual);
+  const displayIps = realIps.length > 0 ? realIps : status.lanIps;
   const ipsHtml =
-    status.lanIps.length > 0
-      ? status.lanIps
+    displayIps.length > 0
+      ? displayIps
           .map(
             (i) =>
               `<div class="ip-pill">${i.address}:${status.port} <span>(${i.interfaceName}${i.isVirtual ? " · virtual" : ""})</span></div>`,
           )
           .join("")
-      : `<div class="ip-pill">Sin IP LAN detectada (solo localhost:${status.port})</div>`;
+      : `<div class="ip-pill">Sin IP Wi-Fi/LAN detectada (solo localhost:${status.port})</div>`;
 
   const roomsHtml =
     status.rooms.length > 0
@@ -78,7 +80,7 @@ function renderStatusHtml(status: ReturnType<PoneleLanHub["getStatusSnapshot"]>)
           </div>`,
           )
           .join("")
-      : `<p class="muted">Todavía no hay salas activas. Abrí el panel de Cabina o vinculá la Android TV para empezar.</p>`;
+      : `<p class="muted">Todavía no hay salas activas. Abrí tu Panel Cabina en este navegador y se conectará automáticamente.</p>`;
 
   return `<!doctype html>
 <html lang="es">
@@ -89,27 +91,38 @@ function renderStatusHtml(status: ReturnType<PoneleLanHub["getStatusSnapshot"]>)
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; background: #0b1020; color: #e2e8f0; margin: 0; padding: 32px; }
     .wrap { max-width: 780px; margin: 0 auto; }
-    h1 { margin: 0 0 8px; font-size: 24px; color: #ffffff; }
-    .sub { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+    .hero { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+    h1 { margin: 0; font-size: 24px; color: #ffffff; }
+    .ready-pill { background: rgba(16,185,129,0.18); color: #34d399; border: 1px solid rgba(16,185,129,0.45); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 700; }
+    .sub { color: #94a3b8; font-size: 14px; margin-bottom: 20px; }
     .card { background: #131b31; border: 1px solid #243154; border-radius: 16px; padding: 20px; margin-bottom: 16px; }
-    .ip-pill { background: #0b1020; border: 1px solid #334155; border-radius: 10px; padding: 10px 14px; font-family: ui-monospace, monospace; font-size: 14px; color: #38bdf8; margin-top: 8px; }
-    .ip-pill span { color: #94a3b8; font-size: 12px; }
+    .ip-pill { background: #0b1020; border: 1px solid #334155; border-radius: 10px; padding: 10px 14px; font-family: ui-monospace, monospace; font-size: 15px; font-weight: 700; color: #38bdf8; margin-top: 8px; }
+    .ip-pill span { color: #94a3b8; font-size: 12px; font-weight: 400; }
     .room-card { background: #0f1629; border: 1px solid #263458; border-radius: 12px; padding: 12px 14px; margin-top: 10px; }
     .room-head { display: flex; justify-content: space-between; align-items: center; }
     .badge { font-size: 11px; padding: 3px 8px; border-radius: 999px; font-weight: 700; }
     .badge.ok { background: rgba(16,185,129,0.18); color: #34d399; border: 1px solid rgba(16,185,129,0.4); }
     .badge.warn { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.35); }
-    .meta, .muted { color: #94a3b8; font-size: 13px; margin-top: 6px; }
+    .meta, .muted { color: #94a3b8; font-size: 13px; margin-top: 8px; line-height: 1.5; }
+    .tip { background: rgba(56,189,248,0.08); border: 1px solid rgba(56,189,248,0.28); border-radius: 12px; padding: 14px; font-size: 13px; color: #bae6fd; margin-top: 12px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>⚡ PonelePlay LAN Hub Local</h1>
-    <div class="sub">Sincronización ultrarrápida (&lt;2ms) en la red Wi-Fi/LAN del salón + Bridge hacia Cloudflare.</div>
+    <div class="hero">
+      <h1>⚡ PonelePlay LAN Hub Local</h1>
+      <span class="ready-pill">LISTO · NO CIERRES ESTA VENTANA (podés minimizarla)</span>
+    </div>
+    <div class="sub">Sincronización local (&lt;2ms) en la misma red Wi-Fi/LAN + auto-descubrimiento automático en Android TV.</div>
     <div class="card">
-      <strong>Direcciones LAN detectadas (para Android TV / Kiosco):</strong>
+      <strong>Cómo se conectan las pantallas automáticamente:</strong>
       ${ipsHtml}
-      <div class="meta">mDNS activo: ${status.mdnsPublished ? "✅ _poneleplay._tcp.local." : "⚪ Desactivado"}</div>
+      <div class="meta">mDNS local: ${status.mdnsPublished ? "✅ _poneleplay._tcp.local. (activo)" : "⚪ Desactivado"} · Puerto TCP: ${status.port}</div>
+      <div class="tip">
+        1. Dejá esta app corriendo minimizada mientras dure el evento.<br/>
+        2. Abrí tu Panel Cabina en Chrome/Edge: se conectará a LAN automáticamente.<br/>
+        3. Tus Android TV en el mismo Wi-Fi reciben esta dirección sola vía Cloud/mDNS o escaneo en 1 click.
+      </div>
     </div>
     <div class="card">
       <strong>Salas activas (${status.rooms.length})</strong>
@@ -151,6 +164,13 @@ export class PoneleLanHub {
 
   getListeningPort(): number {
     return this.actualPort;
+  }
+
+  private getAdvertisedLanEndpoints(): string[] {
+    const lanIps = getLocalLanAddresses();
+    const real = lanIps.filter((item) => !item.isVirtual);
+    const preferred = real.length > 0 ? real : lanIps;
+    return preferred.map((item) => `${item.address}:${this.actualPort}`);
   }
 
   getStatusSnapshot() {
@@ -519,9 +539,17 @@ export class PoneleLanHub {
       return;
     }
 
+    if (msg.type === "lan:announce") {
+      return;
+    }
+
     if (msg.type === "sync:progress") {
+      const prevRev = room.engine.getSnapshot(nowMs).revision;
       const anchorMsg = room.engine.applyProgressReport(msg, nowMs);
-      this.broadcastLocal(room, [anchorMsg], ws);
+      const nextRev = room.engine.getSnapshot(nowMs).revision;
+      if (nextRev !== prevRev || msg.forceSeek) {
+        this.broadcastLocal(room, [anchorMsg], ws);
+      }
       return;
     }
 
@@ -572,20 +600,57 @@ export class PoneleLanHub {
     }
 
     const base = room.cloudUrl.replace(/\/+$/, "");
-    const target = `${base}/ws/${encodeURIComponent(room.slug)}?role=lan-bridge&clientId=lan-hub-${encodeURIComponent(os.hostname())}`;
+    const bridgeClientId = `lan-hub-${encodeURIComponent(os.hostname())}`;
+    const initialEndpoints = this.getAdvertisedLanEndpoints();
+    const lanQuery =
+      initialEndpoints.length > 0
+        ? `&lanEndpoints=${encodeURIComponent(initialEndpoints.join(","))}`
+        : "";
+    const target = `${base}/ws/${encodeURIComponent(room.slug)}?role=lan-bridge&clientId=${bridgeClientId}${lanQuery}`;
 
     try {
       const cloudWs = new WebSocket(target);
       room.cloudWs = cloudWs;
+      let lastAnnouncedKey = initialEndpoints.join(",");
 
       cloudWs.on("open", () => {
         room.cloudConnected = true;
+        const currentEndpoints = this.getAdvertisedLanEndpoints();
+        lastAnnouncedKey = currentEndpoints.join(",");
+        try {
+          cloudWs.send(
+            JSON.stringify({
+              type: "room:join",
+              slug: room.slug,
+              role: "lan-bridge",
+              clientId: `lan-hub-${os.hostname()}`,
+              lanEndpoints: currentEndpoints,
+            } satisfies SyncInboundMessage),
+          );
+        } catch {
+          // ignore
+        }
         if (room.cloudPingTimer) clearInterval(room.cloudPingTimer);
         room.cloudPingTimer = setInterval(() => {
           if (cloudWs.readyState === WebSocket.OPEN) {
             cloudWs.send("ping");
+            const refreshed = this.getAdvertisedLanEndpoints();
+            const nextKey = refreshed.join(",");
+            if (nextKey !== lastAnnouncedKey) {
+              lastAnnouncedKey = nextKey;
+              try {
+                cloudWs.send(
+                  JSON.stringify({
+                    type: "lan:announce",
+                    lanEndpoints: refreshed,
+                  } satisfies SyncInboundMessage),
+                );
+              } catch {
+                // ignore
+              }
+            }
           }
-        }, 25_000);
+        }, 20_000);
       });
 
       cloudWs.on("message", (raw) => {

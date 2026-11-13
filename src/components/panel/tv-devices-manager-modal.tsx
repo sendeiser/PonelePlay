@@ -38,6 +38,7 @@ interface TvDevicesManagerModalProps {
   onClose: () => void;
   slug: string;
   initialCode?: string | null;
+  onOpenLanSync?: () => void;
 }
 
 export function TvDevicesManagerModal({
@@ -45,6 +46,7 @@ export function TvDevicesManagerModal({
   onClose,
   slug,
   initialCode,
+  onOpenLanSync,
 }: TvDevicesManagerModalProps) {
   const [activeTab, setActiveTab] = useState<"pair" | "list">("list");
   const [code, setCode] = useState(initialCode || "");
@@ -817,18 +819,37 @@ export function TvDevicesManagerModal({
         </div>
 
         {/* Footer */}
-        <div className="px-5 sm:px-6 py-3.5 border-t border-th-border bg-th-recessed flex items-center justify-between">
+        <div className="px-5 sm:px-6 py-3.5 border-t border-th-border bg-th-recessed flex items-center justify-between gap-2 flex-wrap">
           <span className="text-xs font-mono text-th-muted flex items-center gap-1.5">
             <Sparkles className="size-3.5 text-th-teal" />
             <span>Los cambios se aplican al instante en la TV vía WebSocket</span>
           </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-th-card hover:bg-th-card-hover text-th-secondary hover:text-th-text font-mono text-xs font-semibold border border-th-border transition-colors"
-          >
-            Cerrar
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenLanSync ? (
+              <button
+                type="button"
+                onClick={onOpenLanSync}
+                className="px-3.5 py-2 rounded-xl bg-th-emerald-soft hover:bg-th-emerald text-th-emerald hover:text-white border border-th-emerald/30 font-mono text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Modo LAN (&lt;2ms)
+              </button>
+            ) : (
+              <a
+                href="/poneleplay-lan.zip"
+                download="poneleplay-lan.zip"
+                className="px-3.5 py-2 rounded-xl bg-th-emerald-soft hover:bg-th-emerald text-th-emerald hover:text-white border border-th-emerald/30 font-mono text-xs font-semibold transition-colors"
+              >
+                Descargar Hub LAN (.ZIP)
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-th-card hover:bg-th-card-hover text-th-secondary hover:text-th-text font-mono text-xs font-semibold border border-th-border transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
       </div>
     </div>

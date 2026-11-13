@@ -18,7 +18,8 @@ data class SyncStatusState(
     val rttMs: Long? = null,
     val offsetMs: Long = 0L,
     val activeHostLabel: String = "",
-    val discoveredLanHost: String? = null
+    val discoveredLanHost: String? = null,
+    val cloudDiscoveredLanHosts: List<String> = emptyList()
 )
 
 data class SyncTrackData(
@@ -127,7 +128,7 @@ object SyncClockEstimator {
         isEarlyWindow: Boolean
     ): Boolean {
         if (isPaused || currentVideoSec < 0.0 || expectedSec < 0.0) return false
-        val threshold = if (isEarlyWindow) 0.50 else 0.95
+        val threshold = if (isEarlyWindow) 0.22 else 0.38
         return abs(currentVideoSec - expectedSec) > threshold
     }
 
@@ -168,7 +169,9 @@ object SyncClockEstimator {
         discoveredLanHost: String?,
         discoveredLanPort: Int,
         defaultLanPort: Int,
-        cloudWsBaseUrl: String?
+        cloudWsBaseUrl: String?,
+        cloudDiscoveredLanHosts: List<String> = emptyList(),
+        savedAutoLanHost: String? = null
     ): List<SyncWsCandidate> {
         val cleanSlug = slug.trim()
         if (cleanSlug.isEmpty()) return emptyList()
@@ -200,6 +203,10 @@ object SyncClockEstimator {
 
         addLan(manualLanHost, defaultLanPort)
         addLan(discoveredLanHost, discoveredLanPort)
+        for (cloudLan in cloudDiscoveredLanHosts) {
+            addLan(cloudLan, defaultLanPort)
+        }
+        addLan(savedAutoLanHost, defaultLanPort)
 
         val normalizedCloud = normalizeCloudBaseUrl(cloudWsBaseUrl)
         if (normalizedCloud.isNotEmpty()) {

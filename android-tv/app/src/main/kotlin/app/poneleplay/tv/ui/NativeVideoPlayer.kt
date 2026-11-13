@@ -21,6 +21,7 @@ class YouTubeBridge(
     private val getDeviceId: () -> String = { "" },
     private val onDisplayConfig: (String) -> Unit = {},
     private val onVideoCued: (String) -> Unit = {},
+    private val onFirstFramePlaying: (String, Float) -> Unit = { _, _ -> },
     private val onTimeUpdate: (Float, Int) -> Unit = { _, _ -> }
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -63,6 +64,11 @@ class YouTubeBridge(
     }
 
     @JavascriptInterface
+    fun onFirstFramePlaying(videoId: String, currentTimeSec: Float) {
+        mainHandler.post { onFirstFramePlaying(videoId, currentTimeSec) }
+    }
+
+    @JavascriptInterface
     fun onTimeUpdate(currentTimeSec: Float, playerState: Int) {
         mainHandler.post { onTimeUpdate(currentTimeSec, playerState) }
     }
@@ -75,6 +81,7 @@ class VideoPlayerController {
     @Volatile var currentPositionSec: Float = 0f
     @Volatile var currentPlayerState: Int = -1
     var onVideoCuedCallback: ((String) -> Unit)? = null
+    var onFirstFramePlayingCallback: ((String, Float) -> Unit)? = null
 
     private fun sanitizeId(raw: String): String =
         raw.replace("'", "").replace("\\", "").replace("\n", "").trim()
@@ -246,6 +253,11 @@ fun NativeVideoPlayer(
                         onVideoCued = { cuedId ->
                             controller.onVideoCuedCallback?.invoke(cuedId)
                         },
+                        onFirstFramePlaying = { playingId, posSec ->
+                            controller.currentPositionSec = posSec
+                            controller.currentPlayerState = 1
+                            controller.onFirstFramePlayingCallback?.invoke(playingId, posSec)
+                        },
                         onTimeUpdate = { posSec, state ->
                             controller.currentPositionSec = posSec
                             controller.currentPlayerState = state
@@ -334,6 +346,9 @@ private fun buildPlayerHtml(
             var hasSyncedFirstFrame = false;
             var isBarrierHolding = false;
             var barrierCuedNotified = false;
+            var barrierHoldStartedAt = 0;
+            var barrierTargetSec = 0;
+            var barrierFallbackTimer = null;
             var legacyWsEnabled = ${if (useLegacySupabaseWs) "true" else "false"};
             var lastTimePushAt = 0;
             var latestMasterTargetSec = ${initialPositionSeconds};
@@ -364,14 +379,32 @@ private fun buildPlayerHtml(
               try {
                 var ifr = document.getElementById('player');
                 if (ifr && ifr.contentWindow) {
-                  ifr.contentWindow.postMessage(JSON.stringify({ event: 'listening' }), '*');
+                  ifr.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
                 }
               } catch(_) {}
             }
 
-            // Continuously request infoDelivery from YouTube iframe so currentTvTime is always live
+            // Continuously request infoDelivery + direct widget getCurrentTime polling every 250ms
             setInterval(pingListening, 1500);
-            setTimeout(pingListening, 400);
+            setTimeout(pingListening, 250);
+            setInterval(function() {
+              try {
+                if (!player) return;
+                if (typeof player.getPlayerState === 'function') {
+                  var st = player.getPlayerState();
+                  if (typeof st === 'number' && !isNaN(st)) {
+                    currentTvState = st;
+                  }
+                }
+                if (typeof player.getCurrentTime === 'function') {
+                  var pt = player.getCurrentTime();
+                  if (typeof pt === 'number' && !isNaN(pt) && pt >= 0) {
+                    currentTvTime = pt;
+                    reportBridgeTime(false);
+                  }
+                }
+              } catch(_) {}
+            }, 250);
 
             // Anti-freeze watchdog: if the video should be playing but YouTube stays
             // PAUSED / CUED / UNSTARTED (pause icon frozen on screen after a skip), resume it.
@@ -386,11 +419,29 @@ private fun buildPlayerHtml(
               } catch(_) {}
             }, 2500);
 
+            function notifyBarrierReady() {
+              if (!isBarrierHolding || barrierCuedNotified) return;
+              barrierCuedNotified = true;
+              if (barrierFallbackTimer) {
+                clearTimeout(barrierFallbackTimer);
+                barrierFallbackTimer = null;
+              }
+              if (window.AndroidBridge && window.AndroidBridge.onVideoCued) {
+                window.AndroidBridge.onVideoCued(currentVideoId);
+              }
+            }
+
             function cueVideoForBarrier(id, startSec) {
               if (!id) return;
               var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
               isBarrierHolding = true;
               barrierCuedNotified = false;
+              barrierHoldStartedAt = Date.now();
+              barrierTargetSec = sec;
+              if (barrierFallbackTimer) {
+                clearTimeout(barrierFallbackTimer);
+                barrierFallbackTimer = null;
+              }
               desiredPaused = true;
               isEndedSent = false;
               isPreloadSent = false;
@@ -400,24 +451,37 @@ private fun buildPlayerHtml(
               currentTvTime = sec;
               currentTvState = -1;
               lastLoadAt = Date.now();
-              lastSyncSeekAt = Date.now() + 1200;
+              lastSyncSeekAt = Date.now() + 900;
 
-              sendCommand('pauseVideo', []);
+              // Pre-buffer muted using loadVideoById so YouTube resolves manifests and decodes the first frame
+              // BEFORE Cabina releases sync:go (eliminates cold-start buffering desync).
               sendCommand('mute', []);
               sendCommand('setVolume', [0]);
-              sendCommand('cueVideoById', [{ videoId: id, startSeconds: sec }]);
+              sendCommand('loadVideoById', [{ videoId: id, startSeconds: sec }]);
+              sendCommand('playVideo', []);
+
+              barrierFallbackTimer = setTimeout(function() {
+                if (isBarrierHolding && currentVideoId === id && !barrierCuedNotified) {
+                  sendCommand('pauseVideo', []);
+                  notifyBarrierReady();
+                }
+              }, 1550);
             }
 
             function startBarrierPlay(id, startSec, vol, muted) {
               var sec = (typeof startSec === 'number' && startSec >= 0) ? startSec : 0;
               var targetVol = (typeof vol === 'number' && vol >= 0) ? vol : (originalVolume > 0 ? originalVolume : 85);
+              if (barrierFallbackTimer) {
+                clearTimeout(barrierFallbackTimer);
+                barrierFallbackTimer = null;
+              }
               isBarrierHolding = false;
               desiredPaused = false;
               currentMuted = Boolean(muted);
               currentVolume = currentMuted ? 0 : targetVol;
               if (!currentMuted) originalVolume = targetVol;
               lastLoadAt = Date.now();
-              lastSyncSeekAt = Date.now() + 900;
+              lastSyncSeekAt = Date.now() + 350;
 
               if (id && id !== currentVideoId) {
                 currentVideoId = id;
@@ -427,7 +491,7 @@ private fun buildPlayerHtml(
                 hasSyncedFirstFrame = false;
                 currentTvTime = sec;
                 sendCommand('loadVideoById', [{ videoId: id, startSeconds: sec }]);
-              } else if (sec > 0.25 && Math.abs((currentTvTime || 0) - sec) > 0.35) {
+              } else if ((sec <= 0.15 && (currentTvTime || 0) > 0.22) || Math.abs((currentTvTime || 0) - sec) > 0.25) {
                 currentTvTime = sec;
                 sendCommand('seekTo', [sec, true]);
               }
@@ -455,15 +519,27 @@ private fun buildPlayerHtml(
 
             function handleBarrierState(state) {
               if (!isBarrierHolding) return;
-              if (state === 1 || state === 2 || state === 5) {
+              var elapsedMs = Date.now() - barrierHoldStartedAt;
+              if (state === 1) {
+                // First video frame actually decoded and started rendering! Hold cleanly at target position.
                 sendCommand('pauseVideo', []);
                 sendCommand('mute', []);
-                if (!barrierCuedNotified) {
-                  barrierCuedNotified = true;
-                  if (window.AndroidBridge && window.AndroidBridge.onVideoCued) {
-                    window.AndroidBridge.onVideoCued(currentVideoId);
-                  }
+                if (barrierTargetSec <= 0.15 && (currentTvTime || 0) > 0.22) {
+                  currentTvTime = 0;
+                  sendCommand('seekTo', [0, true]);
+                } else if (Math.abs((currentTvTime || 0) - barrierTargetSec) > 0.25) {
+                  currentTvTime = barrierTargetSec;
+                  sendCommand('seekTo', [barrierTargetSec, true]);
                 }
+                notifyBarrierReady();
+              } else if (state === 2 && elapsedMs > 350) {
+                sendCommand('pauseVideo', []);
+                sendCommand('mute', []);
+                notifyBarrierReady();
+              } else if (state === 5 && !barrierCuedNotified) {
+                // If YouTube stays cued, nudge playback silently so buffering begins immediately
+                sendCommand('mute', []);
+                sendCommand('playVideo', []);
               }
             }
 
@@ -496,9 +572,15 @@ private fun buildPlayerHtml(
               if (hasSyncedFirstFrame) return;
               hasSyncedFirstFrame = true;
 
-              // 1. Notify Cabina via WebSocket broadcast so Cabina releases its pre-buffer start hold
               try {
-                if (ws && ws.readyState === WebSocket.OPEN && venueSlug) {
+                if (window.AndroidBridge && window.AndroidBridge.onFirstFramePlaying) {
+                  window.AndroidBridge.onFirstFramePlaying(currentVideoId || '', Number(currentTvTime) || 0);
+                }
+              } catch(_) {}
+
+              // 1. Legacy Supabase WS tv_ready fallback when Cloud/LAN WS is not active
+              try {
+                if (legacyWsEnabled && ws && ws.readyState === WebSocket.OPEN && venueSlug) {
                   ws.send(JSON.stringify({
                     topic: "realtime:playback-control:" + venueSlug,
                     event: "broadcast",
@@ -516,12 +598,14 @@ private fun buildPlayerHtml(
                 }
               } catch(_) {}
 
-              // 2. If Cabina is already ahead when TV finishes buffering its first frame, snap immediately!
+              // 2. Only run legacy JS first-frame snap when using uncalibrated legacy Supabase WS
               try {
-                var elapsedSinceMaster = Math.max(0, Math.min(2.5, (Date.now() - latestMasterSentAt) / 1000));
-                var expectedSec = desiredPaused ? latestMasterTargetSec : (latestMasterTargetSec + elapsedSinceMaster);
-                if (expectedSec > 0.3 && Math.abs(expectedSec - currentTvTime) > 0.35) {
-                  seekTo(expectedSec);
+                if (legacyWsEnabled) {
+                  var elapsedSinceMaster = Math.max(0, Math.min(2.5, (Date.now() - latestMasterSentAt) / 1000));
+                  var expectedSec = desiredPaused ? latestMasterTargetSec : (latestMasterTargetSec + elapsedSinceMaster);
+                  if (expectedSec > 0.3 && Math.abs(expectedSec - currentTvTime) > 0.35) {
+                    seekTo(expectedSec);
+                  }
                 }
               } catch(_) {}
             }

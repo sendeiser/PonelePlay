@@ -21,6 +21,7 @@ export interface SyncStatusState {
   rttMs: number | null;
   offsetMs: number;
   presence: RoomPresenceSummary | null;
+  lanEndpoints: string[];
 }
 
 type OutboundListener<T extends SyncOutboundMessage["type"]> = (
@@ -33,9 +34,26 @@ export interface PoneleSyncClientOptions {
   deviceId?: string;
 }
 
-function getConfiguredCloudWsUrl(): string {
+export function normalizeSyncWsUrl(raw?: string | null): string {
+  if (!raw || typeof raw !== "string") return "";
+  let cleaned = raw.trim().replace(/\/+$/, "");
+  if (!cleaned) return "";
+  if (cleaned.startsWith("https://")) {
+    cleaned = `wss://${cleaned.slice("https://".length)}`;
+  } else if (cleaned.startsWith("http://")) {
+    cleaned = `ws://${cleaned.slice("http://".length)}`;
+  } else if (!cleaned.startsWith("wss://") && !cleaned.startsWith("ws://")) {
+    cleaned = `wss://${cleaned}`;
+  }
+  return cleaned;
+}
+
+function getConfiguredCloudWsUrl(runtimeOverride?: string): string {
+  if (runtimeOverride) {
+    return normalizeSyncWsUrl(runtimeOverride);
+  }
   if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_SYNC_WS_URL) {
-    return process.env.NEXT_PUBLIC_SYNC_WS_URL.trim().replace(/\/+$/, "");
+    return normalizeSyncWsUrl(process.env.NEXT_PUBLIC_SYNC_WS_URL);
   }
   return "";
 }
@@ -75,6 +93,8 @@ export class PoneleSyncClient {
   private activeTransport: SyncClientTransport = "offline";
   private clockEstimate: ClockSyncEstimate | null = null;
   private presence: RoomPresenceSummary | null = null;
+  private lanEndpoints: string[] = [];
+  private runtimeCloudWsUrl = "";
   private latestSnapshot: SyncRoomSnapshot | null = null;
   private refCount = 0;
   private disposed = false;
@@ -118,7 +138,11 @@ export class PoneleSyncClient {
   }
 
   hasTargetsConfigured(): boolean {
-    return Boolean(getConfiguredCloudWsUrl() || this.role === "master" || isLocalHttpContext());
+    return Boolean(
+      getConfiguredCloudWsUrl(this.runtimeCloudWsUrl) ||
+        this.role === "master" ||
+        isLocalHttpContext(),
+    );
   }
 
   isConnected(): boolean {
@@ -132,7 +156,70 @@ export class PoneleSyncClient {
       rttMs: this.clockEstimate?.bestRttMs ?? null,
       offsetMs: this.clockEstimate?.offsetMs ?? 0,
       presence: this.presence,
+      lanEndpoints: [...this.lanEndpoints],
     };
+  }
+
+  setRuntimeCloudWsUrl(url?: string | null): void {
+    const normalized = normalizeSyncWsUrl(url);
+    if (!normalized || normalized === this.runtimeCloudWsUrl) return;
+    const prevEffective = getConfiguredCloudWsUrl(this.runtimeCloudWsUrl);
+    this.runtimeCloudWsUrl = normalized;
+    if (!this.disposed && this.refCount > 0 && !prevEffective && this.activeTransport !== "lan") {
+      this.attemptCounter = 0;
+      if (this.activeTransport === "offline" && !this.ws) {
+        this.connect();
+      } else {
+        this.reconnectNow(true);
+      }
+    }
+  }
+
+  reconnectNow(preferLan = true): void {
+    if (this.disposed) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (preferLan) {
+      this.attemptCounter = 0;
+    }
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        // handled cleanly in onclose
+      }
+      return;
+    }
+    if (this.refCount > 0) {
+      this.connect();
+    }
+  }
+
+  async probeLocalLanHubOnce(): Promise<boolean> {
+    if (typeof fetch !== "function") return false;
+    const lanPort = getConfiguredLanPort();
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timeout = ctrl ? setTimeout(() => ctrl.abort(), 900) : null;
+    try {
+      const res = await fetch(`http://127.0.0.1:${lanPort}/health`, {
+        cache: "no-store",
+        signal: ctrl?.signal,
+      });
+      if (res.ok) {
+        this.stopLanProbeLoop();
+        if (this.activeTransport !== "lan") {
+          this.reconnectNow(true);
+        }
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 
   getLatestSnapshot(): SyncRoomSnapshot | null {
@@ -179,6 +266,13 @@ export class PoneleSyncClient {
       command,
       payload,
       useBarrier: options?.useBarrier,
+    });
+  }
+
+  sendSkip(expectedVideoId?: string, payload: Record<string, unknown> = {}): boolean {
+    return this.sendCommand("skip", {
+      ...payload,
+      ...(expectedVideoId ? { expectedVideoId } : {}),
     });
   }
 
@@ -251,7 +345,7 @@ export class PoneleSyncClient {
 
   private buildTargetCandidates(): Array<{ mode: "lan" | "cloud"; url: string }> {
     const candidates: Array<{ mode: "lan" | "cloud"; url: string }> = [];
-    const cloudBase = getConfiguredCloudWsUrl();
+    const cloudBase = getConfiguredCloudWsUrl(this.runtimeCloudWsUrl);
     const originUrl = typeof window !== "undefined" ? window.location.origin : "";
     const lanPort = getConfiguredLanPort();
     const qs = new URLSearchParams({
@@ -387,6 +481,9 @@ export class PoneleSyncClient {
     if (msg.type === "room:snapshot") {
       this.latestSnapshot = msg.snapshot;
       this.presence = msg.snapshot.connectedClients;
+      if (Array.isArray(msg.snapshot.lanEndpoints)) {
+        this.lanEndpoints = msg.snapshot.lanEndpoints;
+      }
       this.emitStatus();
       for (const cb of this.listeners["room:snapshot"]) cb(msg);
       return;
@@ -394,6 +491,9 @@ export class PoneleSyncClient {
 
     if (msg.type === "room:presence") {
       this.presence = msg.connectedClients;
+      if (Array.isArray(msg.lanEndpoints)) {
+        this.lanEndpoints = msg.lanEndpoints;
+      }
       this.emitStatus();
       for (const cb of this.listeners["room:presence"]) cb(msg);
       return;
@@ -425,14 +525,16 @@ export class PoneleSyncClient {
       this.send({ type: "clock:ping", clientSentMs: Date.now() });
     };
     sendPing();
-    this.clockBurstTimers.push(setTimeout(sendPing, 140));
+    this.clockBurstTimers.push(setTimeout(sendPing, 80));
+    this.clockBurstTimers.push(setTimeout(sendPing, 180));
     this.clockBurstTimers.push(setTimeout(sendPing, 320));
+    this.clockBurstTimers.push(setTimeout(sendPing, 550));
     this.pingTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send("ping");
         sendPing();
       }
-    }, 25_000);
+    }, 12_000);
   }
 
   private stopClockSync(): void {
@@ -449,9 +551,12 @@ export class PoneleSyncClient {
     const lanPort = getConfiguredLanPort();
     this.lanRetryTimer = setInterval(async () => {
       if (this.disposed || this.activeTransport === "lan") return;
+      const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timeout = ctrl ? setTimeout(() => ctrl.abort(), 900) : null;
       try {
         const res = await fetch(`http://127.0.0.1:${lanPort}/health`, {
           cache: "no-store",
+          signal: ctrl?.signal,
         });
         if (res.ok && !this.disposed && (this.activeTransport as SyncClientTransport) !== "lan") {
           this.stopLanProbeLoop();
@@ -464,8 +569,10 @@ export class PoneleSyncClient {
         }
       } catch {
         // LAN Hub still offline
+      } finally {
+        if (timeout) clearTimeout(timeout);
       }
-    }, 15_000);
+    }, 12_000);
   }
 
   private stopLanProbeLoop(): void {

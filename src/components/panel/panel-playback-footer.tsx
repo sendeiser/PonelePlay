@@ -21,6 +21,7 @@ import {
   Sparkles,
   Trash2,
   Tv,
+  Wifi,
   X,
 } from "lucide-react";
 import { createNightStateSource } from "@/lib/api/night-state";
@@ -53,6 +54,7 @@ import {
 } from "@/lib/api/master-control";
 import { ManualPlaybackModal } from "./manual-playback-modal";
 import { TvDevicesManagerModal } from "./tv-devices-manager-modal";
+import { LanSyncModal } from "./lan-sync-modal";
 import { PanelAudioEngine, type PanelAudioEngineRef } from "./panel-audio-engine";
 import {
   acquireSyncClient,
@@ -100,6 +102,7 @@ export function PanelPlaybackFooter({
   // Modals
   const [manualModalOpen, setManualModalOpen] = useState(false);
   const [tvManagerOpen, setTvManagerOpen] = useState(false);
+  const [lanSyncModalOpen, setLanSyncModalOpen] = useState(false);
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   // Expandable Queue & Remote Deck Drawer
@@ -109,15 +112,19 @@ export function PanelPlaybackFooter({
   const audioEngineRef = useRef<PanelAudioEngineRef>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const syncClientRef = useRef<PoneleSyncClient | null>(null);
+  const runtimeCloudWsUrlRef = useRef<string | null>(null);
   const activeBarrierIdRef = useRef<string | null>(null);
   const activeBarrierVideoIdRef = useRef<string | null>(null);
   const startBarrierTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fastProgressUntilRef = useRef<number>(0);
+  const lastBufferedVideoIdRef = useRef<string>("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusState>({
     transport: "offline",
     connected: false,
     rttMs: null,
     offsetMs: 0,
     presence: null,
+    lanEndpoints: [],
   });
   const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
   currentTrackRef.current = currentTrack;
@@ -318,10 +325,14 @@ export function PanelPlaybackFooter({
       setVideoDuration(null);
       setLocalTrack(selectedTrack as PlayerTrack);
       audioEngineRef.current?.unlockAudio();
+      const hasWs = Boolean(syncClientRef.current?.isConnected());
       broadcastControl("play_now", { track: selectedTrack });
-      await sendPlaybackCommand(slug, "play_now", {
-        track: selectedTrack,
-      });
+      await sendPlaybackCommand(
+        slug,
+        "play_now",
+        { track: selectedTrack },
+        ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
+      );
       showToast(`Poniendo en TV: "${item.title}"`);
       await refreshNightState();
       await loadState();
@@ -432,6 +443,10 @@ export function PanelPlaybackFooter({
         if (tvRes.ok) {
           const tvData = await tvRes.json();
           if (tvData?.ok) {
+            if (typeof tvData.syncConfig?.cloudWsUrl === "string" && tvData.syncConfig.cloudWsUrl) {
+              runtimeCloudWsUrlRef.current = tvData.syncConfig.cloudWsUrl;
+              syncClientRef.current?.setRuntimeCloudWsUrl(tvData.syncConfig.cloudWsUrl);
+            }
             if (typeof tvData.playback?.tvMuted === "boolean") {
               setTvMuted(tvData.playback.tvMuted);
             }
@@ -579,6 +594,9 @@ export function PanelPlaybackFooter({
 
     if (syncClient.hasTargetsConfigured()) {
       syncClientRef.current = syncClient;
+      if (runtimeCloudWsUrlRef.current) {
+        syncClient.setRuntimeCloudWsUrl(runtimeCloudWsUrlRef.current);
+      }
 
       const latest = syncClient.getLatestSnapshot();
       if (latest?.anchor) applyIncomingAnchor(latest.anchor);
@@ -604,13 +622,33 @@ export function PanelPlaybackFooter({
         setIsPaused(false);
         setElapsed(Math.floor(startPositionSec));
         setVideoDuration(track.durationSeconds ?? null);
-        audioEngineRef.current?.holdUntilSynced(2200);
-        // Send master readiness after iframe cue settle or immediately for cached/local audio
-        setTimeout(() => {
-          if (active && activeBarrierIdRef.current === barrierId) {
-            syncClient.sendReady(barrierId);
-          }
-        }, 140);
+        audioEngineRef.current?.prepareBarrier(track.youtubeVideoId ?? "", startPositionSec, 2400);
+
+        if (startBarrierTimerRef.current) {
+          clearTimeout(startBarrierTimerRef.current);
+          startBarrierTimerRef.current = null;
+        }
+        const alreadyWarm =
+          track.source === "upload" ||
+          !track.youtubeVideoId ||
+          lastBufferedVideoIdRef.current === track.youtubeVideoId;
+
+        if (alreadyWarm) {
+          startBarrierTimerRef.current = setTimeout(() => {
+            startBarrierTimerRef.current = null;
+            if (active && activeBarrierIdRef.current === barrierId) {
+              syncClient.sendReady(barrierId);
+            }
+          }, 80);
+        } else {
+          // Safety ready fallback if YouTube pre-buffer takes unusually long
+          startBarrierTimerRef.current = setTimeout(() => {
+            startBarrierTimerRef.current = null;
+            if (active && activeBarrierIdRef.current === barrierId) {
+              syncClient.sendReady(barrierId);
+            }
+          }, 1150);
+        }
       });
 
       unsubGo = syncClient.on("sync:go", ({ barrierId, startPositionSec, startAtServerMs, anchor }) => {
@@ -623,6 +661,7 @@ export function PanelPlaybackFooter({
           clearTimeout(startBarrierTimerRef.current);
           startBarrierTimerRef.current = null;
         }
+        fastProgressUntilRef.current = Date.now() + 6500;
         const delayMs = syncClient.msUntilServerTime(startAtServerMs);
         audioEngineRef.current?.scheduleStartAt(delayMs, startPositionSec);
       });
@@ -841,13 +880,18 @@ export function PanelPlaybackFooter({
     }
     const next = !isPaused;
     setIsPaused(next);
+    if (!next) {
+      fastProgressUntilRef.current = Date.now() + 6500;
+    }
     showToast(next ? "⏸️ TV Pausada" : "▶️ TV en Reproducción");
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
     broadcastControl(next ? "pause" : "resume");
     try {
+      const cmdOpts = { skipWsBroadcast: hasWs, skipSyncNotify: hasWs };
       if (next) {
-        await pausePlayback(slug);
+        await pausePlayback(slug, cmdOpts);
       } else {
-        await resumePlayback(slug);
+        await resumePlayback(slug, cmdOpts);
       }
     } catch {
       // Revert on failure
@@ -927,9 +971,15 @@ export function PanelPlaybackFooter({
       setVideoDuration(null);
       setIsPaused(false);
       audioEngineRef.current?.unlockAudio();
+      const hasWs = Boolean(syncClientRef.current?.isConnected());
       broadcastControl("play_now", { track: nextTrack });
       try {
-        await sendPlaybackCommand(slug, "play_now", { track: nextTrack });
+        await sendPlaybackCommand(
+          slug,
+          "play_now",
+          { track: nextTrack },
+          ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
+        );
       } catch {
         // Non-blocking
       }
@@ -985,9 +1035,13 @@ export function PanelPlaybackFooter({
   const handleVolume = async (newVol: number) => {
     setVolume(newVol);
     if (isMuted) setIsMuted(false);
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
     broadcastControl("set_volume", { volume: newVol });
     try {
-      await setPlaybackVolume(slug, newVol);
+      await setPlaybackVolume(slug, newVol, {
+        skipWsBroadcast: hasWs,
+        skipSyncNotify: hasWs,
+      });
     } catch {
       // Ignore
     }
@@ -997,11 +1051,13 @@ export function PanelPlaybackFooter({
     const next = !isMuted;
     setIsMuted(next);
     showToast(next ? "🔇 Audio Cabina Silenciado" : "🔊 Audio Cabina Activo");
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
     try {
+      const cmdOpts = { skipWsBroadcast: hasWs, skipSyncNotify: hasWs };
       if (next) {
-        await mutePlayback(slug);
+        await mutePlayback(slug, cmdOpts);
       } else {
-        await unmutePlayback(slug);
+        await unmutePlayback(slug, cmdOpts);
       }
     } catch {
       setIsMuted(!next);
@@ -1012,9 +1068,15 @@ export function PanelPlaybackFooter({
     const next = !tvMuted;
     setTvMuted(next);
     showToast(next ? "🔇 Audio de la TV Silenciado" : "🔊 Audio de la TV Activado");
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
     broadcastControl("set_tv_mute", { tvMuted: next, cabinaMuted: isMuted });
     try {
-      await sendPlaybackCommand(slug, "set_tv_mute", { tvMuted: next });
+      await sendPlaybackCommand(
+        slug,
+        "set_tv_mute",
+        { tvMuted: next },
+        ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
+      );
       await updateTvDeviceDisplay(slug, "all", { tvMuted: next });
     } catch {
       // Non-blocking
@@ -1043,13 +1105,19 @@ export function PanelPlaybackFooter({
 
     // Always broadcast and persist explicit TV mute state
     setTvMuted(nextTvMuted);
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
     broadcastControl("set_tv_mute", {
       tvMuted: nextTvMuted,
       cabinaMuted: nextCabinaMuted,
       audioRouting: routing,
     });
     try {
-      await sendPlaybackCommand(slug, "set_tv_mute", { tvMuted: nextTvMuted });
+      await sendPlaybackCommand(
+        slug,
+        "set_tv_mute",
+        { tvMuted: nextTvMuted },
+        ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
+      );
       await updateTvDeviceDisplay(slug, "all", { tvMuted: nextTvMuted });
     } catch { /* non-blocking */ }
 
@@ -1065,8 +1133,15 @@ export function PanelPlaybackFooter({
     const next = !karaokeMode;
     setKaraokeMode(next);
     showToast(next ? "🎤 Modo Karaoke Activado" : "🎧 Modo Normal");
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
+    if (hasWs) {
+      broadcastControl("set_karaoke_mode", { enabled: next });
+    }
     try {
-      await setKmRemote(slug, next);
+      await setKmRemote(slug, next, {
+        skipWsBroadcast: hasWs,
+        skipSyncNotify: hasWs,
+      });
     } catch {
       setKaraokeMode(!next);
     }
@@ -1078,12 +1153,43 @@ export function PanelPlaybackFooter({
   const handleSeek = async (newSec: number) => {
     const clamped = Math.max(0, Math.min(duration, Math.floor(newSec)));
     const seekSeq = Date.now();
+    fastProgressUntilRef.current = seekSeq + 6500;
+    lastProgressBroadcastRef.current = seekSeq;
     setElapsed(clamped);
     audioEngineRef.current?.seekTo(clamped);
     showToast(`⏩ Posición: ${formatDuration(clamped)}`);
+    const hasWs = Boolean(syncClientRef.current?.isConnected());
     broadcastControl("seek", { seconds: clamped, seekSeq });
+    if (syncClientRef.current?.isConnected() && currentTrack) {
+      syncClientRef.current.sendProgress({
+        currentTime: clamped,
+        duration,
+        isPaused,
+        forceSeek: true,
+        seekSeq,
+        tvMuted,
+        volume,
+        isFromAdminAudio: true,
+        track: {
+          itemId: currentTrack.itemId,
+          trackId: currentTrack.trackId,
+          title: currentTrack.title,
+          artist: currentTrack.artist,
+          source:
+            currentTrack.source === "upload" || currentTrack.source === "spotify"
+              ? currentTrack.source
+              : "youtube",
+          durationSeconds: duration,
+          youtubeVideoId: currentTrack.youtubeVideoId ?? null,
+          thumbnailUrl: currentTrack.thumbnailUrl ?? null,
+          voteCount: currentTrack.voteCount,
+          guestName: currentTrack.guestName ?? null,
+          dedication: currentTrack.dedication ?? null,
+          isKaraoke: currentTrack.isKaraoke ?? false,
+        },
+      });
+    }
     if (channelRef.current && currentTrack) {
-      lastProgressBroadcastRef.current = seekSeq;
       void channelRef.current.send({
         type: "broadcast",
         event: "tv_playback_progress",
@@ -1104,7 +1210,10 @@ export function PanelPlaybackFooter({
       });
     }
     try {
-      await seekPlayback(slug, clamped);
+      await seekPlayback(slug, clamped, {
+        skipWsBroadcast: hasWs,
+        skipSyncNotify: hasWs,
+      });
     } catch {
       // non-blocking
     }
@@ -1451,25 +1560,44 @@ export function PanelPlaybackFooter({
                 <span>Habilitar Sonido</span>
               </button>
             ) : (
-              <div
-                className="hidden 2xl:flex h-8 shrink-0 items-center gap-1.5 bg-th-emerald-soft border border-th-emerald/30 text-th-emerald px-2.5 rounded-xl text-[11px] font-semibold whitespace-nowrap"
+              <button
+                type="button"
+                onClick={() => setLanSyncModalOpen(true)}
+                className={`flex h-8 shrink-0 items-center gap-1.5 px-2.5 rounded-xl text-[11px] font-semibold whitespace-nowrap border transition-all active:scale-95 cursor-pointer ${
+                  syncStatus.transport === "lan"
+                    ? "bg-th-emerald-soft border-th-emerald/35 text-th-emerald hover:bg-th-emerald hover:text-white"
+                    : syncStatus.transport === "cloud"
+                      ? "bg-th-accent-soft border-th-accent/35 text-th-accent hover:bg-th-accent hover:text-white"
+                      : "bg-th-amber-soft border-th-amber/35 text-th-amber hover:bg-th-amber hover:text-white"
+                }`}
                 title={
                   syncStatus.transport === "lan"
-                    ? `Sincronización LAN ultrarrápida (${syncStatus.rttMs ?? "<2"}ms)`
+                    ? `Sincronización LAN ultrarrápida (${syncStatus.rttMs ?? "<2"}ms) — Clic para ver detalles`
                     : syncStatus.transport === "cloud"
-                      ? `Sincronización Cloud Edge (${syncStatus.rttMs ?? "--"}ms)`
-                      : "Sonido principal del salón activo desde esta cabina"
+                      ? `Modo Internet Cloud (${syncStatus.rttMs ?? "--"}ms) — Clic para activar Modo LAN (<2ms)`
+                      : "Clic para configurar sincronización LAN o diagnosticar conexión"
                 }
               >
-                <span className="size-2 rounded-full bg-th-emerald animate-pulse shrink-0" />
+                <span
+                  className={`size-2 rounded-full shrink-0 ${
+                    syncStatus.transport === "lan"
+                      ? "bg-th-emerald animate-pulse"
+                      : syncStatus.transport === "cloud"
+                        ? "bg-th-accent animate-pulse"
+                        : "bg-th-amber"
+                  }`}
+                />
+                <Wifi className="size-3.5 shrink-0 hidden xl:inline" />
                 <span>
                   {syncStatus.transport === "lan"
                     ? `LAN${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
                     : syncStatus.transport === "cloud"
-                      ? `Sync${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : " OK"}`
-                      : "Cabina ON"}
+                      ? `Cloud${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                      : syncStatus.transport === "connecting"
+                        ? "Sync..."
+                        : "Sync LAN"}
                 </span>
-              </div>
+              </button>
             )}
 
             <div className="h-8 shrink-0 flex items-center gap-2 bg-th-recessed px-2.5 rounded-xl border border-th-border">
@@ -1510,6 +1638,7 @@ export function PanelPlaybackFooter({
         isPaused={isPaused}
         volume={volume}
         isMuted={isMuted}
+        syncConnected={syncStatus.connected}
         onTrackEnded={() => void handleSkipNextRef.current()}
         onProgress={(curr, dur) => {
           setElapsed(Math.floor(curr));
@@ -1579,7 +1708,13 @@ export function PanelPlaybackFooter({
           }
 
           const now = Date.now();
-          if (syncClientRef.current?.isConnected() && currentTrack && now - lastProgressBroadcastRef.current >= 2500) {
+          const progressIntervalMs = now < fastProgressUntilRef.current ? 600 : 1800;
+          if (
+            syncClientRef.current?.isConnected() &&
+            currentTrack &&
+            activeBarrierIdRef.current === null &&
+            now - lastProgressBroadcastRef.current >= progressIntervalMs
+          ) {
             lastProgressBroadcastRef.current = now;
             syncClientRef.current.sendProgress({
               currentTime: curr,
@@ -1603,7 +1738,12 @@ export function PanelPlaybackFooter({
                 isKaraoke: currentTrack.isKaraoke ?? false,
               },
             });
-          } else if (channelRef.current && currentTrack && now - lastProgressBroadcastRef.current >= 1500) {
+          } else if (
+            channelRef.current &&
+            currentTrack &&
+            activeBarrierIdRef.current === null &&
+            now - lastProgressBroadcastRef.current >= 1500
+          ) {
             lastProgressBroadcastRef.current = now;
             void channelRef.current.send({
               type: "broadcast",
@@ -1624,11 +1764,16 @@ export function PanelPlaybackFooter({
           }
         }}
         onTrackBuffered={(videoId) => {
+          lastBufferedVideoIdRef.current = videoId;
           if (
             activeBarrierIdRef.current &&
             syncClientRef.current?.isConnected() &&
             (!activeBarrierVideoIdRef.current || activeBarrierVideoIdRef.current === videoId)
           ) {
+            if (startBarrierTimerRef.current) {
+              clearTimeout(startBarrierTimerRef.current);
+              startBarrierTimerRef.current = null;
+            }
             syncClientRef.current.sendReady(activeBarrierIdRef.current);
           }
         }}
@@ -1652,6 +1797,25 @@ export function PanelPlaybackFooter({
         isOpen={tvManagerOpen}
         onClose={() => setTvManagerOpen(false)}
         slug={slug}
+        onOpenLanSync={() => {
+          setTvManagerOpen(false);
+          setLanSyncModalOpen(true);
+        }}
+      />
+
+      {/* LAN & Cloud Sync Diagnostic / Newbie Setup Modal */}
+      <LanSyncModal
+        isOpen={lanSyncModalOpen}
+        onClose={() => setLanSyncModalOpen(false)}
+        slug={slug}
+        syncStatus={syncStatus}
+        onProbeLan={async () => {
+          if (!syncClientRef.current) return false;
+          return syncClientRef.current.probeLocalLanHubOnce();
+        }}
+        onReconnect={() => {
+          syncClientRef.current?.reconnectNow(true);
+        }}
       />
 
       {/* ==================== EXPANDABLE QUEUE & REMOTE PLAYER DRAWER ==================== */}

@@ -172,5 +172,77 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
     expect(snap.anchor.track?.youtubeVideoId).toBe(SAMPLE_TRACK.youtubeVideoId);
     expect(snap.revision).toBe(saved.revision);
   });
+
+  it("tracks advertised LAN endpoints across room:presence and snapshots", () => {
+    const engine = new SyncRoomEngine("juntada", undefined, 1000);
+    engine.upsertClient({
+      clientId: "cabina-1",
+      role: "master",
+      joinedAtMs: 1000,
+      lanEndpoints: ["ws://192.168.1.40:4321"],
+    });
+    expect(engine.getSnapshot(1100).lanEndpoints).toEqual(["ws://192.168.1.40:4321"]);
+
+    const presence = engine.setClientLanEndpoints(
+      "cabina-1",
+      ["ws://192.168.1.40:4321", "ws://192.168.1.50:4321"],
+      1200,
+    );
+    expect(presence?.type).toBe("room:presence");
+    if (presence && presence.type === "room:presence") {
+      expect(presence.lanEndpoints).toEqual([
+        "ws://192.168.1.40:4321",
+        "ws://192.168.1.50:4321",
+      ]);
+    }
+  });
+
+  it("treats skip with expectedVideoId as idempotent when track already advanced", () => {
+    const engine = new SyncRoomEngine("juntada", undefined, 1000);
+    engine.applyPlaybackCommand("play_now", { track: SAMPLE_TRACK }, 2000, { useBarrier: false });
+
+    // First skip matching active track advances anchor seq and broadcasts sync:anchor
+    const first = engine.applyPlaybackCommand(
+      "skip",
+      { expectedVideoId: SAMPLE_TRACK.youtubeVideoId },
+      3000,
+    );
+    expect(first.outbound.length).toBeGreaterThan(0);
+    expect(engine.getSnapshot(3000).anchor.lastCommand).toBe("skip");
+
+    // Re-load new track, then duplicate skip referencing old expectedVideoId is ignored
+    const track2: SyncTrack = { ...SAMPLE_TRACK, itemId: "item-2", youtubeVideoId: "newTrack999" };
+    engine.applyPlaybackCommand("play_now", { track: track2 }, 3500, { useBarrier: false });
+    const seqBeforeDup = engine.getSnapshot(3500).anchor.seq;
+    const dup = engine.applyPlaybackCommand(
+      "skip",
+      { expectedVideoId: SAMPLE_TRACK.youtubeVideoId },
+      3600,
+    );
+    expect(dup.outbound).toHaveLength(0);
+    expect(engine.getSnapshot(3600).anchor.seq).toBe(seqBeforeDup);
+    expect(engine.getSnapshot(3600).anchor.track?.youtubeVideoId).toBe("newTrack999");
+  });
+
+  it("re-anchors progress only when drift exceeds tightened thresholds (0.18s early, 0.30s steady)", () => {
+    const engine = new SyncRoomEngine("juntada", undefined, 1000);
+    // With useBarrier: false, anchorServerMs starts at nowMs + 80ms = 10_080ms
+    engine.applyPlaybackCommand("play_now", { track: SAMPLE_TRACK }, 10_000, { useBarrier: false });
+
+    // At 11_500ms, computed track time = 1.42s. 1.54s is within 0.18s -> revision stays unchanged
+    const minorEarly = engine.applyProgressReport(
+      { currentTime: 1.54, isPaused: false, track: SAMPLE_TRACK },
+      11_500,
+    );
+    expect(minorEarly.type).toBe("sync:anchor");
+    const revBefore = engine.getSnapshot(11_500).revision;
+
+    // At 11_500ms, 1.70s differs by 0.28s >= 0.18s -> bumps revision
+    engine.applyProgressReport(
+      { currentTime: 1.7, isPaused: false, track: SAMPLE_TRACK },
+      11_500,
+    );
+    expect(engine.getSnapshot(11_500).revision).toBeGreaterThan(revBefore);
+  });
 });
 

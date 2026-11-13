@@ -440,11 +440,19 @@ fun NativeTvApp(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var manualLanHost by remember { mutableStateOf(prefs.getString("lan_hub_host", "") ?: "") }
-    var cachedCloudWsUrl by remember { mutableStateOf(prefs.getString("cloud_sync_ws_url", "") ?: "") }
+    var savedAutoLanHost by remember { mutableStateOf(prefs.getString("last_auto_lan_host", "") ?: "") }
+    var cachedCloudWsUrl by remember {
+        mutableStateOf(
+            prefs.getString("cloud_sync_ws_url", "wss://poneleplay-sync.martinsgons709.workers.dev")
+                ?: "wss://poneleplay-sync.martinsgons709.workers.dev"
+        )
+    }
     var cachedLanPort by remember { mutableStateOf(prefs.getInt("lan_hub_port", 4321).takeIf { it > 0 } ?: 4321) }
     var syncStatus by remember { mutableStateOf(SyncStatusState()) }
     var liveAnchor by remember { mutableStateOf<SyncAnchorData?>(null) }
     var discoveredLanHub by remember { mutableStateOf<DiscoveredLanHub?>(null) }
+    var isScanningLan by remember { mutableStateOf(false) }
+    var lanScanStatusText by remember { mutableStateOf<String?>(null) }
     var manualRefreshTick by remember { mutableStateOf(0) }
 
     var lastAnchorSeq by remember { mutableStateOf(0L) }
@@ -594,8 +602,8 @@ fun NativeTvApp(
                 videoController.cueVideo(ytId, preload.startPositionSec.toFloat())
 
                 activeBarrierTimeoutJob = coroutineScope.launch {
-                    val msLeft = clientRef?.msUntilServerTime(preload.deadlineServerMs) ?: 450L
-                    delay(msLeft.coerceIn(180L, 480L))
+                    val msLeft = clientRef?.msUntilServerTime(preload.deadlineServerMs) ?: 1400L
+                    delay(msLeft.coerceIn(700L, 1750L))
                     sendReadyOnce()
                 }
             }
@@ -609,7 +617,7 @@ fun NativeTvApp(
                 if (go.anchor.seekSeq > 0L) lastAnchorSeekSeq = maxOf(lastAnchorSeekSeq, go.anchor.seekSeq)
 
                 val ytId = go.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
-                val waitMs = (clientRef?.msUntilServerTime(go.startAtServerMs) ?: 0L).coerceIn(0L, 900L)
+                val waitMs = (clientRef?.msUntilServerTime(go.startAtServerMs) ?: 0L).coerceIn(0L, 1200L)
 
                 activeScheduledPlayJob = coroutineScope.launch {
                     if (waitMs > 0L) delay(waitMs)
@@ -670,6 +678,14 @@ fun NativeTvApp(
                     }
                 } catch (_: Exception) {}
             }
+
+            override fun onWorkingLanHostDiscovered(hostLabel: String) {
+                val clean = hostLabel.trim()
+                if (clean.isNotEmpty() && clean != savedAutoLanHost) {
+                    savedAutoLanHost = clean
+                    prefs.edit().putString("last_auto_lan_host", clean).apply()
+                }
+            }
         })
         clientRef = client
         client
@@ -682,8 +698,31 @@ fun NativeTvApp(
             return@LaunchedEffect
         }
         lanDiscovery.start()
-        lanDiscovery.discoveredHub.collect { hub ->
-            discoveredLanHub = hub
+        // Zero-config background subnet fallback if mDNS and cloud lanEndpoints haven't paired LAN yet
+        val autoScanJob = launch {
+            delay(1800L)
+            if (discoveredLanHub == null && manualLanHost.isBlank()) {
+                val priority = buildList {
+                    if (savedAutoLanHost.isNotBlank()) add(savedAutoLanHost)
+                    addAll(syncStatus.cloudDiscoveredLanHosts)
+                }
+                val found = lanDiscovery.scanLocalSubnetForLanHub(
+                    priorityHosts = priority,
+                    port = cachedLanPort
+                )
+                if (found != null) {
+                    val label = "${found.host}:${found.port}"
+                    savedAutoLanHost = label
+                    prefs.edit().putString("last_auto_lan_host", label).apply()
+                }
+            }
+        }
+        try {
+            lanDiscovery.discoveredHub.collect { hub ->
+                discoveredLanHub = hub
+            }
+        } finally {
+            autoScanJob.cancel()
         }
     }
 
@@ -696,7 +735,7 @@ fun NativeTvApp(
         }
     }
 
-    LaunchedEffect(isPaired, venueSlug, manualLanHost, discoveredLanHub, cachedLanPort, cachedCloudWsUrl) {
+    LaunchedEffect(isPaired, venueSlug, manualLanHost, discoveredLanHub, cachedLanPort, cachedCloudWsUrl, savedAutoLanHost) {
         if (!isPaired || venueSlug.isBlank()) {
             syncClient.stop()
             return@LaunchedEffect
@@ -708,13 +747,15 @@ fun NativeTvApp(
             discoveredLanHost = discoveredLanHub?.host,
             discoveredLanPort = discoveredLanHub?.port ?: cachedLanPort,
             defaultLanPort = cachedLanPort,
-            cloudWsBaseUrl = cachedCloudWsUrl.ifBlank { null }
+            cloudWsBaseUrl = cachedCloudWsUrl.ifBlank { "wss://poneleplay-sync.martinsgons709.workers.dev" },
+            savedAutoLanHost = savedAutoLanHost.ifBlank { null }
         )
     }
 
     val useLegacySupabaseWs = !syncStatus.connected &&
         manualLanHost.isBlank() &&
         discoveredLanHub == null &&
+        savedAutoLanHost.isBlank() &&
         cachedCloudWsUrl.isBlank()
 
     // Intercept Back button
@@ -824,6 +865,10 @@ fun NativeTvApp(
                     videoController = videoController,
                     onVideoEnded = {
                         val endedVideoId = currentFeed.nowPlaying?.youtubeVideoId
+                        val sentViaWs = currentSyncConnected
+                        if (sentViaWs) {
+                            syncClient.sendSkip(endedVideoId)
+                        }
                         coroutineScope.launch(Dispatchers.IO) {
                             try {
                                 val cmdUrl = URL("${serverUrl.trimEnd('/')}/api/playback/command")
@@ -836,6 +881,9 @@ fun NativeTvApp(
                                 val bodyObj = org.json.JSONObject().apply {
                                     put("slug", venueSlug.trim())
                                     put("command", "skip")
+                                    if (sentViaWs) {
+                                        put("skipSyncNotify", true)
+                                    }
                                     put("payload", org.json.JSONObject().apply {
                                         if (!endedVideoId.isNullOrBlank()) {
                                             put("expectedVideoId", endedVideoId)
@@ -916,12 +964,43 @@ fun NativeTvApp(
             currentVersionName = currentVersionName,
             syncStatus = syncStatus,
             manualLanHost = manualLanHost,
+            isScanningLan = isScanningLan,
+            lanScanStatusText = lanScanStatusText,
             onToggleMode = onToggleMode,
             onToggleMute = onToggleMute,
+            onAutoScanLan = {
+                if (!isScanningLan) {
+                    coroutineScope.launch {
+                        isScanningLan = true
+                        lanScanStatusText = "Buscando Cabina en tu red Wi-Fi / LAN..."
+                        val priority = buildList {
+                            if (manualLanHost.isNotBlank()) add(manualLanHost)
+                            if (savedAutoLanHost.isNotBlank()) add(savedAutoLanHost)
+                            addAll(syncStatus.cloudDiscoveredLanHosts)
+                        }
+                        val found = lanDiscovery.scanLocalSubnetForLanHub(
+                            priorityHosts = priority,
+                            port = cachedLanPort
+                        )
+                        isScanningLan = false
+                        if (found != null) {
+                            val label = "${found.host}:${found.port}"
+                            savedAutoLanHost = label
+                            prefs.edit().putString("last_auto_lan_host", label).apply()
+                            discoveredLanHub = found
+                            syncClient.forceReconnect()
+                            lanScanStatusText = "✅ ¡Cabina encontrada en $label!"
+                        } else {
+                            lanScanStatusText = "No se encontró el Hub LAN en el Wi-Fi. Ejecutá Iniciar-PonelePlay-LAN.bat en la PC Cabina."
+                        }
+                    }
+                }
+            },
             onSaveManualLanHost = { rawIp ->
                 val cleanIp = rawIp.trim()
                 manualLanHost = cleanIp
                 prefs.edit().putString("lan_hub_host", cleanIp).apply()
+                lanScanStatusText = null
             },
             onForceReconnectSync = {
                 syncClient.forceReconnect()

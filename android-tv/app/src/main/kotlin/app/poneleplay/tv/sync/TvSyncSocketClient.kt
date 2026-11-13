@@ -8,6 +8,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,7 @@ interface TvSyncListener {
     fun onGo(go: SyncGoData) {}
     fun onDisplayConfig(configJson: String) {}
     fun onPartyEvent(payloadJson: String) {}
+    fun onWorkingLanHostDiscovered(hostLabel: String) {}
 }
 
 /**
@@ -54,6 +56,8 @@ class TvSyncSocketClient(
     @Volatile private var discoveredLanPort: Int = 4321
     @Volatile private var defaultLanPort: Int = 4321
     @Volatile private var cloudWsBaseUrl: String? = null
+    @Volatile private var cloudDiscoveredLanHosts: List<String> = emptyList()
+    @Volatile private var savedAutoLanHost: String? = null
 
     @Volatile private var currentWs: WebSocket? = null
     @Volatile private var activeCandidate: SyncWsCandidate? = null
@@ -75,7 +79,8 @@ class TvSyncSocketClient(
         discoveredLanHost: String?,
         discoveredLanPort: Int,
         defaultLanPort: Int,
-        cloudWsBaseUrl: String?
+        cloudWsBaseUrl: String?,
+        savedAutoLanHost: String? = this.savedAutoLanHost
     ) {
         val cleanSlug = slug.trim()
         val oldTargetKey = targetKey()
@@ -87,6 +92,7 @@ class TvSyncSocketClient(
         this.discoveredLanPort = discoveredLanPort.takeIf { it > 0 } ?: 4321
         this.defaultLanPort = defaultLanPort.takeIf { it > 0 } ?: 4321
         this.cloudWsBaseUrl = cloudWsBaseUrl?.trim()
+        this.savedAutoLanHost = savedAutoLanHost?.trim()?.takeIf { it.isNotEmpty() }
 
         val newTargetKey = targetKey()
         if (cleanSlug.isEmpty()) {
@@ -170,6 +176,19 @@ class TvSyncSocketClient(
         sendJson(obj)
     }
 
+    fun sendSkip(expectedVideoId: String? = null) {
+        val obj = JSONObject().apply {
+            put("type", "playback:command")
+            put("command", "skip")
+            put("payload", JSONObject().apply {
+                if (!expectedVideoId.isNullOrBlank()) {
+                    put("expectedVideoId", expectedVideoId)
+                }
+            })
+        }
+        sendJson(obj)
+    }
+
     private fun targetKey(): String {
         return listOf(
             slug,
@@ -177,7 +196,9 @@ class TvSyncSocketClient(
             discoveredLanHost.orEmpty(),
             discoveredLanPort.toString(),
             defaultLanPort.toString(),
-            cloudWsBaseUrl.orEmpty()
+            cloudWsBaseUrl.orEmpty(),
+            cloudDiscoveredLanHosts.joinToString(","),
+            savedAutoLanHost.orEmpty()
         ).joinToString("|")
     }
 
@@ -190,7 +211,9 @@ class TvSyncSocketClient(
             discoveredLanHost = discoveredLanHost,
             discoveredLanPort = discoveredLanPort,
             defaultLanPort = defaultLanPort,
-            cloudWsBaseUrl = cloudWsBaseUrl
+            cloudWsBaseUrl = cloudWsBaseUrl,
+            cloudDiscoveredLanHosts = cloudDiscoveredLanHosts,
+            savedAutoLanHost = savedAutoLanHost
         )
     }
 
@@ -266,6 +289,7 @@ class TvSyncSocketClient(
                     startLanProbeLoop()
                 } else {
                     stopLanProbeLoop()
+                    mainHandler.post { listener.onWorkingLanHostDiscovered(candidate.hostLabel) }
                 }
             }
 
@@ -353,6 +377,7 @@ class TvSyncSocketClient(
 
             "room:snapshot" -> {
                 val snap = msg.optJSONObject("snapshot") ?: return
+                applyCloudLanEndpoints(snap.optJSONArray("lanEndpoints"))
                 val tvFeedObj = snap.optJSONObject("tvFeed")
                 if (tvFeedObj != null) {
                     val feedStr = tvFeedObj.toString()
@@ -366,6 +391,10 @@ class TvSyncSocketClient(
                         listener.onAnchor(anchor, false)
                     }
                 }
+            }
+
+            "room:presence" -> {
+                applyCloudLanEndpoints(msg.optJSONArray("lanEndpoints"))
             }
 
             "sync:anchor" -> {
@@ -455,6 +484,28 @@ class TvSyncSocketClient(
         )
     }
 
+    private fun applyCloudLanEndpoints(arr: JSONArray?) {
+        if (arr == null) return
+        val parsed = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val raw = arr.optString(i, "").trim()
+            if (raw.isEmpty()) continue
+            val hostPort = SyncClockEstimator.normalizeLanHostAndPort(raw, defaultLanPort)
+            if (hostPort != null) {
+                val label = "${hostPort.first}:${hostPort.second}"
+                if (!parsed.contains(label)) parsed.add(label)
+            }
+        }
+        val changed = parsed != cloudDiscoveredLanHosts
+        cloudDiscoveredLanHosts = parsed
+        if (changed) {
+            updateStatus(status.copy(cloudDiscoveredLanHosts = parsed))
+        }
+        if (parsed.isNotEmpty() && status.transport != SyncTransportMode.LAN && isActive.get()) {
+            probeLanNow()
+        }
+    }
+
     private fun sendClockPing() {
         val ping = JSONObject().apply {
             put("type", "clock:ping")
@@ -466,18 +517,20 @@ class TvSyncSocketClient(
     private fun startClockSync() {
         stopClockSync()
         sendClockPing()
-        mainHandler.postDelayed({ if (currentWs != null) sendClockPing() }, 150L)
-        mainHandler.postDelayed({ if (currentWs != null) sendClockPing() }, 350L)
+        mainHandler.postDelayed({ if (currentWs != null) sendClockPing() }, 80L)
+        mainHandler.postDelayed({ if (currentWs != null) sendClockPing() }, 180L)
+        mainHandler.postDelayed({ if (currentWs != null) sendClockPing() }, 320L)
+        mainHandler.postDelayed({ if (currentWs != null) sendClockPing() }, 550L)
 
         val periodic = object : Runnable {
             override fun run() {
                 if (!isActive.get() || currentWs == null) return
                 sendClockPing()
-                mainHandler.postDelayed(this, 25_000L)
+                mainHandler.postDelayed(this, 12_000L)
             }
         }
         pingRunnable = periodic
-        mainHandler.postDelayed(periodic, 25_000L)
+        mainHandler.postDelayed(periodic, 12_000L)
     }
 
     private fun stopClockSync() {
@@ -485,35 +538,42 @@ class TvSyncSocketClient(
         pingRunnable = null
     }
 
+    private fun probeLanNow() {
+        if (!isActive.get() || status.transport == SyncTransportMode.LAN) return
+        val lanCandidates = currentCandidates().filter { it.transport == SyncTransportMode.LAN }
+        if (lanCandidates.isEmpty()) return
+        Thread {
+            for (lan in lanCandidates) {
+                val healthUrl = lan.healthUrl ?: continue
+                try {
+                    val req = Request.Builder().url(healthUrl).get().build()
+                    probeClient.newCall(req).execute().use { resp ->
+                        if (resp.isSuccessful && isActive.get() && status.transport != SyncTransportMode.LAN) {
+                            mainHandler.post {
+                                listener.onWorkingLanHostDiscovered(lan.hostLabel)
+                                reconnectNow(resetAttempts = true)
+                            }
+                            return@Thread
+                        }
+                    }
+                } catch (_: Exception) {
+                    // LAN Hub unreachable
+                }
+            }
+        }.start()
+    }
+
     private fun startLanProbeLoop() {
         stopLanProbeLoop()
         val loop = object : Runnable {
             override fun run() {
                 if (!isActive.get() || status.transport == SyncTransportMode.LAN) return
-                val lanCandidates = currentCandidates().filter { it.transport == SyncTransportMode.LAN }
-                if (lanCandidates.isNotEmpty()) {
-                    Thread {
-                        for (lan in lanCandidates) {
-                            val healthUrl = lan.healthUrl ?: continue
-                            try {
-                                val req = Request.Builder().url(healthUrl).get().build()
-                                probeClient.newCall(req).execute().use { resp ->
-                                    if (resp.isSuccessful && isActive.get() && status.transport != SyncTransportMode.LAN) {
-                                        mainHandler.post { reconnectNow(resetAttempts = true) }
-                                        return@Thread
-                                    }
-                                }
-                            } catch (_: Exception) {
-                                // LAN Hub unreachable
-                            }
-                        }
-                    }.start()
-                }
-                mainHandler.postDelayed(this, 15_000L)
+                probeLanNow()
+                mainHandler.postDelayed(this, 12_000L)
             }
         }
         lanProbeRunnable = loop
-        mainHandler.postDelayed(loop, 15_000L)
+        mainHandler.postDelayed(loop, 12_000L)
     }
 
     private fun stopLanProbeLoop() {

@@ -1120,11 +1120,31 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
     };
 
+    const syncClient = acquireSyncClient({
+      slug,
+      role: "tv",
+      deviceId: token || undefined,
+    });
+    syncClientRef.current = syncClient;
+
+    const unsubStatus = syncClient.onStatus((st) => {
+      if (active) setSyncConnected(st.connected);
+    });
+
+    let legacyFallbackStarted = false;
+    let startLegacySupabaseFallback = () => {};
+
     // 1. Initial State from Server (/api/tv/[slug] + fetchPlaybackState)
     void fetch(`/api/tv/${encodeURIComponent(slug)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((tvData) => {
-        if (!active || !tvData?.ok) return;
+        if (!active) return;
+        if (tvData?.ok && typeof tvData.syncConfig?.cloudWsUrl === "string" && tvData.syncConfig.cloudWsUrl) {
+          syncClient.setRuntimeCloudWsUrl(tvData.syncConfig.cloudWsUrl);
+        } else if (!syncClient.hasTargetsConfigured()) {
+          startLegacySupabaseFallback();
+        }
+        if (!tvData?.ok) return;
         const pb = tvData.playback || {};
         if (typeof pb.tvMuted === "boolean") {
           setIsMuted(pb.tvMuted);
@@ -1147,50 +1167,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           lastSeekSeqRef.current = pb.seekSeq;
         }
       })
-      .catch(() => {});
-
-    void import("@/lib/api/master-control").then(({ fetchPlaybackState }) => {
-      fetchPlaybackState(slug)
-        .then((st) => {
-          if (!active) return;
-          if (typeof st.commandSeq === "number") {
-            lastCommandSeqRef.current = st.commandSeq;
-          }
-          if (typeof st.volume === "number") {
-            setVolume(st.volume);
-            engine.setVolume?.(st.volume);
-          }
-          const trkMeta = (st.currentTrack as unknown as Record<string, unknown>) || {};
-          if (typeof trkMeta.tvMuted === "boolean") {
-            setIsMuted(Boolean(trkMeta.tvMuted));
-            if (trkMeta.tvMuted) engine.mute?.();
-            else engine.unMute?.();
-          }
-          if (typeof st.isPaused === "boolean") {
-            setIsPlaying(!st.isPaused);
-            if (st.isPaused) engine.pause?.();
-            else void engine.play?.();
-          }
-          if (typeof st.karaokeMode === "boolean") {
-            setKaraokeMode(st.karaokeMode);
-            if (st.karaokeMode) setVideoMode(true);
-          }
-          if (st.currentTrack) {
-            setManualNowPlaying(st.currentTrack);
-          }
-        })
-        .catch(() => {});
-    });
-
-    const syncClient = acquireSyncClient({
-      slug,
-      role: "tv",
-      deviceId: token || undefined,
-    });
-
-    const unsubStatus = syncClient.onStatus((st) => {
-      if (active) setSyncConnected(st.connected);
-    });
+      .catch(() => {
+        if (!syncClient.hasTargetsConfigured()) {
+          startLegacySupabaseFallback();
+        }
+      });
 
     let unsubCued: (() => void) | null = null;
     let unsubSnap: (() => void) | null = null;
@@ -1270,7 +1251,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setElapsed(Math.floor(targetSec));
         elapsedRef.current = Math.floor(targetSec);
         void engine.load(incomingTrack).then(() => {
-          if (targetSec > 0.8) {
+          if (targetSec > 0.25) {
             engine.seekTo?.(targetSec);
           }
           if (anchor.isPaused) engine.pause?.();
@@ -1291,140 +1272,144 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
     };
 
-    if (syncClient.hasTargetsConfigured()) {
-      syncClientRef.current = syncClient;
+    unsubCued = engine.onCued((videoId) => {
+      const b = activeBarrierRef.current;
+      if (
+        b &&
+        (!b.videoId || b.videoId === videoId) &&
+        lastReadyBarrierSentRef.current !== b.barrierId
+      ) {
+        lastReadyBarrierSentRef.current = b.barrierId;
+        syncClient.sendReady(b.barrierId);
+      }
+    });
 
-      unsubCued = engine.onCued((videoId) => {
-        const b = activeBarrierRef.current;
+    const latest = syncClient.getLatestSnapshot();
+    if (latest?.anchor) applyAnchorToTv(latest.anchor, false);
+
+    unsubSnap = syncClient.on("room:snapshot", ({ snapshot }) => {
+      if (!activeBarrierRef.current) {
+        applyAnchorToTv(snapshot.anchor, false);
+      }
+    });
+
+    unsubAnchor = syncClient.on("sync:anchor", ({ anchor, forceSeek }) => {
+      applyAnchorToTv(anchor, Boolean(forceSeek));
+    });
+
+    unsubPreload = syncClient.on("sync:preload", ({ barrierId, track, startPositionSec }) => {
+      if (!active) return;
+      const incoming = toPlayerTrack(track);
+      activeBarrierRef.current = {
+        barrierId,
+        videoId: resolveVideoId(incoming),
+      };
+      if (startScheduleTimerRef.current) {
+        clearTimeout(startScheduleTimerRef.current);
+        startScheduleTimerRef.current = null;
+      }
+      isPlayingRef.current = false;
+      setIsPlaying(false);
+      setVideoMode(true);
+      setManualNowPlaying(incoming);
+      setElapsed(Math.floor(startPositionSec));
+      elapsedRef.current = Math.floor(startPositionSec);
+      engine.pause?.();
+      void engine.cue(incoming, startPositionSec);
+
+      // Safety timer if YT pre-buffer takes longer than 1500ms
+      setTimeout(() => {
         if (
-          b &&
-          (!b.videoId || b.videoId === videoId) &&
-          lastReadyBarrierSentRef.current !== b.barrierId
+          active &&
+          activeBarrierRef.current?.barrierId === barrierId &&
+          lastReadyBarrierSentRef.current !== barrierId
         ) {
-          lastReadyBarrierSentRef.current = b.barrierId;
-          syncClient.sendReady(b.barrierId);
+          lastReadyBarrierSentRef.current = barrierId;
+          syncClient.sendReady(barrierId);
         }
-      });
+      }, 1500);
+    });
 
-      const latest = syncClient.getLatestSnapshot();
-      if (latest?.anchor) applyAnchorToTv(latest.anchor, false);
+    unsubGo = syncClient.on("sync:go", ({ barrierId, track, startPositionSec, startAtServerMs, anchor }) => {
+      if (!active) return;
+      const incoming = toPlayerTrack(track);
+      if (activeBarrierRef.current?.barrierId === barrierId) {
+        activeBarrierRef.current = null;
+      }
+      syncAnchorRef.current = anchor;
+      lastSeekSeqRef.current = anchor.seekSeq;
+      lastCommandSeqRef.current = Math.max(lastCommandSeqRef.current ?? 0, anchor.seq);
+      setManualNowPlaying(incoming);
+      setVideoMode(true);
+      setElapsed(Math.floor(startPositionSec));
+      elapsedRef.current = Math.floor(startPositionSec);
 
-      unsubSnap = syncClient.on("room:snapshot", ({ snapshot }) => {
-        if (!activeBarrierRef.current) {
-          applyAnchorToTv(snapshot.anchor, false);
-        }
-      });
+      if (anchor.tvMuted !== isMutedRef.current) {
+        isMutedRef.current = anchor.tvMuted;
+        setIsMuted(anchor.tvMuted);
+        if (anchor.tvMuted) engine.mute?.();
+        else engine.unMute?.();
+      }
+      engine.setVolume?.(anchor.volume);
 
-      unsubAnchor = syncClient.on("sync:anchor", ({ anchor, forceSeek }) => {
-        applyAnchorToTv(anchor, Boolean(forceSeek));
-      });
+      if (startScheduleTimerRef.current) {
+        clearTimeout(startScheduleTimerRef.current);
+        startScheduleTimerRef.current = null;
+      }
 
-      unsubPreload = syncClient.on("sync:preload", ({ barrierId, track, startPositionSec }) => {
+      const startNow = () => {
         if (!active) return;
-        const incoming = toPlayerTrack(track);
-        activeBarrierRef.current = {
-          barrierId,
-          videoId: resolveVideoId(incoming),
-        };
-        if (startScheduleTimerRef.current) {
-          clearTimeout(startScheduleTimerRef.current);
+        lastTvSeekAtRef.current = Date.now();
+        if (startPositionSec > 0.05) {
+          engine.seekTo?.(startPositionSec);
+        }
+        if (anchor.tvMuted) engine.mute?.();
+        else {
+          engine.unMute?.();
+          engine.setVolume?.(anchor.volume);
+        }
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        void engine.play();
+        setHudMessage(`🎵 Reproduciendo: ${incoming.title}`);
+        setTimeout(() => setHudMessage(null), 3500);
+      };
+
+      const delayMs = syncClient.msUntilServerTime(startAtServerMs);
+      if (delayMs <= 12) {
+        startNow();
+      } else {
+        startScheduleTimerRef.current = setTimeout(() => {
           startScheduleTimerRef.current = null;
-        }
-        isPlayingRef.current = false;
-        setIsPlaying(false);
-        setVideoMode(true);
-        setManualNowPlaying(incoming);
-        setElapsed(Math.floor(startPositionSec));
-        elapsedRef.current = Math.floor(startPositionSec);
-        engine.pause?.();
-        void engine.cue(incoming, startPositionSec);
-
-        // Safety timer if YT player was already cued or slow to report state=5
-        setTimeout(() => {
-          if (
-            active &&
-            activeBarrierRef.current?.barrierId === barrierId &&
-            lastReadyBarrierSentRef.current !== barrierId
-          ) {
-            lastReadyBarrierSentRef.current = barrierId;
-            syncClient.sendReady(barrierId);
-          }
-        }, 280);
-      });
-
-      unsubGo = syncClient.on("sync:go", ({ barrierId, track, startPositionSec, startAtServerMs, anchor }) => {
-        if (!active) return;
-        const incoming = toPlayerTrack(track);
-        if (activeBarrierRef.current?.barrierId === barrierId) {
-          activeBarrierRef.current = null;
-        }
-        syncAnchorRef.current = anchor;
-        lastSeekSeqRef.current = anchor.seekSeq;
-        lastCommandSeqRef.current = Math.max(lastCommandSeqRef.current ?? 0, anchor.seq);
-        setManualNowPlaying(incoming);
-        setVideoMode(true);
-        setElapsed(Math.floor(startPositionSec));
-        elapsedRef.current = Math.floor(startPositionSec);
-
-        if (anchor.tvMuted !== isMutedRef.current) {
-          isMutedRef.current = anchor.tvMuted;
-          setIsMuted(anchor.tvMuted);
-          if (anchor.tvMuted) engine.mute?.();
-          else engine.unMute?.();
-        }
-        engine.setVolume?.(anchor.volume);
-
-        if (startScheduleTimerRef.current) {
-          clearTimeout(startScheduleTimerRef.current);
-          startScheduleTimerRef.current = null;
-        }
-
-        const startNow = () => {
-          if (!active) return;
-          lastTvSeekAtRef.current = Date.now();
-          if (startPositionSec > 0.1) {
-            engine.seekTo?.(startPositionSec);
-          }
-          isPlayingRef.current = true;
-          setIsPlaying(true);
-          void engine.play();
-          setHudMessage(`🎵 Reproduciendo: ${incoming.title}`);
-          setTimeout(() => setHudMessage(null), 3500);
-        };
-
-        const delayMs = syncClient.msUntilServerTime(startAtServerMs);
-        if (delayMs <= 12) {
           startNow();
-        } else {
-          startScheduleTimerRef.current = setTimeout(() => {
-            startScheduleTimerRef.current = null;
-            startNow();
-          }, delayMs);
-        }
-      });
+        }, delayMs);
+      }
+    });
 
-      unsubParty = syncClient.on("party:event", ({ payload }) => {
-        applyPartyEventPayload(payload);
-      });
+    unsubParty = syncClient.on("party:event", ({ payload }) => {
+      applyPartyEventPayload(payload);
+    });
 
-      // Continuous tight drift guard driven by NTP-lite server clock anchor (no Supabase traffic)
-      driftTimer = setInterval(() => {
-        const anchor = syncAnchorRef.current;
-        if (!anchor || anchor.isPaused || activeBarrierRef.current || !syncClient.isConnected()) return;
-        if (!engine.hasLiveTime?.()) return;
-        const expected = computeTargetPositionSec(anchor, syncClient.estimatedServerMs());
-        const actual = engine.getCurrentTime?.() ?? elapsedRef.current;
-        const drift = Math.abs(actual - expected);
-        if (drift >= 0.7 && Date.now() - lastTvSeekAtRef.current > 5000) {
-          lastTvSeekAtRef.current = Date.now();
-          engine.seekTo?.(expected);
-        }
-      }, 1000);
-    } else {
-      releaseSyncClient(syncClient);
-      syncClientRef.current = null;
+    // Continuous tight drift guard driven by NTP-lite server clock anchor
+    driftTimer = setInterval(() => {
+      const anchor = syncAnchorRef.current;
+      if (!anchor || anchor.isPaused || activeBarrierRef.current || !syncClient.isConnected()) return;
+      if (!engine.hasLiveTime?.()) return;
+      const expected = computeTargetPositionSec(anchor, syncClient.estimatedServerMs());
+      const actual = engine.getCurrentTime?.() ?? elapsedRef.current;
+      const drift = Math.abs(actual - expected);
+      const isEarlyWindow = expected < 8;
+      const thresholdSec = isEarlyWindow ? 0.28 : 0.45;
+      const cooldownMs = isEarlyWindow ? 1800 : 3000;
+      if (drift >= thresholdSec && Date.now() - lastTvSeekAtRef.current > cooldownMs) {
+        lastTvSeekAtRef.current = Date.now();
+        engine.seekTo?.(expected + 0.2);
+      }
+    }, 450);
 
-      // 2. Legacy Supabase Realtime listener fallback when WebSocket Sync URL is unset
+    startLegacySupabaseFallback = () => {
+      if (legacyFallbackStarted || !active) return;
+      legacyFallbackStarted = true;
       void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
         if (!active) return;
         const supabase = createBrowserSupabase();
@@ -1867,7 +1852,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           .subscribe();
         controlChannelRef.current = channel;
       });
-    }
+    };
 
     return () => {
       active = false;

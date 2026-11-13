@@ -1,0 +1,13 @@
+PONELEPLAY LAN HUB - GUIA RAPIDA (3 PASOS)
+==========================================
+
+1) Descomprime toda la carpeta del archivo ZIP (no lo ejecutes dentro del ZIP).
+2) Haz doble clic en: Iniciar-PonelePlay-LAN.bat
+   - La primera vez te pedira permiso de Windows para abrir el puerto LAN (Firewall). Acepta "Si".
+   - Se creara un acceso directo "PonelePlay LAN Hub" en tu Escritorio para futuras noches.
+3) Deja esa ventana negra abierta minimizada mientras uses PonelePlay:
+   - Tu PC Cabina se conecta automaticamente (veras el cartel "LAN Conectado" en verde).
+   - Tus Android TV en el mismo Wi-Fi se conectan solas o usando el boton "Buscar Cabina automaticamente".
+
+Si no tenias Node.js instalado en la PC, el script intentara instalarlo automaticamente o abrira https://nodejs.org para instalarlo en 1 clic.
+

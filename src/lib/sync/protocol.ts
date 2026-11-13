@@ -59,11 +59,20 @@ export interface SyncRoomSnapshot {
   updatedAtServerMs: number;
   activeBarrier: ReadyBarrierState | null;
   connectedClients: RoomPresenceSummary;
+  lanEndpoints?: string[];
 }
 
 export type SyncInboundMessage =
   | { type: "clock:ping"; clientSentMs: number }
-  | { type: "room:join"; slug: string; role: SyncRole; clientId: string; deviceId?: string }
+  | {
+      type: "room:join";
+      slug: string;
+      role: SyncRole;
+      clientId: string;
+      deviceId?: string;
+      lanEndpoints?: string[];
+    }
+  | { type: "lan:announce"; lanEndpoints: string[] }
   | {
       type: "playback:command";
       command: string;
@@ -115,7 +124,12 @@ export type SyncOutboundMessage =
       serverNowMs: number;
     }
   | { type: "party:event"; payload: Record<string, unknown>; serverNowMs: number }
-  | { type: "room:presence"; connectedClients: RoomPresenceSummary; serverNowMs: number }
+  | {
+      type: "room:presence";
+      connectedClients: RoomPresenceSummary;
+      lanEndpoints?: string[];
+      serverNowMs: number;
+    }
   | { type: "sync:error"; code: string; message: string };
 
 export interface ClockSyncEstimate {

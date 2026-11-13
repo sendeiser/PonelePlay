@@ -54,11 +54,40 @@ class SyncLogicTest {
     }
 
     @Test
+    fun buildCandidates_includesCloudDiscoveredAndSavedAutoLanHostsBeforeCloud() {
+        val candidates = SyncClockEstimator.buildCandidates(
+            slug = "mi-boliche",
+            clientId = "tv-123",
+            deviceId = "dev-1",
+            manualLanHost = null,
+            discoveredLanHost = null,
+            discoveredLanPort = 4321,
+            defaultLanPort = 4321,
+            cloudWsBaseUrl = "wss://poneleplay-sync.workers.dev",
+            cloudDiscoveredLanHosts = listOf("ws://192.168.0.15:4321", "192.168.0.15"),
+            savedAutoLanHost = "192.168.0.22:4321"
+        )
+
+        assertEquals(3, candidates.size)
+        assertEquals("192.168.0.15:4321", candidates[0].hostLabel)
+        assertEquals("192.168.0.22:4321", candidates[1].hostLabel)
+        assertEquals(SyncTransportMode.CLOUD, candidates[2].transport)
+    }
+
+    @Test
     fun driftGuard_usesTighterThresholdInEarlyWindow() {
+        assertFalse(
+            SyncClockEstimator.shouldCorrectDrift(
+                currentVideoSec = 1.2,
+                expectedSec = 1.35,
+                isPaused = false,
+                isEarlyWindow = true
+            )
+        )
         assertTrue(
             SyncClockEstimator.shouldCorrectDrift(
                 currentVideoSec = 1.2,
-                expectedSec = 1.85,
+                expectedSec = 1.50,
                 isPaused = false,
                 isEarlyWindow = true
             )
@@ -66,7 +95,15 @@ class SyncLogicTest {
         assertFalse(
             SyncClockEstimator.shouldCorrectDrift(
                 currentVideoSec = 45.0,
-                expectedSec = 45.65,
+                expectedSec = 45.30,
+                isPaused = false,
+                isEarlyWindow = false
+            )
+        )
+        assertTrue(
+            SyncClockEstimator.shouldCorrectDrift(
+                currentVideoSec = 45.0,
+                expectedSec = 45.45,
                 isPaused = false,
                 isEarlyWindow = false
             )

@@ -21,6 +21,16 @@ interface SocketAttachment {
   deviceId?: string;
   slug: string;
   joinedAtMs: number;
+  lanEndpoints?: string[];
+}
+
+function parseLanEndpointsParam(raw: string | null): string[] | undefined {
+  if (!raw) return undefined;
+  const list = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return list.length > 0 ? list : undefined;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -170,6 +180,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
           role: meta.role,
           deviceId: meta.deviceId,
           joinedAtMs: meta.joinedAtMs,
+          lanEndpoints: meta.lanEndpoints,
         });
       }
     }
@@ -287,6 +298,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
 
     const role = normalizeRole(url.searchParams.get("role"));
     const deviceId = url.searchParams.get("deviceId") || undefined;
+    const lanEndpoints = parseLanEndpointsParam(url.searchParams.get("lanEndpoints"));
     const clientId =
       url.searchParams.get("clientId")?.trim() || `${role}-${crypto.randomUUID().slice(0, 8)}`;
     const nowMs = Date.now();
@@ -297,6 +309,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
       deviceId,
       slug,
       joinedAtMs: nowMs,
+      lanEndpoints,
     };
 
     this.ctx.acceptWebSocket(server, [role, slug]);
@@ -308,6 +321,7 @@ export class PoneleSyncRoom extends DurableObject<Env> {
       role,
       deviceId,
       joinedAtMs: nowMs,
+      lanEndpoints,
     });
 
     if (!engine.getSnapshot().tvFeed) {
@@ -369,6 +383,9 @@ export class PoneleSyncRoom extends DurableObject<Env> {
         deviceId: msg.deviceId ?? meta?.deviceId,
         slug: msg.slug || slug,
         joinedAtMs: meta?.joinedAtMs || nowMs,
+        lanEndpoints: Array.isArray(msg.lanEndpoints)
+          ? msg.lanEndpoints
+          : meta?.lanEndpoints,
       };
       ws.serializeAttachment(nextAttachment);
       const presence = engine.upsertClient(nextAttachment);
@@ -380,6 +397,23 @@ export class PoneleSyncRoom extends DurableObject<Env> {
         } satisfies SyncOutboundMessage),
       );
       this.broadcast([presence], ws);
+      return;
+    }
+
+    if (msg.type === "lan:announce") {
+      const clientId = meta?.clientId;
+      if (clientId && Array.isArray(msg.lanEndpoints)) {
+        if (meta) {
+          ws.serializeAttachment({
+            ...meta,
+            lanEndpoints: msg.lanEndpoints,
+          });
+        }
+        const presence = engine.setClientLanEndpoints(clientId, msg.lanEndpoints, nowMs);
+        if (presence) {
+          this.broadcast([presence]);
+        }
+      }
       return;
     }
 
@@ -426,10 +460,10 @@ export class PoneleSyncRoom extends DurableObject<Env> {
       const prevRev = engine.getSnapshot(nowMs).revision;
       const anchorMsg = engine.applyProgressReport(msg, nowMs);
       const nextRev = engine.getSnapshot(nowMs).revision;
-      if (nextRev !== prevRev) {
+      if (nextRev !== prevRev || msg.forceSeek) {
         this.persistEngine();
+        this.broadcast([anchorMsg], ws);
       }
-      this.broadcast([anchorMsg], ws);
       return;
     }
 
