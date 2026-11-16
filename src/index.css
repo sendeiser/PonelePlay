@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme='dark'] {
+  --bg-primary: #0F0F23;
+  --bg-card: #1B1B30;
+  --bg-elevated: #27273B;
+  --text-primary: #F8FAFC;
+  --text-muted: #94A3B8;
+  --brand-primary: #4338CA;
+  --brand-indigo-deep: #1E1B4B;
+  --accent-green: #22C55E;
+  --on-accent-green: #0F172A;
+  --accent-ytm: #FF0033;
+  --accent-amber: #F59E0B;
+  --accent-danger: #EF4444;
+  --border-subtle: #312E81;
+  --ring-focus: #FFFFFF;
+}
+
+[data-theme='light'] {
+  --bg-primary: #F8FAFC;
+  --bg-card: #FFFFFF;
+  --bg-elevated: #F1F5F9;
+  --text-primary: #0F172A;
+  --text-muted: #475569;
+  --brand-primary: #4338CA;
+  --brand-indigo-deep: #E0E7FF;
+  --accent-green: #16A34A;
+  --on-accent-green: #FFFFFF;
+  --accent-ytm: #DC2626;
+  --accent-amber: #D97706;
+  --accent-danger: #DC2626;
+  --border-subtle: #CBD5E1;
+  --ring-focus: #4338CA;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--ring-focus);
+    outline-offset: 2px;
+  }
+}
+
+.tabular-nums-mono {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes eqPulse {
+  0%, 100% {
+    transform: scaleY(0.32);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.eq-bar {
+  transform-origin: bottom;
+  animation: eqPulse 0.8s ease-in-out infinite;
+}
+
+.eq-bar-2 {
+  animation-delay: 0.16s;
+  animation-duration: 0.62s;
+}
+
+.eq-bar-3 {
+  animation-delay: 0.32s;
+  animation-duration: 0.92s;
+}
+
+.eq-bar-4 {
+  animation-delay: 0.22s;
+  animation-duration: 0.7s;
+}
+
+@keyframes floatUpFade {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.8);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0px) scale(1.08);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-96px) scale(0.95);
+  }
+}
+
+.floating-reaction {
+  animation: floatUpFade 2.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .eq-bar,
+  .floating-reaction,
+  .animate-pulse {
+    animation: none !important;
+  }
+}

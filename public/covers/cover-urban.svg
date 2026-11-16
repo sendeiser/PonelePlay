@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <rect width="400" height="400" fill="#160B2E"/>
+  <circle cx="310" cy="95" r="130" fill="#FF0033" fill-opacity="0.35"/>
+  <circle cx="90" cy="310" r="140" fill="#4338CA" fill-opacity="0.5"/>
+  <rect x="48" y="48" width="304" height="304" rx="28" stroke="#F8FAFC" stroke-opacity="0.2" stroke-width="2"/>
+  <circle cx="200" cy="200" r="88" stroke="#22C55E" stroke-width="6"/>
+  <circle cx="200" cy="200" r="52" fill="#22C55E" fill-opacity="0.18" stroke="#F8FAFC" stroke-opacity="0.5" stroke-width="2"/>
+  <text x="200" y="348" text-anchor="middle" fill="#F8FAFC" font-family="sans-serif" font-weight="700" font-size="22" letter-spacing="4">NOCHE URBANA</text>
+</svg>

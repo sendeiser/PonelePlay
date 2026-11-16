@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <rect width="400" height="400" fill="#1C1917"/>
+  <rect x="40" y="40" width="320" height="320" rx="160" fill="#EF4444" fill-opacity="0.24"/>
+  <circle cx="200" cy="200" r="115" stroke="#F8FAFC" stroke-width="5" stroke-dasharray="16 10"/>
+  <path d="M168 148L252 200L168 252V148Z" fill="#EF4444"/>
+  <text x="200" y="352" text-anchor="middle" fill="#F8FAFC" font-family="sans-serif" font-weight="700" font-size="22" letter-spacing="4">ELÉCTRICO VIVO</text>
+</svg>

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PonelePlay V2 - Flagship Room</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=Syne:wght@700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary-fixed-dim": "#c3c0ff",
+            "surface-container-highest": "#333348",
+            "surface-container-high": "#28283d",
+            "outline": "#918fa0",
+            "primary-container": "#4338ca",
+            "on-secondary-container": "#004119",
+            "inverse-on-surface": "#2f2e44",
+            "surface-tint": "#c3c0ff",
+            "surface-container": "#1e1e32",
+            "on-surface-variant": "#c7c4d7",
+            "surface-bright": "#37374d",
+            "tertiary-fixed": "#ffdad8",
+            "secondary": "#4ae176",
+            "on-background": "#e2e0fc",
+            "surface": "#111125",
+            "tertiary-fixed-dim": "#ffb3af",
+            "outline-variant": "#464554",
+            "on-primary-fixed-variant": "#372abf",
+            "surface-variant": "#333348",
+            "tertiary": "#ffb3af",
+            "primary": "#c3c0ff",
+            "on-primary": "#1f00a4",
+            "surface-container-lowest": "#0c0c20",
+            "on-error-container": "#ffdad6",
+            "inverse-surface": "#e2e0fc",
+            "on-secondary-fixed": "#002109",
+            "on-tertiary-fixed": "#410006",
+            "on-secondary": "#003915",
+            "error-container": "#93000a",
+            "on-secondary-fixed-variant": "#005321",
+            "on-primary-fixed": "#100069",
+            "on-tertiary-container": "#ffb1ad",
+            "on-tertiary-fixed-variant": "#930019",
+            "on-surface": "#e2e0fc",
+            "surface-container-low": "#1a1a2e",
+            "background": "#111125",
+            "primary-fixed": "#e3dfff",
+            "on-error": "#690005",
+            "inverse-primary": "#5148d7",
+            "on-primary-container": "#c1beff",
+            "on-tertiary": "#68000e",
+            "error": "#ffb4ab",
+            "surface-dim": "#111125",
+            "tertiary-container": "#a7001e",
+            "secondary-fixed-dim": "#4ae176",
+            "secondary-container": "#00b954",
+            "secondary-fixed": "#6bff8f"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-lg": "1.5rem",
+            "space-sm": "0.5rem",
+            "gutter": "1rem",
+            "margin-desktop": "2.5rem",
+            "space-xs": "0.25rem",
+            "margin-tablet": "1.5rem",
+            "margin": "1rem",
+            "space-md": "1rem",
+            "space-xl": "2.5rem"
+          },
+          "fontFamily": {
+            "body-sm": ["Plus Jakarta Sans"],
+            "headline-room-code": ["Syne"],
+            "label-timestamp": ["JetBrains Mono"],
+            "label-mono": ["JetBrains Mono"],
+            "body-base": ["Plus Jakarta Sans"],
+            "display-lg": ["Syne"],
+            "headline-track": ["Plus Jakarta Sans"],
+            "headline-room-code-mobile": ["Syne"],
+            "display-lg-mobile": ["Syne"]
+          },
+          "fontSize": {
+            "body-sm": ["13px", { "lineHeight": "18px", "letterSpacing": "0.01em", "fontWeight": "400" }],
+            "headline-room-code": ["36px", { "lineHeight": "40px", "letterSpacing": "0.12em", "fontWeight": "700" }],
+            "label-timestamp": ["11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+            "label-mono": ["12px", { "lineHeight": "16px", "letterSpacing": "0.04em", "fontWeight": "600" }],
+            "body-base": ["15px", { "lineHeight": "22px", "letterSpacing": "0em", "fontWeight": "400" }],
+            "display-lg": ["48px", { "lineHeight": "52px", "letterSpacing": "-0.02em", "fontWeight": "800" }],
+            "headline-track": ["18px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "700" }],
+            "headline-room-code-mobile": ["24px", { "lineHeight": "28px", "letterSpacing": "0.08em", "fontWeight": "700" }],
+            "display-lg-mobile": ["32px", { "lineHeight": "36px", "letterSpacing": "-0.01em", "fontWeight": "800" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .neon-glow-green {
+      box-shadow: 0 0 20px -2px rgba(34, 197, 94, 0.4);
+    }
+    .neon-glow-red {
+      box-shadow: 0 0 16px -2px rgba(255, 0, 51, 0.35);
+    }
+    .ambient-art-shadow {
+      filter: drop-shadow(0 12px 28px rgba(74, 225, 118, 0.18)) drop-shadow(0 4px 12px rgba(67, 56, 202, 0.3));
+    }
+    @keyframes eqWave {
+      0%, 100% { height: 4px; }
+      50% { height: 16px; }
+    }
+    .eq-bar-1 { animation: eqWave 0.75s ease-in-out infinite; }
+    .eq-bar-2 { animation: eqWave 0.55s ease-in-out infinite 0.15s; }
+    .eq-bar-3 { animation: eqWave 0.9s ease-in-out infinite 0.3s; }
+    .eq-bar-4 { animation: eqWave 0.65s ease-in-out infinite 0.2s; }
+  </style>
+</head>
+<body class="bg-surface-container-lowest text-on-surface antialiased min-h-screen pb-28 selection:bg-secondary selection:text-on-secondary-container">
+<!-- TopAppBar (JSON Shared Component Anchor) -->
+<header class="flex justify-between items-center w-full px-margin py-space-sm bg-surface-container-high dark:bg-surface-container-high z-50 sticky top-0 border-b border-primary-container dark:border-primary-container">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-2xl" data-icon="music_note">music_note</span>
+<div>
+<div class="flex items-center gap-1.5">
+<span class="inline-block w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<h1 class="font-headline-room-code-mobile text-headline-room-code-mobile text-secondary tracking-widest leading-none">PLAY42</h1>
+<button class="text-on-surface-variant hover:text-secondary active:scale-95 transition-transform ml-0.5" title="Copiar cÃ³digo de sala">
+<span class="material-symbols-outlined text-sm" data-icon="content_copy">content_copy</span>
+</button>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate max-w-[150px]">Previa en lo de Tincho</p>
+</div>
+</div>
+<!-- Center/Right pill tags and actions -->
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1 bg-tertiary-container text-tertiary-fixed px-2 py-0.5 rounded-full border border-tertiary-container neon-glow-red">
+<span class="material-symbols-outlined text-xs" data-icon="play_circle">play_circle</span>
+<span class="font-label-timestamp text-label-timestamp font-semibold">YT Sin Premium</span>
+</div>
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center border border-primary-container text-on-surface hover:bg-surface-bright active:scale-95 transition-all" title="Ver cÃ³digo QR">
+<span class="material-symbols-outlined text-lg" data-icon="qr_code_2">qr_code_2</span>
+</button>
+<button class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center border border-primary-container text-secondary hover:bg-surface-bright active:scale-95 transition-all" title="Modo Pantalla TV">
+<span class="material-symbols-outlined text-lg" data-icon="tv">tv</span>
+</button>
+</div>
+</header>
+<!-- Main Flow Canvas Container -->
+<main class="max-w-md mx-auto px-margin pt-space-md space-y-space-md">
+<!-- HERO: 'Sonando Ahora' Card -->
+<section class="bg-surface-container-high rounded-xl border border-primary-container p-space-md relative overflow-hidden shadow-2xl">
+<!-- Ambient Glow Behind Art -->
+<div class="absolute -top-16 -right-16 w-44 h-44 bg-secondary/15 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute -bottom-16 -left-16 w-44 h-44 bg-primary-container/30 rounded-full blur-3xl pointer-events-none"></div>
+<!-- Card Top Sub-header -->
+<div class="flex items-center justify-between pb-3 border-b border-surface-container-highest">
+<div class="flex items-center gap-2">
+<span class="font-label-mono text-label-mono text-secondary uppercase tracking-widest font-bold">SONANDO AHORA</span>
+<!-- Dynamic Neon Equalizer Bars -->
+<div class="flex items-end gap-0.5 h-4 px-1">
+<span class="w-1 bg-secondary rounded-full eq-bar-1"></span>
+<span class="w-1 bg-secondary rounded-full eq-bar-2"></span>
+<span class="w-1 bg-secondary rounded-full eq-bar-3"></span>
+<span class="w-1 bg-secondary rounded-full eq-bar-4"></span>
+</div>
+</div>
+<!-- Proposer Chip -->
+<div class="flex items-center gap-1.5 bg-surface-container px-2 py-0.5 rounded-full border border-primary-container/70">
+<span class="material-symbols-outlined text-xs text-secondary" data-icon="star" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-timestamp text-label-timestamp text-on-surface-variant">Por <strong class="text-on-surface">@martina</strong></span>
+</div>
+</div>
+<!-- Hero Artwork & Title Grid -->
+<div class="pt-4 flex flex-col items-center">
+<div class="relative w-full aspect-square max-w-[280px] rounded-xl overflow-hidden ambient-art-shadow border border-primary-container">
+<img alt="Neon Pulse Night City Album Art" class="w-full h-full object-cover rounded-xl" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBo2KEPumTWH0sH-7t1IRs5T0lNNSU0ZUAWMfqQ5VV1gy8T0IXUJngNPJ31gUo_LgYhHweSjKjDt7VQDW1uFZfWLqb2fO2DHtwHRBnG51N21F4y-tmXAZB_oYzkaM-eRE6LwizYntIbCb7lwheQql0obKaCWDbodsMxidg3tFD9VHPI61_vnZBf9vwX4cG2W5iTMulTGfFw1gjd_Nz-oJggwtUjCo_LaxSGrVjIZ3YTcKcU-iSDIIeW_7Qwacfz_y8Lsz3I7Fho3O8"/>
+<div class="absolute top-2 right-2 px-2 py-0.5 bg-surface-container-lowest/80 backdrop-blur-md rounded-md border border-outline-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-xs text-secondary" data-icon="graphic_eq">graphic_eq</span>
+<span class="font-label-timestamp text-label-timestamp text-secondary">320 KBPS</span>
+</div>
+</div>
+<!-- Track Info -->
+<div class="w-full mt-4 text-center">
+<h2 class="font-headline-track text-headline-track text-on-surface font-extrabold tracking-tight truncate">
+            Neon Pulse (Night City)
+          </h2>
+<p class="font-body-base text-body-base text-on-surface-variant font-medium mt-0.5 truncate">
+            Synthwave Dreams
+          </p>
+</div>
+<!-- Progress Scrub Line -->
+<div class="w-full mt-4 space-y-1.5">
+<div class="relative w-full h-2 bg-surface-container-lowest rounded-full overflow-hidden border border-outline-variant/30 cursor-pointer">
+<div class="h-full bg-secondary rounded-full relative neon-glow-green" style="width: 52%;">
+<span class="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-surface-container-lowest border-2 border-secondary rounded-full shadow"></span>
+</div>
+</div>
+<div class="flex justify-between items-center font-label-timestamp text-label-timestamp text-on-surface-variant">
+<span class="text-secondary font-semibold">01:48</span>
+<span>03:24</span>
+</div>
+</div>
+<!-- Audio Output Selector & Host Controls -->
+<div class="w-full mt-3 p-2 bg-surface-container rounded-lg border border-primary-container/80 flex items-center justify-between">
+<!-- Audio Switch Toggle -->
+<div class="flex items-center gap-1 bg-surface-container-lowest p-1 rounded-md border border-outline-variant/40">
+<button class="px-2 py-0.5 text-xs font-label-mono rounded bg-primary-container text-on-primary-container flex items-center gap-1">
+<span class="material-symbols-outlined text-xs" data-icon="smartphone">smartphone</span>
+<span>Host ðŸ“±</span>
+</button>
+<button class="px-2 py-0.5 text-xs font-label-mono text-on-surface-variant hover:text-on-surface flex items-center gap-1">
+<span class="material-symbols-outlined text-xs" data-icon="connected_tv">connected_tv</span>
+<span>Smart TV ðŸ“º</span>
+</button>
+</div>
+<!-- Mini Volume Slider -->
+<div class="flex items-center gap-1.5 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="volume_up">volume_up</span>
+<div class="w-14 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="w-3/4 h-full bg-secondary"></div>
+</div>
+</div>
+</div>
+<!-- Main Playback Actuators -->
+<div class="flex items-center justify-center gap-4 mt-4 w-full">
+<button class="w-10 h-10 rounded-full bg-surface-container border border-primary-container text-on-surface flex items-center justify-center hover:bg-surface-bright active:scale-95 transition-all">
+<span class="material-symbols-outlined text-xl" data-icon="replay_10">replay_10</span>
+</button>
+<button class="w-12 h-12 rounded-full bg-primary-container text-on-primary flex items-center justify-center border border-primary hover:brightness-110 active:scale-90 transition-all shadow-lg">
+<span class="material-symbols-outlined text-2xl" data-icon="pause" style="font-variation-settings: 'FILL' 1;">pause</span>
+</button>
+<button class="w-10 h-10 rounded-full bg-surface-container border border-primary-container text-on-surface flex items-center justify-center hover:bg-surface-bright active:scale-95 transition-all">
+<span class="material-symbols-outlined text-xl" data-icon="skip_next">skip_next</span>
+</button>
+</div>
+<!-- Live Reactions Bar -->
+<div class="flex items-center justify-center gap-2 mt-4 pt-3 border-t border-surface-container-highest w-full overflow-x-auto">
+<button class="px-2.5 py-1 bg-surface-container hover:bg-surface-bright border border-primary-container rounded-full flex items-center gap-1 text-xs active:scale-95 transition-transform">
+<span>ðŸ”¥</span>
+<span class="font-label-mono text-secondary font-bold">14</span>
+</button>
+<button class="px-2.5 py-1 bg-surface-container hover:bg-surface-bright border border-primary-container rounded-full flex items-center gap-1 text-xs active:scale-95 transition-transform">
+<span>â¤ï¸</span>
+<span class="font-label-mono text-tertiary-fixed font-bold">9</span>
+</button>
+<button class="px-2.5 py-1 bg-surface-container hover:bg-surface-bright border border-primary-container rounded-full flex items-center gap-1 text-xs active:scale-95 transition-transform">
+<span>ðŸ’ƒ</span>
+<span class="font-label-mono text-primary font-bold">6</span>
+</button>
+<button class="px-2.5 py-1 bg-surface-container hover:bg-surface-bright border border-primary-container rounded-full flex items-center gap-1 text-xs active:scale-95 transition-transform">
+<span>ðŸ‘Ž</span>
+<span class="font-label-mono text-outline font-bold">2</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Sticky Search & Quota Bar -->
+<div class="space-y-2">
+<div class="flex items-center gap-2 bg-surface-container-high p-1.5 pl-3 rounded-xl border border-primary-container focus-within:border-secondary transition-all">
+<span class="material-symbols-outlined text-secondary text-xl" data-icon="search">search</span>
+<input class="bg-transparent border-none text-on-surface text-body-sm font-body-sm focus:ring-0 w-full placeholder:text-outline p-0" placeholder="Buscar canciÃ³n o pegar link..." type="text"/>
+<button class="px-2.5 py-1 bg-surface-container-highest hover:bg-surface-bright rounded-lg text-xs font-label-mono text-primary flex items-center gap-1 border border-primary-container shrink-0">
+<span class="material-symbols-outlined text-xs" data-icon="content_paste">content_paste</span>
+<span>Pegar</span>
+</button>
+</div>
+<!-- Quota Counter Banner -->
+<div class="flex items-center justify-between px-3 py-1.5 bg-surface-container rounded-lg border border-primary-container/50">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-sm text-secondary" data-icon="queue_music">queue_music</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Tus pedidos restantes:</span>
+</div>
+<div class="flex items-center gap-1.5">
+<div class="w-16 h-2 bg-surface-container-lowest rounded-full overflow-hidden border border-outline-variant/30">
+<div class="w-2/5 h-full bg-secondary"></div>
+</div>
+<span class="font-label-mono text-label-mono text-secondary font-bold">2/5</span>
+</div>
+</div>
+</div>
+<!-- Segmented Live Navigation Tabs -->
+<div class="flex border-b border-primary-container gap-2 pt-2">
+<button class="pb-2.5 px-3 font-headline-track text-sm text-secondary border-b-2 border-secondary font-bold flex items-center gap-1.5">
+<span>Cola en Vivo</span>
+<span class="px-1.5 py-0.2 bg-secondary/15 rounded-full text-xs font-label-mono">8</span>
+</button>
+<button class="pb-2.5 px-3 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1.5">
+<span>Ya Sonaron</span>
+<span class="px-1.5 py-0.2 bg-surface-container rounded-full text-xs font-label-mono">14</span>
+</button>
+<button class="pb-2.5 px-3 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1.5">
+<span>Participantes</span>
+<span class="px-1.5 py-0.2 bg-surface-container rounded-full text-xs font-label-mono">19</span>
+</button>
+</div>
+<!-- Ranked Song Queue Cards Stream -->
+<div class="space-y-3">
+<!-- Card 1: PINNED NEXT -->
+<div class="bg-surface-container-high rounded-xl border border-secondary/60 p-3 relative neon-glow-green">
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-1.5">
+<span class="font-headline-room-code-mobile text-sm text-secondary font-extrabold">#1</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary/20 text-secondary border border-secondary/50 font-label-mono text-[10px] tracking-wider uppercase font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-[10px]" data-icon="push_pin">push_pin</span>
+              PINNED NEXT
+            </span>
+</div>
+<span class="font-label-timestamp text-label-timestamp text-on-surface-variant">Siguiente en 01:36</span>
+</div>
+<div class="flex items-center gap-3">
+<!-- Album Thumbnail -->
+<div class="w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-primary-container">
+<img alt="Neon RebeliÃ³n Thumbnail" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAfIL42rhOb1AGwwLUsh_LZrW5bBFENMqxabVAuZjHyFsNRAIAwsg2LnTSAlJg-TD4CP8kghWDwLjiM4CQ4dCUDsBInXoV9l5uEARrJjsBnKltFcwAv9zMRGDhyf-lqVSCl5_WsaE6FkFVM-kejzqZeLhymUtSl56NY6ldqzQST0yKmHBqDKJTTV5hw2QKybOcDO2Y9Wx7e7YxGiD1TO59lKpYrAR7MhgMO18t8Vytn9EPHunAvf3aw_51S1N2hQwI1V-wj_xN8Lrc"/>
+</div>
+<!-- Metadata -->
+<div class="flex-1 min-w-0">
+<h3 class="font-headline-track text-body-base font-bold text-on-surface truncate">Neon RebeliÃ³n</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Luna Nova</p>
+<div class="flex items-center gap-1 mt-1 text-[11px] text-outline font-label-timestamp">
+<span class="material-symbols-outlined text-xs text-secondary" data-icon="person">person</span>
+<span>Pedido por <strong class="text-on-surface">@gonza</strong></span>
+</div>
+</div>
+<!-- 44px Tabular Vote Control -->
+<div class="flex flex-col items-center justify-between bg-surface-container rounded-lg border border-secondary p-1 w-11 h-20 shrink-0">
+<button class="w-full text-secondary hover:text-secondary-fixed active:scale-90 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up" style="font-variation-settings: 'FILL' 1;">keyboard_arrow_up</span>
+</button>
+<span class="font-label-mono text-label-mono text-secondary font-bold tabular-nums">12</span>
+<button class="w-full text-on-surface-variant hover:text-on-surface active:scale-90 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface-container rounded-xl border border-primary-container p-3">
+<div class="flex items-center justify-between mb-2">
+<span class="font-headline-room-code-mobile text-sm text-on-surface-variant font-extrabold">#2</span>
+<span class="font-label-timestamp text-label-timestamp text-outline">En cola</span>
+</div>
+<div class="flex items-center gap-3">
+<!-- Album Thumbnail -->
+<div class="w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-primary-container bg-surface-container-highest">
+<img class="w-full h-full object-cover" data-alt="Vibrant cyberpunk urban scene album cover artwork with electric cyan and magenta lights reflecting on slick streets with Maria Becerra futuristic aesthetic. Highly detailed dark club visuals." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3MV_1J5CBNFAh8RzTptbpDvP-ewLauU13a9o-o78blpj72JuFCA7cU3k7rYYxP4NPu6UK0eJFbQ_ecUD7wV_9U7UU8G11LaRgiQGU3WcQlcY2VJd_QU4ysu7B8VNRMBxlZgLJPUJvY5PnK_88-0WgtBEwpvseUjmDJYR0UssDwBzLeiRoFFrj7bJCFgBewQst2YH8emr44hid_tZxsf73XNjUDfWVlDrPqVPgaBHTaZVZ3wjdHnHMTeXWqB-2AqyRBv1Xn9bCkX8"/>
+</div>
+<!-- Metadata -->
+<div class="flex-1 min-w-0">
+<h3 class="font-headline-track text-body-base font-bold text-on-surface truncate">AutomÃ¡tico</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Maria Becerra</p>
+<div class="flex items-center gap-1 mt-1 text-[11px] text-outline font-label-timestamp">
+<span class="material-symbols-outlined text-xs" data-icon="person">person</span>
+<span>Pedido por <strong class="text-on-surface">@flor</strong></span>
+</div>
+</div>
+<!-- Vote Controls -->
+<div class="flex flex-col items-center justify-between bg-surface-container-high rounded-lg border border-primary-container p-1 w-11 h-20 shrink-0">
+<button class="w-full text-on-surface-variant hover:text-secondary active:scale-90 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up">keyboard_arrow_up</span>
+</button>
+<span class="font-label-mono text-label-mono text-on-surface font-bold tabular-nums">8</span>
+<button class="w-full text-on-surface-variant hover:text-on-surface active:scale-90 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface-container rounded-xl border border-primary-container p-3">
+<div class="flex items-center justify-between mb-2">
+<span class="font-headline-room-code-mobile text-sm text-on-surface-variant font-extrabold">#3</span>
+<span class="font-label-timestamp text-label-timestamp text-outline">En cola</span>
+</div>
+<div class="flex items-center gap-3">
+<!-- Album Thumbnail -->
+<div class="w-14 h-14 rounded-lg overflow-hidden shrink-0 border border-primary-container bg-surface-container-highest">
+<img class="w-full h-full object-cover" data-alt="Duki album cover aesthetic set in a nocturnal neon cityscape with deep violet, toxic green highlights, smoke plumes, and modern trap street visual style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCL-91sibM639RTD7DxE3L9xImDZdR_-d5EvnqjZ4RNPl622lS0ahNtB2D3_I50NQnth7m84O2pvnIZIr4Lm6j4nxR1Ali95qrhl-GR-QaxTSvt3b9Q0UCgGwxiOKopMQrDPUMuHO6wfdtZvYLPyjmM1bbOuaKozKbi7A_UXaCaxEFnb_CcdHiAD6FiSqYJGnBeL0MqnMIzvVvSk0IJ2sZ4Ju2ViZVh1UcVqhwKbNqfILeZ52i2mladQ9-mzOhRaRzxKrXiUlHqfIw"/>
+</div>
+<!-- Metadata -->
+<div class="flex-1 min-w-0">
+<h3 class="font-headline-track text-body-base font-bold text-on-surface truncate">RincÃ³n de la Noche</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant truncate">Duki</p>
+<div class="flex items-center gap-1 mt-1 text-[11px] text-outline font-label-timestamp">
+<span class="material-symbols-outlined text-xs" data-icon="person">person</span>
+<span>Pedido por <strong class="text-on-surface">@mati</strong></span>
+</div>
+</div>
+<!-- Vote Controls -->
+<div class="flex flex-col items-center justify-between bg-surface-container-high rounded-lg border border-primary-container p-1 w-11 h-20 shrink-0">
+<button class="w-full text-on-surface-variant hover:text-secondary active:scale-90 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up">keyboard_arrow_up</span>
+</button>
+<span class="font-label-mono text-label-mono text-on-surface font-bold tabular-nums">5</span>
+<button class="w-full text-on-surface-variant hover:text-on-surface active:scale-90 transition-transform flex items-center justify-center">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Contextual Floating Action Button (FAB) for Track Request -->
+<div class="fixed bottom-20 right-4 z-40">
+<button class="flex items-center gap-2 bg-secondary text-on-secondary-container px-4 py-3 rounded-full font-headline-track text-sm font-bold shadow-2xl neon-glow-green active:scale-95 transition-transform">
+<span class="material-symbols-outlined font-bold text-xl" data-icon="add">add</span>
+<span>Agregar Tema</span>
+</button>
+</div>
+<!-- BottomNavBar (Shared Component Blueprint executed with exact JSON mapping) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-gutter py-space-sm bg-surface-container-high dark:bg-surface-container-high border-t border-primary-container shadow-2xl">
+<!-- Active Destination: Cola -->
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary font-bold hover:text-secondary dark:hover:text-secondary transition-colors duration-150 active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="queue_music">queue_music</span>
+<span class="font-body-sm text-body-sm font-semibold mt-0.5">Cola</span>
+</a>
+<!-- Inactive Destination: Sonaron -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-secondary dark:hover:text-secondary transition-colors duration-150 active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="history">history</span>
+<span class="font-body-sm text-body-sm font-semibold mt-0.5">Sonaron</span>
+</a>
+<!-- Inactive Destination: Gente -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-on-surface-variant hover:text-secondary dark:hover:text-secondary transition-colors duration-150 active:scale-90" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="group">group</span>
+<span class="font-body-sm text-body-sm font-semibold mt-0.5">Gente</span>
+</a>
+</nav>
+</body></html>
