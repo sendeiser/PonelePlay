@@ -15,6 +15,12 @@ export interface IframePlaybackEngine extends PlaybackEngine {
   onCued(cb: (videoId: string) => void): () => void;
   /** True once YouTube's JS bridge (YT.Player or infoDelivery) is actively reporting. */
   hasLiveTime(): boolean;
+  /** True while YouTube is actively buffering (PlayerState.BUFFERING = 3). */
+  isBuffering(): boolean;
+  getPlayerState(): number | null;
+  setPlaybackRate(rate: number): void;
+  getPlaybackRate(): number;
+  getAvailablePlaybackRates(): number[];
   getCurrentTime(): number;
   getDuration(): number;
   /** Build the initial embed URL for a track. */
@@ -24,6 +30,7 @@ export interface IframePlaybackEngine extends PlaybackEngine {
 const YT_ENDED = 0;
 const YT_PLAYING = 1;
 const YT_PAUSED = 2;
+const YT_BUFFERING = 3;
 const YT_CUED = 5;
 
 export function resolveVideoId(track?: PlayerTrack | null): string {
@@ -56,6 +63,8 @@ export function createIframeEngine(
   let lastPlayerState: number | null = null;
   let hasPlayedCurrentVideo = false;
   let pendingSeekSeconds: number | null = null;
+  let currentPlaybackRate = 1;
+  let availablePlaybackRates: number[] = [];
 
   let desiredVolume: number | null = 85;
   let desiredMuted: boolean | null = true;
@@ -317,8 +326,18 @@ export function createIframeEngine(
         currentTime?: number;
         duration?: number;
         playerState?: number;
+        playbackRate?: number;
+        availablePlaybackRates?: number[];
         videoData?: { video_id?: string };
       };
+      if (typeof info.playbackRate === "number" && info.playbackRate > 0) {
+        currentPlaybackRate = info.playbackRate;
+      }
+      if (Array.isArray(info.availablePlaybackRates) && info.availablePlaybackRates.length > 0) {
+        availablePlaybackRates = info.availablePlaybackRates.filter(
+          (r) => typeof r === "number" && Number.isFinite(r) && r > 0,
+        );
+      }
       if (typeof info.currentTime === "number" && Date.now() >= seekLockUntil) {
         currentTime = info.currentTime;
         lastTimeUpdateAt = Date.now();
@@ -382,6 +401,8 @@ export function createIframeEngine(
       pendingSeekSeconds = null;
       seekLockUntil = Date.now() + 1800;
       desiredPlaying = true;
+      currentPlaybackRate = 1;
+      availablePlaybackRates = [];
 
       if (ytReady && ytPlayer) {
         try {
@@ -422,6 +443,8 @@ export function createIframeEngine(
       pendingSeekSeconds = startSec > 0 ? startSec : null;
       seekLockUntil = Date.now() + 1800;
       desiredPlaying = false;
+      currentPlaybackRate = 1;
+      availablePlaybackRates = [];
       isPrebuffering = true;
       prebufferStartSec = startSec;
       cueStartedAt = Date.now();
@@ -586,6 +609,69 @@ export function createIframeEngine(
 
     hasLiveTime(): boolean {
       return (hasLiveBridge || ytReady) && lastTimeUpdateAt > 0 && lastPlayerState === YT_PLAYING;
+    },
+
+    isBuffering(): boolean {
+      if (ytReady && ytPlayer) {
+        try {
+          if (ytPlayer.getPlayerState?.() === YT_BUFFERING) {
+            return true;
+          }
+        } catch {}
+      }
+      return lastPlayerState === YT_BUFFERING;
+    },
+
+    getPlayerState(): number | null {
+      if (ytReady && ytPlayer) {
+        try {
+          const st = ytPlayer.getPlayerState?.();
+          if (typeof st === "number") {
+            return st;
+          }
+        } catch {}
+      }
+      return lastPlayerState;
+    },
+
+    setPlaybackRate(rate: number): void {
+      if (!Number.isFinite(rate) || rate <= 0) return;
+      if (Math.abs(currentPlaybackRate - rate) < 0.002) return;
+      currentPlaybackRate = rate;
+      if (ytReady && ytPlayer) {
+        try {
+          ytPlayer.setPlaybackRate?.(rate);
+          return;
+        } catch {}
+      }
+      post("setPlaybackRate", [rate]);
+    },
+
+    getPlaybackRate(): number {
+      if (ytReady && ytPlayer) {
+        try {
+          const r = ytPlayer.getPlaybackRate?.();
+          if (typeof r === "number" && Number.isFinite(r) && r > 0) {
+            currentPlaybackRate = r;
+            return r;
+          }
+        } catch {}
+      }
+      return currentPlaybackRate;
+    },
+
+    getAvailablePlaybackRates(): number[] {
+      if (ytReady && ytPlayer) {
+        try {
+          const rates = ytPlayer.getAvailablePlaybackRates?.();
+          if (Array.isArray(rates) && rates.length > 0) {
+            availablePlaybackRates = rates.filter(
+              (r) => typeof r === "number" && Number.isFinite(r) && r > 0,
+            );
+          }
+        } catch {}
+      }
+      return availablePlaybackRates;
     },
 
     getCurrentTime(): number {

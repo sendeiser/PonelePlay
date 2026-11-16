@@ -25,6 +25,8 @@ export interface PanelAudioEngineProps {
   onProgress?: (currentTime: number, duration: number | null) => void;
   onAudioBlockedChange?: (isBlocked: boolean) => void;
   onTrackBuffered?: (videoId: string) => void;
+  liveMonitorVisible?: boolean;
+  onCloseMonitor?: () => void;
 }
 
 export interface PanelAudioEngineRef {
@@ -34,6 +36,7 @@ export interface PanelAudioEngineRef {
   holdUntilSynced: (maxWaitMs?: number) => void;
   prepareBarrier: (videoId: string, startSec?: number, maxWaitMs?: number) => void;
   scheduleStartAt: (delayMs: number, startSec?: number) => void;
+  getVideoSurfaceElement: () => HTMLDivElement | null;
   isUnlocked: boolean;
 }
 
@@ -49,6 +52,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       onProgress,
       onAudioBlockedChange,
       onTrackBuffered,
+      liveMonitorVisible = false,
+      onCloseMonitor,
     },
     ref,
   ) {
@@ -774,18 +779,47 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       holdUntilSynced,
       prepareBarrier,
       scheduleStartAt,
+      getVideoSurfaceElement: () => containerRef.current,
       isUnlocked: isUnlockedRef.current,
     }));
 
     return (
       <div
         id="admin-cabina-audio-engine"
-        aria-hidden="true"
-        className="fixed bottom-2 right-2 w-[160px] h-[90px] opacity-0 pointer-events-none overflow-hidden z-0"
-        tabIndex={-1}
+        aria-hidden={!liveMonitorVisible}
+        className={
+          liveMonitorVisible
+            ? "fixed bottom-20 right-4 w-[360px] sm:w-[440px] rounded-2xl overflow-hidden border border-cyan-500/45 bg-black shadow-2xl z-30"
+            : "fixed bottom-2 right-2 w-[160px] h-[90px] opacity-0 pointer-events-none overflow-hidden z-0"
+        }
+        tabIndex={liveMonitorVisible ? undefined : -1}
       >
+        {liveMonitorVisible && (
+          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950/90 border-b border-cyan-500/25 text-[11px] font-mono text-cyan-300">
+            <span className="inline-flex items-center gap-1.5 font-bold">
+              <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
+              Monitor Cabina HD (Live WebRTC)
+            </span>
+            {onCloseMonitor && (
+              <button
+                type="button"
+                onClick={onCloseMonitor}
+                className="text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800/80 cursor-pointer"
+              >
+                Ocultar
+              </button>
+            )}
+          </div>
+        )}
         {/* Container where YouTube iframe mounts inside viewport */}
-        <div ref={containerRef} className="w-full h-full" />
+        <div
+          ref={containerRef}
+          className={
+            liveMonitorVisible
+              ? "w-full aspect-video bg-black [&_iframe]:!w-full [&_iframe]:!h-full [&_#admin-audio-yt-host]:!w-full [&_#admin-audio-yt-host]:!h-full"
+              : "w-full h-full"
+          }
+        />
         {/* HTML5 audio element for uploaded tracks */}
         <audio ref={html5AudioRef} preload="auto" className="hidden" />
       </div>

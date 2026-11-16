@@ -430,10 +430,12 @@ export class PoneleSyncRoom extends DurableObject<Env> {
         fromClientId,
         fromRole: meta.role,
         targetClientId: msg.targetClientId,
+        channel: msg.channel,
         signalType: msg.signalType,
         sdp: msg.sdp,
         candidate: msg.candidate,
         directEnabled: msg.directEnabled,
+        mediaActive: msg.mediaActive,
         serverNowMs: nowMs,
       };
       const serialized = JSON.stringify(outboundMsg);

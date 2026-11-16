@@ -10,16 +10,28 @@ import {
   Copy,
   Download,
   ExternalLink,
+  MonitorUp,
   Radio,
   RefreshCw,
   ShieldCheck,
+  Square,
   Tv,
+  Video,
   WifiOff,
   X,
   Zap,
 } from "lucide-react";
 import type { SyncStatusState } from "@/lib/sync/client";
 import type { SyncPreferenceMode } from "@/lib/sync/protocol";
+
+interface LiveMediaActionResult {
+  ok: boolean;
+  error?: string;
+  hasAudio?: boolean;
+  hasVideo?: boolean;
+  label?: string | null;
+  cropApplied?: boolean;
+}
 
 interface LanSyncModalProps {
   isOpen: boolean;
@@ -29,6 +41,8 @@ interface LanSyncModalProps {
   onSelectMode: (mode: SyncPreferenceMode) => void;
   onProbeLan: () => Promise<boolean>;
   onReconnect: () => void;
+  onStartLiveMedia?: (source: "cabina" | "screen") => Promise<LiveMediaActionResult>;
+  onStopLiveMedia?: () => void;
 }
 
 export function LanSyncModal({
@@ -39,9 +53,13 @@ export function LanSyncModal({
   onSelectMode,
   onProbeLan,
   onReconnect,
+  onStartLiveMedia,
+  onStopLiveMedia,
 }: LanSyncModalProps) {
   const [probing, setProbing] = useState(false);
   const [probeMsg, setProbeMsg] = useState<string | null>(null);
+  const [startingLive, setStartingLive] = useState<"cabina" | "screen" | null>(null);
+  const [mediaMsg, setMediaMsg] = useState<string | null>(null);
   const [copiedEndpoint, setCopiedEndpoint] = useState<string | null>(null);
   const [showLanAdvanced, setShowLanAdvanced] = useState(
     syncStatus.preferenceMode === "lan" || syncStatus.transport === "lan",
@@ -57,8 +75,29 @@ export function LanSyncModal({
   const bridgeCount = syncStatus.presence?.bridgeCount ?? 0;
   const lanEndpoints = syncStatus.lanEndpoints ?? [];
   const directStats = syncStatus.directStats;
+  const mediaStats = syncStatus.mediaStats;
   const directPeerTotal =
     (directStats?.broadcastPeerCount ?? 0) + (directStats?.dataChannelCount ?? 0);
+
+  const handleStartLive = async (source: "cabina" | "screen") => {
+    if (!onStartLiveMedia) return;
+    setStartingLive(source);
+    setMediaMsg(null);
+    try {
+      const res = await onStartLiveMedia(source);
+      if (!res.ok) {
+        setMediaMsg(res.error || "No se pudo iniciar la transmisión en vivo.");
+      } else if (!res.hasAudio) {
+        setMediaMsg(
+          "Video transmitiéndose en vivo (sin audio capturado). Si querés audio por stream en TV, volvé a compartir marcando 'Compartir también el audio'.",
+        );
+      } else {
+        setMediaMsg("¡Transmisión Audio + Video en Vivo activa hacia Pantalla Web (0 ms)!");
+      }
+    } finally {
+      setStartingLive(null);
+    }
+  };
 
   const handleChooseMode = (mode: SyncPreferenceMode) => {
     setProbeMsg(null);
@@ -328,6 +367,105 @@ export function LanSyncModal({
               </button>
             </div>
           </div>
+
+          {/* Option 2 Pro Add-on: Live WebRTC Media Broadcast (0 ms Hyperbeam-style) */}
+          {onStartLiveMedia && (
+            <div
+              className={`rounded-xl p-4 border transition-all ${
+                mediaStats?.streaming
+                  ? "bg-cyan-950/30 border-cyan-500/55"
+                  : "bg-th-shell/60 border-th-border hover:border-th-border-strong"
+              }`}
+            >
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Video className="size-4 text-cyan-400 shrink-0" />
+                      <span className="font-semibold text-th-text">
+                        Stream Cabina en Vivo (Video + Audio 0 ms)
+                      </span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                        {mediaStats?.streaming ? "EN VIVO" : "Cero desfase"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-th-secondary leading-relaxed">
+                      Envía el video y audio real desde tu PC hacia la Pantalla Web (<code className="text-th-text">/player</code>) por WebRTC. Elimina anuncios dobles, saltos y desincronización entre plataformas.
+                    </p>
+                  </div>
+
+                  {mediaStats?.streaming && onStopLiveMedia && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMediaMsg(null);
+                        onStopLiveMedia();
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-semibold inline-flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+                    >
+                      <Square className="size-3 fill-current" />
+                      <span>Detener Live</span>
+                    </button>
+                  )}
+                </div>
+
+                {mediaStats?.streaming ? (
+                  <div className="flex items-center gap-3 flex-wrap text-xs px-3 py-2 rounded-lg bg-cyan-950/40 border border-cyan-500/30 text-cyan-100">
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
+                      <span className="size-2 rounded-full bg-rose-400 animate-pulse" />
+                      {mediaStats.streamLabel || "Transmisión activa"}
+                    </span>
+                    <span className="text-cyan-300/90">
+                      TVs conectadas: <strong>{mediaStats.viewerCount}</strong>
+                    </span>
+                    <span className="text-cyan-300/90">
+                      Audio: <strong>{mediaStats.hasAudio ? "Estéreo OK" : "Solo Video"}</strong>
+                    </span>
+                    {mediaStats.cropApplied && (
+                      <span className="text-emerald-300 font-semibold">
+                        Recorte 16:9 automático
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      disabled={startingLive !== null}
+                      onClick={() => void handleStartLive("cabina")}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      <Video className="size-3.5" />
+                      <span>
+                        {startingLive === "cabina"
+                          ? "Abriendo selector..."
+                          : "Transmitir Reproductor de Cabina"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={startingLive !== null}
+                      onClick={() => void handleStartLive("screen")}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-text text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors"
+                    >
+                      <MonitorUp className="size-3.5 text-cyan-400" />
+                      <span>
+                        {startingLive === "screen"
+                          ? "Abriendo selector..."
+                          : "Compartir Pestaña / Pantalla"}
+                      </span>
+                    </button>
+                  </div>
+                )}
+
+                {mediaMsg && (
+                  <p className="text-xs px-3 py-2 rounded-lg bg-th-card border border-th-border text-th-secondary">
+                    {mediaMsg}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Mode Option 3: Hub LAN Local (.ZIP - Optional for Android TV) */}
           <div

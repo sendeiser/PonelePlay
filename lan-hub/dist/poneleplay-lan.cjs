@@ -8222,6 +8222,34 @@ var PoneleLanHub = class {
     if (msg.type === "room:snapshot_sync" && msg.tvFeed) {
       const snapshotMsg = room.engine.mergeExternalTvFeed(msg.tvFeed, nowMs);
       this.broadcastLocal(room, [snapshotMsg], ws);
+      return;
+    }
+    if (msg.type === "rtc:signal") {
+      const senderMeta = room.sockets.get(ws);
+      if (!senderMeta) return;
+      const outbound = {
+        type: "rtc:signal",
+        fromClientId: senderMeta.clientId,
+        fromRole: senderMeta.role,
+        targetClientId: msg.targetClientId,
+        channel: msg.channel,
+        signalType: msg.signalType,
+        sdp: msg.sdp,
+        candidate: msg.candidate,
+        directEnabled: msg.directEnabled,
+        mediaActive: msg.mediaActive,
+        serverNowMs: nowMs
+      };
+      if (msg.targetClientId) {
+        for (const [sock, peerMeta] of room.sockets.entries()) {
+          if (sock === ws || sock.readyState !== import_websocket.default.OPEN) continue;
+          if (peerMeta.clientId === msg.targetClientId) {
+            this.sendToSocket(sock, outbound);
+          }
+        }
+      } else {
+        this.broadcastLocal(room, [outbound], ws);
+      }
     }
   }
   scheduleBarrierTimeout(room, deadlineMs) {

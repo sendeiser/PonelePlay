@@ -87,10 +87,12 @@ export type SyncInboundMessage =
   | {
       type: "rtc:signal";
       targetClientId?: string;
+      channel?: "data" | "media";
       signalType: "offer" | "answer" | "candidate" | "bye" | "direct-ready";
       sdp?: string;
       candidate?: Record<string, unknown>;
       directEnabled?: boolean;
+      mediaActive?: boolean;
     }
   | {
       type: "playback:command";
@@ -157,10 +159,12 @@ export type SyncOutboundMessage =
       fromClientId: string;
       fromRole: SyncRole;
       targetClientId?: string;
+      channel?: "data" | "media";
       signalType: "offer" | "answer" | "candidate" | "bye" | "direct-ready";
       sdp?: string;
       candidate?: Record<string, unknown>;
       directEnabled?: boolean;
+      mediaActive?: boolean;
       serverNowMs: number;
     }
   | { type: "sync:error"; code: string; message: string };
@@ -344,5 +348,116 @@ export function createDefaultAnchor(nowMs = Date.now()): PlaybackAnchor {
     lastCommand: null,
     displayConfig: null,
   };
+}
+
+export interface ElasticSyncOptions {
+  /** Drift tolerance band around 0 where rate returns cleanly to 1.0 (default 0.05s). */
+  deadzoneSec?: number;
+  /** Threshold above which rate catch-up is too slow and a hard seek is issued (default 1.35s, or 0.85s when isEarlyWindow). */
+  hardSeekThresholdSec?: number;
+  /** True during initial playback window (< 10s) where faster lock is preferred. */
+  isEarlyWindow?: boolean;
+  /** True when audio is muted on this screen (discrete coarse rates are visually smooth and inaudible). */
+  isMuted?: boolean;
+}
+
+export interface ElasticSyncDecision {
+  action: "none" | "rate" | "seek";
+  playbackRate: number;
+  driftSec: number;
+}
+
+/**
+ * Decides between smooth playbackRate micro-bending (Watch2Gether / Kosmi style)
+ * and a hard seekTo fallback based on drift magnitude and player rate granularity.
+ *
+ * Sign convention: `driftSec = actualSec - expectedSec`
+ * - `driftSec > 0`: player is AHEAD of anchor -> slow down (`playbackRate < 1`)
+ * - `driftSec < 0`: player is BEHIND anchor -> speed up (`playbackRate > 1`)
+ */
+export function computeElasticPlaybackRate(
+  driftSec: number,
+  availableRates?: readonly number[] | null,
+  options: ElasticSyncOptions = {},
+): ElasticSyncDecision {
+  if (!Number.isFinite(driftSec)) {
+    return { action: "none", playbackRate: 1, driftSec: 0 };
+  }
+
+  const deadzoneSec = Math.max(0.02, options.deadzoneSec ?? 0.05);
+  const hardSeekThresholdSec = Math.max(
+    0.45,
+    options.hardSeekThresholdSec ?? (options.isEarlyWindow ? 0.85 : 1.35),
+  );
+  const isMuted = options.isMuted === true;
+  const absDrift = Math.abs(driftSec);
+
+  if (absDrift <= deadzoneSec) {
+    return { action: "rate", playbackRate: 1, driftSec };
+  }
+
+  if (absDrift >= hardSeekThresholdSec) {
+    return { action: "seek", playbackRate: 1, driftSec };
+  }
+
+  const sortedRates =
+    Array.isArray(availableRates) && availableRates.length > 0
+      ? [...availableRates].filter((r) => Number.isFinite(r) && r > 0).sort((a, b) => a - b)
+      : null;
+
+  const hasFineSlow = sortedRates ? sortedRates.some((r) => r >= 0.88 && r < 0.995) : true;
+  const hasFineFast = sortedRates ? sortedRates.some((r) => r > 1.005 && r <= 1.12) : true;
+  const hasFineRates = !sortedRates || (hasFineSlow && hasFineFast);
+
+  if (hasFineRates) {
+    const norm = Math.min(
+      1,
+      Math.max(0, (absDrift - deadzoneSec) / (hardSeekThresholdSec - deadzoneSec)),
+    );
+    const delta = 0.015 + norm * 0.035; // 1.5% .. 5.0% imperceptible speed trim
+    const idealRate = driftSec > 0 ? 1 - delta : 1 + delta;
+
+    if (!sortedRates) {
+      return {
+        action: "rate",
+        playbackRate: Math.round(idealRate * 1000) / 1000,
+        driftSec,
+      };
+    }
+
+    const candidates = sortedRates.filter((r) =>
+      driftSec > 0 ? r >= 0.88 && r < 1 : r > 1 && r <= 1.12,
+    );
+    if (candidates.length > 0) {
+      const closest = candidates.reduce((best, r) =>
+        Math.abs(r - idealRate) < Math.abs(best - idealRate) ? r : best,
+      );
+      return { action: "rate", playbackRate: closest, driftSec };
+    }
+  }
+
+  // Coarse discrete rates only (e.g. standard YouTube [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2])
+  const slowCoarse = sortedRates?.filter((r) => r >= 0.5 && r < 1).pop() ?? 0.75;
+  const fastCoarse = sortedRates?.find((r) => r > 1 && r <= 1.5) ?? 1.25;
+
+  if (isMuted) {
+    const triggerSec = options.isEarlyWindow ? 0.09 : 0.11;
+    if (absDrift < triggerSec) {
+      return { action: "rate", playbackRate: 1, driftSec };
+    }
+    return {
+      action: "rate",
+      playbackRate: driftSec > 0 ? slowCoarse : fastCoarse,
+      driftSec,
+    };
+  }
+
+  // Unmuted coarse YouTube: avoid audible pitch shift; trigger clean hard seek instead
+  const audibleSeekThresholdSec = options.isEarlyWindow ? 0.14 : 0.24;
+  if (absDrift >= audibleSeekThresholdSec) {
+    return { action: "seek", playbackRate: 1, driftSec };
+  }
+
+  return { action: "rate", playbackRate: 1, driftSec };
 }
 

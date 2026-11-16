@@ -66,5 +66,9 @@ export interface YTPlayerInstance {
   isMuted(): boolean;
   setVolume(volume: number): void;
   getVolume(): number;
+  getPlayerState?(): number;
+  setPlaybackRate?(suggestedRate: number): void;
+  getPlaybackRate?(): number;
+  getAvailablePlaybackRates?(): number[];
 }
 

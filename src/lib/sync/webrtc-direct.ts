@@ -53,7 +53,7 @@ interface ManagedRtcPeer {
   closed: boolean;
 }
 
-const RTC_CONFIGURATION: RTCConfiguration = {
+export const RTC_CONFIGURATION: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.cloudflare.com:3478" },
     { urls: "stun:stun.l.google.com:19302" },
@@ -301,10 +301,12 @@ export class DirectP2PManager {
   async handleSignal(signal: {
     fromClientId: string;
     fromRole: SyncRole;
+    channel?: "data" | "media";
     signalType: "offer" | "answer" | "candidate" | "bye" | "direct-ready";
     sdp?: string;
     candidate?: Record<string, unknown>;
   }): Promise<void> {
+    if (signal.channel === "media") return;
     if (signal.fromClientId === this.clientId) return;
     if (typeof RTCPeerConnection === "undefined") return;
 

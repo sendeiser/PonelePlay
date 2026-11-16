@@ -16,6 +16,12 @@ import {
 } from "./protocol";
 import { SyncRoomEngine } from "./room-engine";
 import { DirectP2PManager, type DirectP2PStats } from "./webrtc-direct";
+import {
+  DirectMediaStreamer,
+  type DirectMediaStartOptions,
+  type DirectMediaStartResult,
+  type DirectMediaStats,
+} from "./webrtc-media";
 
 export type SyncClientTransport = "lan" | "direct" | "cloud" | "connecting" | "offline";
 
@@ -54,6 +60,7 @@ export interface SyncStatusState {
   lanEndpoints: string[];
   peers: SyncPeerInfo[];
   directStats: DirectP2PStats | null;
+  mediaStats: DirectMediaStats | null;
 }
 
 type OutboundListener<T extends SyncOutboundMessage["type"]> = (
@@ -135,6 +142,7 @@ export class PoneleSyncClient {
   private disposed = false;
 
   private directP2P: DirectP2PManager | null = null;
+  private mediaStreamer: DirectMediaStreamer | null = null;
   private directEngine: SyncRoomEngine | null = null;
   private directBarrierTimer: ReturnType<typeof setTimeout> | null = null;
   private lastDirectInboundMs = 0;
@@ -156,6 +164,7 @@ export class PoneleSyncClient {
     "room:presence": new Set<OutboundListener<"room:presence">>(),
   };
   private statusListeners = new Set<(status: SyncStatusState) => void>();
+  private mediaStreamListeners = new Set<(stream: MediaStream | null) => void>();
 
   constructor(options: PoneleSyncClientOptions) {
     this.slug = options.slug;
@@ -172,6 +181,7 @@ export class PoneleSyncClient {
           this.send({
             type: "rtc:signal",
             targetClientId: signal.targetClientId,
+            channel: "data",
             signalType: signal.signalType,
             sdp: signal.sdp,
             candidate: signal.candidate,
@@ -184,6 +194,31 @@ export class PoneleSyncClient {
           if (this.role === "master" && this.getEffectivePreferenceMode() === "direct") {
             this.syncDirectEngineClients();
           }
+          this.emitStatus();
+        },
+      });
+
+      this.mediaStreamer = new DirectMediaStreamer({
+        clientId: this.clientId,
+        role: this.role,
+        onSendSignal: (signal) => {
+          this.send({
+            type: "rtc:signal",
+            targetClientId: signal.targetClientId,
+            channel: "media",
+            signalType: signal.signalType,
+            sdp: signal.sdp,
+            candidate: signal.candidate,
+            mediaActive: signal.mediaActive,
+          });
+        },
+        onRemoteStreamChange: (stream) => {
+          for (const cb of this.mediaStreamListeners) {
+            cb(stream);
+          }
+          this.emitStatus();
+        },
+        onStatsChange: () => {
           this.emitStatus();
         },
       });
@@ -314,7 +349,58 @@ export class PoneleSyncClient {
       lanEndpoints: [...this.lanEndpoints],
       peers: [...this.peers],
       directStats,
+      mediaStats: this.mediaStreamer?.getStats() ?? null,
     };
+  }
+
+  async startLiveMediaBroadcast(
+    options?: DirectMediaStartOptions,
+  ): Promise<DirectMediaStartResult> {
+    if (!this.mediaStreamer) {
+      return {
+        ok: false,
+        error: "Transmisión multimedia no disponible para este rol.",
+        hasAudio: false,
+        hasVideo: false,
+        label: null,
+        cropApplied: false,
+      };
+    }
+    this.syncMediaPeers();
+    const res = await this.mediaStreamer.startCapture(options);
+    if (res.ok) {
+      this.syncMediaPeers();
+    }
+    this.emitStatus();
+    return res;
+  }
+
+  stopLiveMediaBroadcast(): void {
+    this.mediaStreamer?.stopCapture();
+    this.emitStatus();
+  }
+
+  isMediaStreaming(): boolean {
+    return this.mediaStreamer?.isStreaming() ?? false;
+  }
+
+  getRemoteMediaStream(): MediaStream | null {
+    return this.mediaStreamer?.getRemoteStream() ?? null;
+  }
+
+  onMediaStream(cb: (stream: MediaStream | null) => void): () => void {
+    this.mediaStreamListeners.add(cb);
+    return () => {
+      this.mediaStreamListeners.delete(cb);
+    };
+  }
+
+  private syncMediaPeers(): void {
+    if (this.role !== "master" || !this.mediaStreamer) return;
+    const tvIds = this.peers
+      .filter((p) => p.role === "tv" && p.clientId)
+      .map((p) => p.clientId);
+    this.mediaStreamer.syncPeers(tvIds);
   }
 
   setRuntimeCloudWsUrl(url?: string | null): void {
@@ -922,7 +1008,11 @@ export class PoneleSyncClient {
     }
 
     if (msg.type === "rtc:signal") {
-      void this.directP2P?.handleSignal(msg);
+      if (msg.channel === "media") {
+        void this.mediaStreamer?.handleSignal(msg);
+      } else {
+        void this.directP2P?.handleSignal(msg);
+      }
       return;
     }
 
@@ -934,6 +1024,7 @@ export class PoneleSyncClient {
       }
       if (Array.isArray(msg.snapshot.peers)) {
         this.peers = msg.snapshot.peers;
+        this.syncMediaPeers();
         if (this.role === "master" && this.getEffectivePreferenceMode() === "direct") {
           this.syncDirectEngineClients();
           this.directP2P?.syncPeers(this.peers);
@@ -976,6 +1067,7 @@ export class PoneleSyncClient {
       }
       if (Array.isArray(msg.peers)) {
         this.peers = msg.peers;
+        this.syncMediaPeers();
         if (this.role === "master" && this.getEffectivePreferenceMode() === "direct") {
           this.syncDirectEngineClients();
           this.directP2P?.syncPeers(this.peers);
@@ -1111,6 +1203,7 @@ export class PoneleSyncClient {
     this.stopLanProbeLoop();
     this.stopClockSync();
     this.stopDirectModeRuntime();
+    this.mediaStreamer?.dispose();
     if (this.ws) {
       try {
         this.ws.close();

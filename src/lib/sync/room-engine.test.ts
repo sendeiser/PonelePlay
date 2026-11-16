@@ -325,5 +325,63 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
       SAMPLE_TRACK.youtubeVideoId,
     );
   });
+
+  it("computes Option 1 elastic playbackRate decisions for continuous, coarse-muted, coarse-audible, and hard-seek drifts", async () => {
+    const { computeElasticPlaybackRate } = await import("@/lib/sync/protocol");
+    const ytCoarse = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+
+    // Inside deadzone snaps back cleanly to 1.0
+    expect(computeElasticPlaybackRate(0.04, ytCoarse, { isMuted: true })).toMatchObject({
+      action: "rate",
+      playbackRate: 1,
+    });
+    expect(computeElasticPlaybackRate(-0.03, null)).toMatchObject({
+      action: "rate",
+      playbackRate: 1,
+    });
+
+    // Continuous HTML5/fine rates apply subtle +/-1.5%..5% speed trim
+    const slowContinuous = computeElasticPlaybackRate(0.4, null, { isMuted: false });
+    expect(slowContinuous.action).toBe("rate");
+    expect(slowContinuous.playbackRate).toBeLessThan(1);
+    expect(slowContinuous.playbackRate).toBeGreaterThanOrEqual(0.95);
+
+    const fastContinuous = computeElasticPlaybackRate(-0.4, null, { isMuted: false });
+    expect(fastContinuous.action).toBe("rate");
+    expect(fastContinuous.playbackRate).toBeGreaterThan(1);
+    expect(fastContinuous.playbackRate).toBeLessThanOrEqual(1.05);
+
+    // Muted YouTube TV uses smooth 0.75x / 1.25x instead of seek spinner flashes
+    expect(computeElasticPlaybackRate(0.25, ytCoarse, { isMuted: true })).toMatchObject({
+      action: "rate",
+      playbackRate: 0.75,
+    });
+    expect(computeElasticPlaybackRate(-0.25, ytCoarse, { isMuted: true })).toMatchObject({
+      action: "rate",
+      playbackRate: 1.25,
+    });
+
+    // Unmuted coarse YouTube avoids audible 1.25x chipmunk effect and uses clean seek instead
+    expect(computeElasticPlaybackRate(-0.15, ytCoarse, { isMuted: false })).toMatchObject({
+      action: "rate",
+      playbackRate: 1,
+    });
+    expect(computeElasticPlaybackRate(-0.32, ytCoarse, { isMuted: false })).toMatchObject({
+      action: "seek",
+      playbackRate: 1,
+    });
+
+    // Large desync always forces hard seek recovery
+    expect(computeElasticPlaybackRate(-1.6, ytCoarse, { isMuted: true })).toMatchObject({
+      action: "seek",
+      playbackRate: 1,
+    });
+    expect(
+      computeElasticPlaybackRate(0.92, ytCoarse, { isMuted: true, isEarlyWindow: true }),
+    ).toMatchObject({
+      action: "seek",
+      playbackRate: 1,
+    });
+  });
 });
 

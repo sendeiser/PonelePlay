@@ -28,6 +28,7 @@ import {
 } from "@/lib/sync/client";
 import {
   computeAdaptiveSeekLeadSec,
+  computeElasticPlaybackRate,
   computeTargetPositionSec,
   type PlaybackAnchor,
   type SyncTrack,
@@ -388,6 +389,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const controlChannelRef = useRef<import("@supabase/supabase-js").RealtimeChannel | null>(null);
   const syncClientRef = useRef<PoneleSyncClient | null>(null);
   const [syncConnected, setSyncConnected] = useState(false);
+  const [remoteMediaStream, setRemoteMediaStream] = useState<MediaStream | null>(null);
+  const remoteMediaStreamRef = useRef<MediaStream | null>(null);
+  remoteMediaStreamRef.current = remoteMediaStream;
+  const remoteMediaVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [liveStreamAudioBlocked, setLiveStreamAudioBlocked] = useState(false);
   const syncAnchorRef = useRef<PlaybackAnchor | null>(null);
   const activeBarrierRef = useRef<{ barrierId: string; videoId: string | null } | null>(null);
   const lastReadyBarrierSentRef = useRef<string | null>(null);
@@ -1022,12 +1028,68 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   useEffect(
     () =>
       engine.onEnded(() => {
+        if (remoteMediaStreamRef.current) return;
         if (Date.now() - lastAdminProgressAtRef.current > 12000) {
           void handleSkipNextRef.current(false);
         }
       }),
     [engine],
   );
+
+  // Synchronize Option 2 WebRTC live stream (<video>) & pause duplicate YT iframe while live
+  useEffect(() => {
+    const videoEl = remoteMediaVideoRef.current;
+    if (remoteMediaStream) {
+      engine.setPlaybackRate?.(1);
+      engine.pause?.();
+      engine.mute?.();
+      if (videoEl) {
+        if (videoEl.srcObject !== remoteMediaStream) {
+          videoEl.srcObject = remoteMediaStream;
+        }
+        videoEl.muted = isMuted;
+        videoEl.volume = Math.max(0, Math.min(1, volume / 100));
+        void videoEl.play().then(
+          () => setLiveStreamAudioBlocked(false),
+          () => {
+            if (!isMuted) {
+              videoEl.muted = true;
+              setLiveStreamAudioBlocked(true);
+              void videoEl.play().catch(() => {});
+            }
+          },
+        );
+      }
+      return;
+    }
+
+    if (videoEl && videoEl.srcObject) {
+      videoEl.srcObject = null;
+    }
+    setLiveStreamAudioBlocked(false);
+
+    // Restore YouTube synced playback smoothly when live broadcast stops
+    const anchor = syncAnchorRef.current;
+    if (anchor) {
+      if (anchor.tvMuted) {
+        engine.mute?.();
+      } else {
+        engine.unMute?.();
+        engine.setVolume?.(anchor.volume);
+      }
+      if (anchor.track) {
+        const client = syncClientRef.current;
+        const targetSec = computeTargetPositionSec(
+          anchor,
+          client ? client.estimatedServerMs() : Date.now(),
+        );
+        lastTvSeekAtRef.current = Date.now();
+        engine.seekTo?.(targetSec);
+        if (anchor.isPaused) engine.pause?.();
+        else void engine.play?.();
+      }
+    }
+  }, [remoteMediaStream, isMuted, volume, engine]);
 
 
   // Master Remote Control synchronization (LAN/Cloud WebSocket Sync primary + Supabase fallback)
@@ -1132,6 +1194,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (active) setSyncConnected(st.connected);
     });
 
+    const initialMediaStream = syncClient.getRemoteMediaStream();
+    if (initialMediaStream) {
+      setRemoteMediaStream(initialMediaStream);
+    }
+    const unsubMedia = syncClient.onMediaStream((stream) => {
+      if (active) {
+        setRemoteMediaStream(stream);
+      }
+    });
+
     let legacyFallbackStarted = false;
     let startLegacySupabaseFallback = () => {};
 
@@ -1198,16 +1270,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (typeof anchor.volume === "number" && anchor.volume !== volumeRef.current) {
         volumeRef.current = anchor.volume;
         setVolume(anchor.volume);
-        engine.setVolume?.(anchor.volume);
+        if (!remoteMediaStreamRef.current) {
+          engine.setVolume?.(anchor.volume);
+        }
       }
 
       if (anchor.tvMuted !== isMutedRef.current) {
         isMutedRef.current = anchor.tvMuted;
         setIsMuted(anchor.tvMuted);
-        if (anchor.tvMuted) engine.mute?.();
-        else {
-          engine.unMute?.();
-          engine.setVolume?.(anchor.volume);
+        if (!remoteMediaStreamRef.current) {
+          if (anchor.tvMuted) engine.mute?.();
+          else {
+            engine.unMute?.();
+            engine.setVolume?.(anchor.volume);
+          }
         }
         setAudioRouting(
           anchor.cabinaMuted && !anchor.tvMuted
@@ -1233,8 +1309,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (nextPlaying !== isPlayingRef.current) {
         isPlayingRef.current = nextPlaying;
         setIsPlaying(nextPlaying);
-        if (anchor.isPaused) engine.pause?.();
-        else void engine.play?.();
+        if (!remoteMediaStreamRef.current) {
+          if (anchor.isPaused) engine.pause?.();
+          else void engine.play?.();
+        }
       }
 
       const incomingTrack = anchor.track ? toPlayerTrack(anchor.track) : null;
@@ -1251,13 +1329,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setManualNowPlaying(incomingTrack);
         setElapsed(Math.floor(targetSec));
         elapsedRef.current = Math.floor(targetSec);
-        void engine.load(incomingTrack).then(() => {
-          if (targetSec > 0.25) {
-            engine.seekTo?.(targetSec);
-          }
-          if (anchor.isPaused) engine.pause?.();
-          else void engine.play?.();
-        });
+        if (!remoteMediaStreamRef.current) {
+          void engine.load(incomingTrack).then(() => {
+            if (remoteMediaStreamRef.current) return;
+            if (targetSec > 0.25) {
+              engine.seekTo?.(targetSec);
+            }
+            if (anchor.isPaused) engine.pause?.();
+            else void engine.play?.();
+          });
+        }
+        return;
+      }
+
+      if (remoteMediaStreamRef.current) {
+        engine.pause?.();
+        engine.mute?.();
         return;
       }
 
@@ -1268,6 +1355,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         if (Date.now() - lastTvSeekAtRef.current < 250 && Math.abs(elapsedRef.current - targetSec) <= 0.8) {
           return;
         }
+        engine.setPlaybackRate?.(1);
         lastTvSeekAtRef.current = Date.now();
         handleSeekRef.current(targetSec);
       }
@@ -1329,7 +1417,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       setManualNowPlaying(incoming);
       setElapsed(Math.floor(startPositionSec));
       elapsedRef.current = Math.floor(startPositionSec);
+      engine.setPlaybackRate?.(1);
       engine.pause?.();
+      if (remoteMediaStreamRef.current) {
+        lastReadyBarrierSentRef.current = barrierId;
+        syncClient.sendReady(barrierId);
+        return;
+      }
       void engine.cue(incoming, startPositionSec);
 
       // Safety timer if YT pre-buffer takes longer than 1500ms
@@ -1382,6 +1476,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         prebufferedVideoId = null;
         prebufferedStartSec = null;
         pendingSeekVerification = null;
+        engine.setPlaybackRate?.(1);
+        isPlayingRef.current = true;
+        setIsPlaying(true);
+        if (remoteMediaStreamRef.current) {
+          engine.pause?.();
+          engine.mute?.();
+          setHudMessage(`🎵 Reproduciendo: ${incoming.title}`);
+          setTimeout(() => setHudMessage(null), 3500);
+          return;
+        }
         lastTvSeekAtRef.current = Date.now();
         if (!alreadyPrebufferedSpot && startPositionSec > 0.05) {
           engine.seekTo?.(startPositionSec);
@@ -1391,8 +1495,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           engine.unMute?.();
           engine.setVolume?.(anchor.volume);
         }
-        isPlayingRef.current = true;
-        setIsPlaying(true);
         void engine.play();
         setHudMessage(`🎵 Reproduciendo: ${incoming.title}`);
         setTimeout(() => setHudMessage(null), 3500);
@@ -1413,11 +1515,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       applyPartyEventPayload(payload);
     });
 
-    // Continuous tight drift guard driven by NTP-lite server clock anchor + adaptive seek-lead EMA
+    // Continuous elastic drift guard (Option 1 playbackRate micro-bending + buffering suppression + adaptive seek fallback)
     driftTimer = setInterval(() => {
+      if (remoteMediaStreamRef.current) {
+        pendingSeekVerification = null;
+        return;
+      }
       const anchor = syncAnchorRef.current;
       if (!anchor || anchor.isPaused || activeBarrierRef.current || !syncClient.isConnected()) {
         pendingSeekVerification = null;
+        engine.setPlaybackRate?.(1);
+        return;
+      }
+      if (engine.isBuffering?.()) {
+        pendingSeekVerification = null;
+        engine.setPlaybackRate?.(1);
         return;
       }
       if (!engine.hasLiveTime?.()) return;
@@ -1440,14 +1552,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
 
       const isEarlyWindow = expected < 10;
-      const minCheckIntervalMs = isEarlyWindow ? 200 : 500;
+      const minCheckIntervalMs = isEarlyWindow ? 200 : 450;
       if (now - lastDriftCheckAtMs < minCheckIntervalMs) return;
       lastDriftCheckAtMs = now;
 
-      const drift = Math.abs(actual - expected);
-      const thresholdSec = isEarlyWindow ? 0.1 : 0.16;
+      const driftSec = actual - expected;
+      const decision = computeElasticPlaybackRate(
+        driftSec,
+        engine.getAvailablePlaybackRates?.(),
+        {
+          isEarlyWindow,
+          isMuted: isMutedRef.current,
+        },
+      );
+
+      if (decision.action === "rate") {
+        engine.setPlaybackRate?.(decision.playbackRate);
+        return;
+      }
+
       const cooldownMs = isEarlyWindow ? 950 : 1800;
-      if (drift >= thresholdSec && now - lastTvSeekAtRef.current > cooldownMs) {
+      engine.setPlaybackRate?.(1);
+      if (decision.action === "seek" && now - lastTvSeekAtRef.current > cooldownMs) {
         lastTvSeekAtRef.current = now;
         const seekLead = expected > 0.25 ? adaptiveSeekLeadSec : 0;
         engine.seekTo?.(expected + seekLead);
@@ -1908,6 +2034,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => {
       active = false;
       unsubStatus();
+      unsubMedia();
       unsubCued?.();
       unsubSnap?.();
       unsubAnchor?.();
@@ -2133,6 +2260,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               allowFullScreen
               onLoad={() => {
                 engine.handshake();
+                if (remoteMediaStreamRef.current) {
+                  engine.pause?.();
+                  engine.mute?.();
+                  return;
+                }
                 if (isMuted) {
                   engine.mute?.();
                 } else {
@@ -2140,6 +2272,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   engine.setVolume?.(volume);
                 }
               }}
+            />
+          )}
+
+          {remoteMediaStream && (
+            <video
+              ref={remoteMediaVideoRef}
+              autoPlay
+              playsInline
+              muted={isMuted}
+              className="absolute inset-0 w-full h-full object-contain bg-black z-[5] pointer-events-none select-none"
             />
           )}
 
@@ -2151,6 +2293,27 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           />
         </div>
       </div>
+
+      {/* Live WebRTC Audio Unmute Fallback (if browser blocked unmuted stream autoplay) */}
+      {remoteMediaStream && liveStreamAudioBlocked && !isMuted && (
+        <button
+          type="button"
+          onClick={() => {
+            const v = remoteMediaVideoRef.current;
+            if (!v) return;
+            v.muted = false;
+            v.volume = Math.max(0, Math.min(1, volume / 100));
+            void v.play().then(
+              () => setLiveStreamAudioBlocked(false),
+              () => {},
+            );
+          }}
+          className="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-2xl border border-amber-200 animate-bounce cursor-pointer"
+        >
+          <Volume2 className="size-4" />
+          <span>Clic para activar audio del Stream en vivo</span>
+        </button>
+      )}
 
       {/* ================= TV MODE VIDEO OVERLAYS (EXACT ANDROID TV PARITY) ================= */}
       {screenMode !== "PLAYLIST" && (
@@ -2170,6 +2333,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <span>{screenMode === "VIDEO" ? "Modo: Video Completo" : "Modo: Video Limpio"}</span>
               <span className="text-[10px] text-slate-400 font-normal">(V)</span>
             </button>
+
+            {/* Live WebRTC 0ms Stream Pill */}
+            {remoteMediaStream && (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-400/40 font-mono text-[11px] font-bold text-cyan-200"
+                title="Recibiendo Video y Audio directo de Cabina sin desfase (WebRTC)"
+              >
+                <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span>STREAM 0ms</span>
+              </div>
+            )}
 
             {/* TV Audio Indicator (Read-only) */}
             <div
