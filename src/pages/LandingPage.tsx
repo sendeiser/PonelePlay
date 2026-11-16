@@ -9,7 +9,6 @@ import {
   Radio,
   ShieldCheck,
   Smartphone,
-  Sparkles,
   Tv,
   Users,
 } from 'lucide-react';
@@ -60,41 +59,31 @@ export const LandingPage: React.FC = () => {
   };
 
   return (
-    <main className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:px-6 sm:py-10">
-      {/* Hero Banner */}
-      <section className="relative overflow-hidden rounded-3xl border border-stroke bg-card p-6 sm:p-10">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand/25 blur-3xl"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-24 left-12 h-64 w-64 rounded-full bg-neon/10 blur-3xl"
-        />
+    <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:px-6 sm:py-10">
+      {/* Hero Banner Minimalista */}
+      <section className="rounded-3xl border border-stroke bg-card p-6 shadow-surface sm:p-10">
+        <div className="max-w-3xl space-y-4">
+          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-brand">
+            YouTube Music Sin Premium · Spotify Opcional · Smart TV
+          </p>
 
-        <div className="relative z-10 max-w-3xl space-y-4">
-          <div className="inline-flex flex-wrap items-center gap-2 rounded-2xl border border-neon/40 bg-neon/10 px-3 py-1.5 text-xs font-semibold text-neon sm:rounded-full">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>YouTube Music Sin Premium · Spotify Opcional · Smart TV Nativa</span>
-          </div>
-
-          <h1 className="font-display text-3xl leading-tight text-ink sm:text-5xl">
-            Tu fiesta, tus reglas. <span className="text-neon">Todos eligen</span> el próximo tema en vivo.
+          <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
+            Tu fiesta, tus reglas. <span className="text-brand">Todos eligen</span> el próximo tema.
           </h1>
 
           <p className="text-sm leading-relaxed text-muted sm:text-base">
-            Crea una sala en segundos, comparte el código QR en tu celular o en la App nativa de Smart TV y deja que tus invitados propongan y voten canciones sin instalar nada.
+            Crea una sala en segundos, proyecta el código QR en tu Smart TV o compártelo por link y deja que tus invitados propongan y voten canciones sin instalar nada.
           </p>
 
           <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted">
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
-              <Smartphone className="h-3.5 w-3.5 text-neon" /> PWA Instalable + APK Mobile
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
+              <Smartphone className="h-3.5 w-3.5 text-brand" /> PWA Instalable + Mobile
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
-              <Tv className="h-3.5 w-3.5 text-brand" /> Android TV D-Pad Nativo
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
+              <Tv className="h-3.5 w-3.5 text-brand" /> App Android TV Nativa
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
-              <ShieldCheck className="h-3.5 w-3.5 text-amber" /> 1 Voto Único por Canción
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
+              <ShieldCheck className="h-3.5 w-3.5 text-brand" /> 1 Voto Único por Canción
             </span>
           </div>
         </div>
@@ -105,17 +94,17 @@ export const LandingPage: React.FC = () => {
         {/* Tarjeta A: Crear Sala */}
         <form
           onSubmit={handleCreateRoom}
-          className="flex flex-col justify-between rounded-3xl border border-stroke bg-card p-6 shadow-lg"
+          className="flex flex-col justify-between rounded-3xl border border-stroke bg-card p-6 shadow-surface"
         >
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-neon">
+                <p className="font-mono text-xs font-semibold uppercase tracking-widest text-brand">
                   Para Anfitriones
-                </span>
-                <h2 className="mt-1 font-display text-2xl text-ink">Crear Sala como Anfitrión</h2>
+                </p>
+                <h2 className="mt-1 font-display text-2xl font-bold text-ink">Crear Sala</h2>
               </div>
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-neon/15 text-neon">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">
                 <PlusCircle className="h-6 w-6" />
               </span>
             </div>
@@ -140,13 +129,13 @@ export const LandingPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setProvider('youtube_music')}
-                  className={`flex min-h-[60px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
+                  className={`flex min-h-[60px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-colors ${
                     provider === 'youtube_music'
-                      ? 'border-ytm bg-ytm/10 shadow-neon-ytm'
-                      : 'border-stroke bg-elevated hover:border-brand/60'
+                      ? 'border-brand bg-brand-soft'
+                      : 'border-stroke bg-elevated hover:border-muted'
                   }`}
                 >
-                  <Music2 className="mt-0.5 h-5 w-5 shrink-0 text-ytm" />
+                  <Music2 className={`mt-0.5 h-5 w-5 shrink-0 ${provider === 'youtube_music' ? 'text-brand' : 'text-muted'}`} />
                   <div>
                     <p className="text-xs font-bold text-ink">YouTube Music Audio</p>
                     <p className="text-[11px] text-muted">100% gratis · Sin Premium</p>
@@ -156,13 +145,13 @@ export const LandingPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setProvider('spotify')}
-                  className={`flex min-h-[60px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
+                  className={`flex min-h-[60px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-colors ${
                     provider === 'spotify'
-                      ? 'border-neon bg-neon/10 shadow-neon-green'
-                      : 'border-stroke bg-elevated hover:border-brand/60'
+                      ? 'border-brand bg-brand-soft'
+                      : 'border-stroke bg-elevated hover:border-muted'
                   }`}
                 >
-                  <Radio className="mt-0.5 h-5 w-5 shrink-0 text-neon" />
+                  <Radio className={`mt-0.5 h-5 w-5 shrink-0 ${provider === 'spotify' ? 'text-brand' : 'text-muted'}`} />
                   <div>
                     <p className="text-xs font-bold text-ink">Spotify Premium</p>
                     <p className="text-[11px] text-muted">Web Player & Connect</p>
@@ -172,7 +161,7 @@ export const LandingPage: React.FC = () => {
             </div>
 
             {/* Acordeón Opciones Avanzadas */}
-            <div className="rounded-2xl border border-stroke bg-elevated/70">
+            <div className="rounded-2xl border border-stroke bg-elevated/60">
               <button
                 type="button"
                 onClick={() => setAdvancedOpen((o) => !o)}
@@ -236,7 +225,7 @@ export const LandingPage: React.FC = () => {
 
           <button
             type="submit"
-            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-neon px-5 text-sm font-bold text-on-neon shadow-neon-green transition-transform hover:opacity-95 active:scale-[0.99]"
+            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-on-brand shadow-surface transition-opacity hover:opacity-95 active:scale-[0.99]"
           >
             <PlusCircle className="h-5 w-5" />
             <span>Crear Sala y Empezar</span>
@@ -246,17 +235,17 @@ export const LandingPage: React.FC = () => {
         {/* Tarjeta B: Unirse a una Sala */}
         <form
           onSubmit={handleJoinSubmit}
-          className="flex flex-col justify-between rounded-3xl border border-stroke bg-card p-6 shadow-lg"
+          className="flex flex-col justify-between rounded-3xl border border-stroke bg-card p-6 shadow-surface"
         >
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-brand">
+                <p className="font-mono text-xs font-semibold uppercase tracking-widest text-muted">
                   Para Invitados
-                </span>
-                <h2 className="mt-1 font-display text-2xl text-ink">Unirse a una Sala</h2>
+                </p>
+                <h2 className="mt-1 font-display text-2xl font-bold text-ink">Unirse a una Sala</h2>
               </div>
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand/20 text-brand">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elevated text-ink">
                 <DoorOpen className="h-6 w-6" />
               </span>
             </div>
@@ -276,21 +265,21 @@ export const LandingPage: React.FC = () => {
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                 placeholder="PLAY42"
-                className="min-h-[56px] w-full rounded-2xl border border-stroke bg-elevated px-4 text-center font-display text-2xl uppercase tracking-[0.25em] text-neon placeholder:text-muted/50 focus:border-neon"
+                className="min-h-[56px] w-full rounded-2xl border border-stroke bg-elevated px-4 text-center font-display text-2xl font-bold uppercase tracking-[0.25em] text-ink placeholder:text-muted/50 focus:border-brand"
               />
             </div>
 
             <div className="rounded-2xl border border-stroke bg-elevated/60 p-4 text-xs text-muted">
               <p className="font-semibold text-ink">¿Tienes Android Smart TV en casa?</p>
               <p className="mt-1">
-                Abre la app nativa <strong className="text-ink">PonelePlay TV</strong> en tu televisor, vincula este mismo código y usa la TV como parlante principal o pantalla visual gigante.
+                Abre la app <strong className="text-ink">PonelePlay TV</strong> en tu televisor, vincula este código y usa el TV como parlante principal o pantalla visual.
               </p>
             </div>
           </div>
 
           <button
             type="submit"
-            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-brand px-5 text-sm font-bold text-white shadow-neon-indigo transition-transform hover:opacity-95 active:scale-[0.99]"
+            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-5 text-sm font-semibold text-ink transition-colors hover:border-brand hover:text-brand active:scale-[0.99]"
           >
             <DoorOpen className="h-5 w-5" />
             <span>Entrar a la Sala</span>
@@ -301,7 +290,7 @@ export const LandingPage: React.FC = () => {
       {/* Sección Mis Salas Recientes */}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-display text-xl text-ink">Mis Salas Recientes</h2>
+          <h2 className="font-display text-xl font-bold text-ink">Mis Salas Recientes</h2>
           <span className="font-mono text-xs text-muted">Historial sincronizado</span>
         </div>
 
@@ -309,15 +298,15 @@ export const LandingPage: React.FC = () => {
           {RECENT_ROOMS_MOCK.map((r) => (
             <div
               key={r.code}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stroke bg-card p-4 transition-colors hover:border-brand/70"
+              className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stroke bg-card p-4 transition-colors hover:bg-elevated/40"
             >
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-bold text-neon">{r.code}</span>
+                  <span className="font-mono text-xs font-bold text-brand">{r.code}</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                       r.isActive
-                        ? 'bg-neon/15 text-neon'
+                        ? 'bg-brand-soft text-brand'
                         : 'bg-elevated text-muted'
                     }`}
                   >
@@ -337,7 +326,7 @@ export const LandingPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate(r.isActive ? `/room/${r.code}` : `/room/${r.code}/summary`)}
-                className="min-h-[44px] rounded-xl border border-stroke bg-elevated px-4 text-xs font-semibold text-ink hover:border-neon hover:text-neon"
+                className="min-h-[44px] rounded-full border border-stroke bg-elevated px-4 text-xs font-semibold text-ink hover:border-brand hover:text-brand"
               >
                 {r.isActive ? 'Volver a la Sala' : 'Ver Resumen'}
               </button>

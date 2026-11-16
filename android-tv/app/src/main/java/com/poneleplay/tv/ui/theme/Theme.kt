@@ -7,17 +7,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 object PonelePlayTvColors {
-    val BgCanvas = Color(0xFF0F0F23)
-    val BgCard = Color(0xFF1B1B30)
-    val BgElevated = Color(0xFF27273B)
-    val BrandIndigo = Color(0xFF4338CA)
-    val NeonGreen = Color(0xFF22C55E)
-    val OnNeonGreen = Color(0xFF0F172A)
-    val TextPrimary = Color(0xFFF8FAFC)
-    val TextMuted = Color(0xFF94A3B8)
-    val BorderSubtle = Color(0xFF312E81)
+    val BgCanvas = Color(0xFF09090B)
+    val BgCard = Color(0xFF121215)
+    val BgElevated = Color(0xFF1C1C21)
+    val BrandCrimson = Color(0xFFFF2D55)
+    val OnBrandCrimson = Color(0xFFFFFFFF)
+    val TextPrimary = Color(0xFFFAFAFA)
+    val TextMuted = Color(0xFFA1A1AA)
+    val BorderSubtle = Color(0xFF27272A)
     val AmberGold = Color(0xFFF59E0B)
-    val YtmRed = Color(0xFFFF0033)
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -25,9 +23,9 @@ object PonelePlayTvColors {
 fun PonelePlayTvTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = PonelePlayTvColors.NeonGreen,
-            onPrimary = PonelePlayTvColors.OnNeonGreen,
-            secondary = PonelePlayTvColors.BrandIndigo,
+            primary = PonelePlayTvColors.BrandCrimson,
+            onPrimary = PonelePlayTvColors.OnBrandCrimson,
+            secondary = PonelePlayTvColors.BgElevated,
             onSecondary = PonelePlayTvColors.TextPrimary,
             background = PonelePlayTvColors.BgCanvas,
             onBackground = PonelePlayTvColors.TextPrimary,

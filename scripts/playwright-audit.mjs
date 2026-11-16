@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 
 const BASE_URL = process.env.AUDIT_URL || 'http://127.0.0.1:4173';
 const OUT_DIR =
-  process.argv[2] || 'd:/PonelePlay V2/docs/audits/round-1';
+  process.argv[2] || 'C:/Users/TinChoX/.gemini/antigravity/brain/a8b76b99-c75d-4572-be6e-b709b4903c23/screenshots';
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -97,20 +97,21 @@ async function run() {
       await page.screenshot({ path: path.join(OUT_DIR, `02-join-${vp.name}.png`), fullPage: true });
 
       // 3. Live Room (Host)
-      await page.goto(`${BASE_URL}/room/PLAY42`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE_URL}/room/PLAY42?role=host`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(350);
       report.push(await auditDom(page, `room-host-${vp.name}`));
       await page.screenshot({ path: path.join(OUT_DIR, `03-room-host-${vp.name}.png`), fullPage: true });
 
-      // 4. Live Room (Guest) + Empty Queue State (only desktop/mobile to keep output focused)
+      // 4. Live Room (Guest) + Modals
       if (vp.name === 'mobile' || vp.name === 'desktop') {
-        await page.getByRole('button', { name: 'Invitado (Guest)' }).click();
-        await page.waitForTimeout(200);
+        await page.goto(`${BASE_URL}/room/PLAY42?role=guest`, { waitUntil: 'networkidle' });
+        await page.waitForTimeout(250);
         report.push(await auditDom(page, `room-guest-${vp.name}`));
         await page.screenshot({ path: path.join(OUT_DIR, `04-room-guest-${vp.name}.png`), fullPage: true });
 
         // Back to Host + Open Search Modal
-        await page.getByRole('button', { name: 'Anfitrión (Host)' }).click();
+        await page.goto(`${BASE_URL}/room/PLAY42?role=host`, { waitUntil: 'networkidle' });
+        await page.waitForTimeout(250);
         await page.getByRole('button', { name: /Buscar canción o pegar link/i }).click();
         await page.waitForTimeout(250);
         report.push(await auditDom(page, `modal-search-${vp.name}`));
@@ -132,20 +133,20 @@ async function run() {
         await page.getByRole('button', { name: 'Cerrar ajustes' }).click();
       }
 
-      // 5. TV Mode Web + Android TV Native Preview
+      // 5. TV Mode Web + Android TV Native
       await page.goto(`${BASE_URL}/room/PLAY42/tv`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(300);
       report.push(await auditDom(page, `tv-web-${vp.name}`));
       await page.screenshot({ path: path.join(OUT_DIR, `08-tv-web-${vp.name}.png`), fullPage: true });
 
       if (vp.name === 'desktop' || vp.name === 'mobile') {
-        await page.getByRole('button', { name: /App Nativa Android TV/i }).click();
+        await page.getByRole('button', { name: /App Smart TV/i }).click();
         await page.waitForTimeout(250);
         report.push(await auditDom(page, `android-tv-room-${vp.name}`));
         await page.screenshot({ path: path.join(OUT_DIR, `09-android-tv-room-${vp.name}.png`), fullPage: true });
 
         if (vp.name === 'desktop') {
-          await page.getByRole('button', { name: /1\. TvHomeScreen/i }).click();
+          await page.getByRole('button', { name: /^Inicio TV$/i }).click();
           await page.waitForTimeout(200);
           report.push(await auditDom(page, `android-tv-home-${vp.name}`));
           await page.screenshot({ path: path.join(OUT_DIR, `10-android-tv-home-${vp.name}.png`), fullPage: true });
@@ -160,7 +161,7 @@ async function run() {
 
       // 7. Light Mode verification on Live Room
       if (vp.name === 'desktop' || vp.name === 'mobile') {
-        await page.goto(`${BASE_URL}/room/PLAY42`, { waitUntil: 'networkidle' });
+        await page.goto(`${BASE_URL}/room/PLAY42?role=host`, { waitUntil: 'networkidle' });
         await page.getByRole('button', { name: /Cambiar a modo claro/i }).click();
         await page.waitForTimeout(300);
         report.push(await auditDom(page, `room-light-${vp.name}`));

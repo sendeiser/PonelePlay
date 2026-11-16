@@ -27,7 +27,6 @@ interface ModalProps {
 export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
   const { queue, nowPlaying, blockedSongIds, proposeSong, cooldownRemaining } = usePartyPreview();
   const [query, setQuery] = useState('');
-  const [loadingSkeleton, setLoadingSkeleton] = useState(false);
 
   if (!open) return null;
 
@@ -54,88 +53,61 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
       role="dialog"
       aria-modal="true"
       aria-label="Buscar y proponer canción"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-0 backdrop-blur-sm sm:items-center sm:p-4"
     >
-      <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-stroke bg-card shadow-2xl sm:rounded-3xl">
+      <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-t-3xl border border-stroke bg-card shadow-elevated sm:rounded-3xl">
         <div className="flex items-center justify-between gap-3 border-b border-stroke px-4 py-3.5 sm:px-6">
           <div className="min-w-0">
-            <h2 className="font-display text-lg text-ink">Buscar o Pegar Link</h2>
+            <h2 className="font-display text-lg font-bold text-ink">Agregar Canción</h2>
             <p className="text-xs text-muted">
-              Compatible con texto, YouTube, YouTube Music y Spotify
+              Busca por nombre o pega un enlace de YouTube / Spotify
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar buscador"
-            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-stroke bg-elevated text-muted hover:text-ink"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-stroke bg-elevated text-muted hover:text-ink"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="space-y-3 p-4 sm:p-6">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neon" />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ej: Duki, María Becerra o pegá link..."
-                className="min-h-[44px] w-full rounded-xl border border-stroke bg-elevated pl-10 pr-10 text-sm text-ink placeholder:text-muted focus:border-brand"
-                autoFocus
-              />
-              {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  aria-label="Limpiar búsqueda"
-                  className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:text-ink"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setLoadingSkeleton(true);
-                window.setTimeout(() => setLoadingSkeleton(false), 700);
-              }}
-              className="min-h-[44px] shrink-0 rounded-xl border border-stroke bg-elevated px-3.5 text-xs font-semibold text-muted hover:text-ink"
-            >
-              Simular Carga
-            </button>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-brand" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Ej: Duki, María Becerra o pegá un link..."
+              className="min-h-[44px] w-full rounded-xl border border-stroke bg-elevated pl-10 pr-10 text-sm text-ink placeholder:text-muted focus:border-brand"
+              autoFocus
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Limpiar búsqueda"
+                className="absolute right-1 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:text-ink"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
           {cooldownRemaining > 0 && (
             <div className="rounded-xl border border-amber/40 bg-amber/10 px-3 py-2 text-xs font-medium text-amber">
-              Cooldown anti-spam activo: espera{' '}
-              <span className="tabular-nums-mono font-bold">{cooldownRemaining}s</span> para proponer un tema nuevo (puedes sumar +1 a temas ya en cola).
+              Espera <span className="tabular-nums-mono font-bold">{cooldownRemaining}s</span> para proponer otro tema nuevo.
             </div>
           )}
 
-          <div className="max-h-[52vh] space-y-2.5 overflow-y-auto pr-1">
-            {loadingSkeleton ? (
-              Array.from({ length: 4 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="flex animate-pulse items-center gap-3 rounded-2xl border border-stroke bg-elevated p-3"
-                >
-                  <div className="h-12 w-12 rounded-xl bg-card" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3.5 w-2/3 rounded bg-card" />
-                    <div className="h-3 w-1/3 rounded bg-card" />
-                  </div>
-                  <div className="h-10 w-24 rounded-xl bg-card" />
-                </div>
-              ))
-            ) : filtered.length === 0 ? (
+          <div className="max-h-[55vh] space-y-2.5 overflow-y-auto pr-1">
+            {filtered.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-stroke py-10 text-center">
                 <Music className="mx-auto h-8 w-8 text-muted" />
-                <p className="mt-2 text-sm font-medium text-ink">No encontramos canciones para "{query}"</p>
-                <p className="text-xs text-muted">Prueba otro artista o pega el enlace directo de YouTube / Spotify.</p>
+                <p className="mt-2 text-sm font-medium text-ink">Sin resultados para "{query}"</p>
+                <p className="text-xs text-muted">Prueba otro artista o pega el enlace directo.</p>
               </div>
             ) : (
               filtered.map((song) => {
@@ -152,14 +124,7 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
                         className="h-12 w-12 shrink-0 rounded-xl border border-stroke object-cover"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <p className="truncate text-sm font-semibold text-ink">{song.title}</p>
-                          {song.cached && (
-                            <span className="shrink-0 rounded bg-neon/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-neon">
-                              CACHÉ
-                            </span>
-                          )}
-                        </div>
+                        <p className="truncate text-sm font-semibold text-ink">{song.title}</p>
                         <p className="truncate text-xs text-muted">
                           {song.artist} · <span className="tabular-nums-mono">{formatDurationMs(song.durationMs)}</span>
                         </p>
@@ -171,7 +136,7 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
                         type="button"
                         disabled={cooldownRemaining > 0}
                         onClick={() => proposeSong(song)}
-                        className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl bg-neon px-3.5 text-xs font-bold text-on-neon shadow-neon-green disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand px-4 text-xs font-semibold text-on-brand disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Plus className="h-4 w-4" />
                         <span>Proponer</span>
@@ -182,7 +147,7 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
                       <button
                         type="button"
                         onClick={() => proposeSong(song)}
-                        className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl border border-neon/50 bg-neon/15 px-3 text-xs font-semibold text-neon hover:bg-neon/25"
+                        className="flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-full border border-brand/50 bg-brand-soft px-4 text-xs font-semibold text-brand"
                       >
                         <ThumbsUp className="h-4 w-4" />
                         <span>+1 Voto (En cola)</span>
@@ -190,13 +155,13 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
                     )}
 
                     {status === 'playing' && (
-                      <span className="inline-flex min-h-[44px] shrink-0 items-center rounded-xl border border-brand/40 bg-brand/20 px-3 text-xs font-semibold text-ink">
+                      <span className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full border border-stroke bg-card px-4 text-xs font-medium text-muted">
                         Sonando ahora
                       </span>
                     )}
 
                     {status === 'blocked' && (
-                      <span className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl border border-danger/40 bg-danger/15 px-3 text-xs font-semibold text-danger">
+                      <span className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-1 rounded-full border border-danger/40 bg-danger/10 px-4 text-xs font-medium text-danger">
                         <Ban className="h-3.5 w-3.5" />
                         <span>Bloqueada</span>
                       </span>
@@ -238,34 +203,34 @@ export const ShareQrModal: React.FC<ModalProps> = ({ open, onClose }) => {
       aria-label="Compartir sala y código QR"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-md rounded-3xl border border-stroke bg-card p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-display text-xl text-ink">Invitar a la Fiesta</h2>
+      <div className="w-full max-w-md rounded-3xl border border-stroke bg-card p-6 shadow-elevated">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="font-display text-xl font-bold text-ink">Invitar a la Fiesta</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal de compartir"
-            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-stroke bg-elevated text-muted hover:text-ink"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-stroke bg-elevated text-muted hover:text-ink"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <div className="flex flex-col items-center rounded-2xl border border-stroke bg-elevated p-5 text-center">
-          <div className="rounded-2xl bg-white p-3.5 shadow-lg">
+          <div className="rounded-2xl bg-white p-3.5 shadow-sm">
             <QRCodeSVG value={joinUrl} size={184} level="M" />
           </div>
           <p className="mt-4 text-xs font-medium text-muted">Código de sala (sin instalar nada)</p>
-          <p className="mt-1 font-display text-3xl tracking-[0.2em] text-neon">{room.code}</p>
+          <p className="mt-1 font-display text-3xl font-bold tracking-[0.2em] text-brand">{room.code}</p>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           <button
             type="button"
             onClick={copyLink}
-            className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-stroke bg-elevated px-4 text-sm font-semibold text-ink hover:border-brand"
+            className="flex min-h-[44px] items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-4 text-sm font-semibold text-ink hover:bg-canvas"
           >
-            {copied ? <Check className="h-4 w-4 text-neon" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="h-4 w-4 text-brand" /> : <Copy className="h-4 w-4" />}
             <span>{copied ? 'Copiado' : 'Copiar Enlace'}</span>
           </button>
 
@@ -273,7 +238,7 @@ export const ShareQrModal: React.FC<ModalProps> = ({ open, onClose }) => {
             href={`https://wa.me/?text=${encodeURIComponent(`¡Sumate a votar la música en ${room.name}! Entrá sin instalar nada: ${joinUrl}`)}`}
             target="_blank"
             rel="noreferrer"
-            className="flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-neon px-4 text-sm font-bold text-on-neon shadow-neon-green"
+            className="flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-on-brand"
           >
             <Share2 className="h-4 w-4" />
             <span>WhatsApp</span>
@@ -305,17 +270,17 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
       aria-label="Ajustes del Anfitrión"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
     >
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-stroke bg-card p-6 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-stroke bg-card p-6 shadow-elevated">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="font-display text-xl text-ink">Ajustes del Anfitrión</h2>
-            <p className="text-xs text-muted">Controla reglas anti-spam, Autoplay y motor</p>
+            <h2 className="font-display text-xl font-bold text-ink">Ajustes de Sala</h2>
+            <p className="text-xs text-muted">Reglas anti-spam, Autoplay y motor de audio</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar ajustes"
-            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-stroke bg-elevated text-muted hover:text-ink"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-stroke bg-elevated text-muted hover:text-ink"
           >
             <X className="h-5 w-5" />
           </button>
@@ -333,7 +298,7 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
               max={15}
               value={room.maxPendingPerUser}
               onChange={(e) => updateRoom({ maxPendingPerUser: Number(e.target.value) })}
-              className="w-full accent-neon"
+              className="w-full accent-brand"
             />
           </div>
 
@@ -349,7 +314,7 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
               step={5}
               value={room.cooldownSeconds}
               onChange={(e) => updateRoom({ cooldownSeconds: Number(e.target.value) })}
-              className="w-full accent-neon"
+              className="w-full accent-brand"
             />
           </div>
 
@@ -376,7 +341,7 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
               <div>
                 <p className="text-sm font-semibold text-ink">Spotify Premium OAuth PKCE</p>
                 <p className="text-xs text-muted">
-                  Opcional: YouTube Music funciona 100% sin cuenta Premium.
+                  Opcional: YouTube Music funciona sin cuenta Premium.
                 </p>
               </div>
               <button
@@ -384,13 +349,13 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
                 onClick={() => {
                   updateRoom({ spotifyConnected: !room.spotifyConnected });
                   toast.success(
-                    room.spotifyConnected ? 'Spotify desconectado' : 'Cuenta Spotify vinculada (Demo)'
+                    room.spotifyConnected ? 'Spotify desconectado' : 'Cuenta Spotify vinculada'
                   );
                 }}
-                className={`min-h-[44px] rounded-xl px-4 text-xs font-bold ${
+                className={`min-h-[44px] rounded-full px-4 text-xs font-semibold ${
                   room.spotifyConnected
-                    ? 'border border-neon/40 bg-neon/15 text-neon'
-                    : 'bg-brand text-white'
+                    ? 'border border-brand/50 bg-brand-soft text-brand'
+                    : 'bg-brand text-on-brand'
                 }`}
               >
                 {room.spotifyConnected ? 'Conectado' : 'Conectar Spotify'}
@@ -398,19 +363,19 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-danger/40 bg-danger/10 p-4">
+          <div className="rounded-2xl border border-danger/35 bg-danger/5 p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
               <div className="flex-1">
-                <h3 className="text-sm font-bold text-danger">Zona de Cierre de Fiesta</h3>
+                <h3 className="text-sm font-bold text-danger">Finalizar Fiesta</h3>
                 <p className="mt-1 text-xs text-muted">
-                  Al finalizar la sala se detiene la votación y todos ven el Podio de DJs y la exportación de playlist.
+                  Se cerrará la votación y todos podrán ver el Podio de DJs y exportar el tracklist.
                 </p>
                 {!confirmEnd ? (
                   <button
                     type="button"
                     onClick={() => setConfirmEnd(true)}
-                    className="mt-3 min-h-[44px] rounded-xl border border-danger bg-card px-4 text-xs font-bold text-danger hover:bg-danger hover:text-white"
+                    className="mt-3 min-h-[44px] rounded-full border border-danger bg-card px-4 text-xs font-semibold text-danger hover:bg-danger hover:text-white"
                   >
                     Finalizar Fiesta
                   </button>
@@ -419,14 +384,14 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
                     <button
                       type="button"
                       onClick={endParty}
-                      className="min-h-[44px] rounded-xl bg-danger px-4 text-xs font-bold text-white"
+                      className="min-h-[44px] rounded-full bg-danger px-4 text-xs font-semibold text-white"
                     >
                       Confirmar y Ver Resumen
                     </button>
                     <button
                       type="button"
                       onClick={() => setConfirmEnd(false)}
-                      className="min-h-[44px] rounded-xl border border-stroke bg-elevated px-4 text-xs font-semibold text-ink"
+                      className="min-h-[44px] rounded-full border border-stroke bg-elevated px-4 text-xs font-semibold text-ink"
                     >
                       Cancelar
                     </button>
@@ -451,48 +416,48 @@ export const AccountLinkModal: React.FC<ModalProps> = ({ open, onClose }) => {
       aria-label="Vincular cuenta opcional"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-md rounded-3xl border border-stroke bg-card p-6 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
+      <div className="w-full max-w-md rounded-3xl border border-stroke bg-card p-6 shadow-elevated">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-neon" />
-            <h2 className="font-display text-xl text-ink">Identidad Híbrida</h2>
+            <Sparkles className="h-5 w-5 text-brand" />
+            <h2 className="font-display text-xl font-bold text-ink">Tu Cuenta</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal de cuenta"
-            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-stroke bg-elevated text-muted hover:text-ink"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full border border-stroke bg-elevated text-muted hover:text-ink"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         <p className="text-sm text-muted">
-          Estás navegando con acceso instantáneo por sesión anónima segura (<code className="font-mono text-xs text-neon">auth.uid()</code>). Puedes vincular una cuenta para conservar tu historial y trofeos de DJ entre dispositivos.
+          Puedes usar PonelePlay sin registrarte o vincular tu cuenta para guardar tu historial de fiestas y premios de DJ entre dispositivos.
         </p>
 
         <div className="mt-5 space-y-2.5">
           <button
             type="button"
             onClick={() => {
-              toast.success('Cuenta vinculada con Google (Preview)');
+              toast.success('Cuenta vinculada con Google');
               onClose();
             }}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-slate-900 shadow"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-on-brand"
           >
-            <Link2 className="h-4 w-4 text-brand" />
+            <Link2 className="h-4 w-4" />
             <span>Continuar con Google</span>
           </button>
 
           <button
             type="button"
             onClick={() => {
-              toast.success('Magic Link enviado a tu correo (Preview)');
+              toast.success('Enlace mágico enviado a tu correo');
               onClose();
             }}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-stroke bg-elevated px-4 text-sm font-semibold text-ink hover:border-brand"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-4 text-sm font-semibold text-ink hover:bg-canvas"
           >
-            <span>Vincular con Email Magic Link</span>
+            <span>Vincular con Email</span>
           </button>
         </div>
       </div>

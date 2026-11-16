@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AlertOctagon,
   ArrowRight,
@@ -15,12 +15,20 @@ import { JoinEdgeState } from '../types/jukebox';
 
 export const JoinRoomPage: React.FC = () => {
   const { code = 'PLAY42' } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { room, setDemoRole } = usePartyPreview();
 
   const [nickname, setNickname] = useState('luqui');
   const [avatar, setAvatar] = useState('⚡');
-  const [edgeState, setEdgeState] = useState<JoinEdgeState>('active');
+
+  const paramState = searchParams.get('state');
+  const edgeState: JoinEdgeState =
+    paramState === 'ended' || paramState === 'banned' || paramState === 'not_found'
+      ? paramState
+      : !room.isActive
+      ? 'ended'
+      : 'active';
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,40 +38,15 @@ export const JoinRoomPage: React.FC = () => {
     }
     setDemoRole('guest');
     toast.success(`¡Bienvenido a ${room.name}, @${nickname.trim()}!`);
-    navigate(`/room/${code.toUpperCase()}`);
+    navigate(`/room/${code.toUpperCase()}?role=guest`);
   };
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-6 sm:px-6 sm:py-10">
-      {/* Conmutador de casos borde para verificación UI */}
-      <div className="mb-5 flex flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-stroke bg-card p-2">
-        {(
-          [
-            { id: 'active', label: 'Sala Activa' },
-            { id: 'ended', label: 'Finalizada' },
-            { id: 'banned', label: 'Expulsado' },
-            { id: 'not_found', label: 'No Encontrada' },
-          ] as const
-        ).map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setEdgeState(item.id)}
-            className={`min-h-[44px] rounded-xl px-3 text-xs font-semibold transition-colors ${
-              edgeState === item.id
-                ? 'bg-brand text-white'
-                : 'text-muted hover:bg-elevated hover:text-ink'
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-
+    <main className="mx-auto max-w-xl px-4 py-8 sm:px-6 sm:py-12">
       {edgeState === 'active' && (
-        <section className="rounded-3xl border border-stroke bg-card p-6 shadow-xl sm:p-8">
+        <section className="rounded-3xl border border-stroke bg-card p-6 shadow-elevated sm:p-8">
           <div className="space-y-2 border-b border-stroke pb-5 text-center">
-            <div className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-ytm/40 bg-ytm/10 px-3 py-1 text-xs font-semibold text-red-400">
+            <div className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand">
               <Music2 className="h-3.5 w-3.5" />
               <span>
                 {room.activeProvider === 'youtube_music'
@@ -72,10 +55,10 @@ export const JoinRoomPage: React.FC = () => {
               </span>
             </div>
 
-            <h1 className="font-display text-2xl text-ink sm:text-3xl">{room.name}</h1>
+            <h1 className="font-display text-2xl font-bold text-ink sm:text-3xl">{room.name}</h1>
             <p className="text-xs text-muted">
               Anfitrión: <strong className="text-ink">{room.hostName}</strong> · Sala{' '}
-              <span className="font-mono font-bold text-neon">{code.toUpperCase()}</span>
+              <span className="font-mono font-bold text-brand">{code.toUpperCase()}</span>
             </p>
           </div>
 
@@ -91,7 +74,7 @@ export const JoinRoomPage: React.FC = () => {
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
                 placeholder="Ej: Martu, Tincho, DJ Luqui..."
-                className="min-h-[48px] w-full rounded-xl border border-stroke bg-elevated px-4 text-sm text-ink focus:border-neon"
+                className="min-h-[48px] w-full rounded-xl border border-stroke bg-elevated px-4 text-sm text-ink focus:border-brand"
               />
             </div>
 
@@ -107,8 +90,8 @@ export const JoinRoomPage: React.FC = () => {
                     aria-pressed={avatar === emoji}
                     className={`flex min-h-[48px] min-w-[44px] items-center justify-center rounded-xl border text-xl transition-all ${
                       avatar === emoji
-                        ? 'border-neon bg-neon/15 shadow-neon-green'
-                        : 'border-stroke bg-elevated hover:border-brand'
+                        ? 'border-brand bg-brand-soft'
+                        : 'border-stroke bg-elevated hover:border-muted'
                     }`}
                   >
                     {emoji}
@@ -119,7 +102,7 @@ export const JoinRoomPage: React.FC = () => {
 
             <button
               type="submit"
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-neon px-5 text-sm font-bold text-on-neon shadow-neon-green transition-transform active:scale-[0.99]"
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-on-brand shadow-surface transition-opacity hover:opacity-95 active:scale-[0.99]"
             >
               <span>Entrar a Votar y Proponer</span>
               <ArrowRight className="h-4 w-4" />
@@ -129,8 +112,8 @@ export const JoinRoomPage: React.FC = () => {
           <div className="mt-5 border-t border-stroke pt-4 text-center">
             <button
               type="button"
-              onClick={() => toast.info('Modal de Google / Email disponible desde Cuenta en la barra superior')}
-              className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-muted hover:text-neon"
+              onClick={() => toast.info('Puedes vincular Google o Email desde el botón Cuenta arriba')}
+              className="inline-flex min-h-[44px] items-center gap-1.5 text-xs font-medium text-muted hover:text-brand"
             >
               <Link2 className="h-3.5 w-3.5" />
               <span>¿Ya tienes cuenta? Vincular Google o Email para guardar tu historial</span>
@@ -140,16 +123,16 @@ export const JoinRoomPage: React.FC = () => {
       )}
 
       {edgeState === 'ended' && (
-        <section className="rounded-3xl border border-stroke bg-card p-8 text-center shadow-xl">
+        <section className="rounded-3xl border border-stroke bg-card p-8 text-center shadow-elevated">
           <Trophy className="mx-auto h-12 w-12 text-amber" />
-          <h1 className="mt-4 font-display text-2xl text-ink">Esta fiesta ya terminó</h1>
+          <h1 className="mt-4 font-display text-2xl font-bold text-ink">Esta fiesta ya terminó</h1>
           <p className="mt-2 text-sm text-muted">
             La sala <strong className="font-mono text-ink">{code.toUpperCase()}</strong> fue cerrada por el anfitrión, pero ya está listo el podio de DJs y la playlist final.
           </p>
           <button
             type="button"
             onClick={() => navigate(`/room/${code}/summary`)}
-            className="mt-6 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-2xl bg-neon px-6 text-sm font-bold text-on-neon shadow-neon-green"
+            className="mt-6 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full bg-brand px-6 text-sm font-semibold text-on-brand shadow-surface"
           >
             <Trophy className="h-4 w-4" />
             <span>Ver Resumen de la Fiesta</span>
@@ -158,16 +141,16 @@ export const JoinRoomPage: React.FC = () => {
       )}
 
       {edgeState === 'banned' && (
-        <section className="rounded-3xl border border-danger/50 bg-card p-8 text-center shadow-xl">
+        <section className="rounded-3xl border border-danger/40 bg-card p-8 text-center shadow-elevated">
           <AlertOctagon className="mx-auto h-12 w-12 text-danger" />
-          <h1 className="mt-4 font-display text-2xl text-ink">Acceso restringido</h1>
+          <h1 className="mt-4 font-display text-2xl font-bold text-ink">Acceso restringido</h1>
           <p className="mt-2 text-sm text-muted">
             El anfitrión restringió tu participación en la sala <strong className="font-mono text-ink">{code.toUpperCase()}</strong>.
           </p>
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl border border-stroke bg-elevated px-5 text-sm font-semibold text-ink"
+            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-full border border-stroke bg-elevated px-5 text-sm font-semibold text-ink"
           >
             Volver al Inicio
           </button>
@@ -175,16 +158,16 @@ export const JoinRoomPage: React.FC = () => {
       )}
 
       {edgeState === 'not_found' && (
-        <section className="rounded-3xl border border-stroke bg-card p-8 text-center shadow-xl">
+        <section className="rounded-3xl border border-stroke bg-card p-8 text-center shadow-elevated">
           <SearchX className="mx-auto h-12 w-12 text-muted" />
-          <h1 className="mt-4 font-display text-2xl text-ink">Sala no encontrada</h1>
+          <h1 className="mt-4 font-display text-2xl font-bold text-ink">Sala no encontrada</h1>
           <p className="mt-2 text-sm text-muted">
             No existe ninguna sala con el código <strong className="font-mono text-ink">{code.toUpperCase()}</strong>. Verifica con el anfitrión.
           </p>
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold text-white"
+            className="mt-6 inline-flex min-h-[44px] items-center justify-center rounded-full bg-brand px-5 text-sm font-semibold text-on-brand"
           >
             Probar otro código
           </button>

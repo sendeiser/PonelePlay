@@ -56,8 +56,8 @@ fun TvHomeScreen(
     ) {
         Column {
             Text(
-                text = "PONELEPLAY TV · 10-FOOT UI",
-                color = PonelePlayTvColors.NeonGreen,
+                text = "PONELEPLAY TV",
+                color = PonelePlayTvColors.BrandCrimson,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -98,7 +98,7 @@ fun TvHomeScreen(
                             ) {
                                 Text(
                                     text = ch.toString(),
-                                    color = PonelePlayTvColors.NeonGreen,
+                                    color = PonelePlayTvColors.BrandCrimson,
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -109,13 +109,13 @@ fun TvHomeScreen(
                     Button(
                         onClick = { onConnectRoom(initialCode) },
                         colors = ButtonDefaults.colors(
-                            containerColor = PonelePlayTvColors.NeonGreen,
-                            contentColor = PonelePlayTvColors.OnNeonGreen,
+                            containerColor = PonelePlayTvColors.BrandCrimson,
+                            contentColor = PonelePlayTvColors.OnBrandCrimson,
                             focusedContainerColor = Color.White,
-                            focusedContentColor = PonelePlayTvColors.OnNeonGreen
+                            focusedContentColor = PonelePlayTvColors.BgCanvas
                         ),
                         border = ButtonDefaults.border(
-                            focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.NeonGreen))
+                            focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.BrandCrimson))
                         )
                     ) {
                         Text("OK · Conectar a $initialCode", fontWeight = FontWeight.Bold)
@@ -131,7 +131,7 @@ fun TvHomeScreen(
             ) {
                 Column(verticalArrangement = Arrangement.SpaceBetween) {
                     Text(
-                        text = "Crear Sala desde esta TV",
+                        text = "Crear Sala Nueva en esta TV",
                         color = PonelePlayTvColors.TextPrimary,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
@@ -146,10 +146,10 @@ fun TvHomeScreen(
                     Button(
                         onClick = onCreateTvRoom,
                         colors = ButtonDefaults.colors(
-                            containerColor = PonelePlayTvColors.BrandIndigo,
+                            containerColor = PonelePlayTvColors.BgElevated,
                             contentColor = PonelePlayTvColors.TextPrimary,
-                            focusedContainerColor = PonelePlayTvColors.NeonGreen,
-                            focusedContentColor = PonelePlayTvColors.OnNeonGreen
+                            focusedContainerColor = PonelePlayTvColors.BrandCrimson,
+                            focusedContentColor = PonelePlayTvColors.OnBrandCrimson
                         )
                     ) {
                         Text("Crear Sala Ahora", fontWeight = FontWeight.Bold)
@@ -160,7 +160,7 @@ fun TvHomeScreen(
 
         Column {
             Text(
-                text = "Salas Recientes (Navegación D-Pad)",
+                text = "Salas Recientes",
                 color = PonelePlayTvColors.TextMuted,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold
@@ -175,13 +175,13 @@ fun TvHomeScreen(
                             focusedContainerColor = PonelePlayTvColors.BgElevated
                         ),
                         border = ClickableSurfaceDefaults.border(
-                            focusedBorder = Border(BorderStroke(2.dp, PonelePlayTvColors.NeonGreen))
+                            focusedBorder = Border(BorderStroke(2.dp, PonelePlayTvColors.BrandCrimson))
                         ),
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text(room.name, color = PonelePlayTvColors.TextPrimary, fontWeight = FontWeight.Bold)
-                            Text("Código ${room.code} · Host ${room.host}", color = PonelePlayTvColors.NeonGreen, fontSize = 13.sp)
+                            Text("Código ${room.code} · Host ${room.host}", color = PonelePlayTvColors.BrandCrimson, fontSize = 13.sp)
                         }
                     }
                 }

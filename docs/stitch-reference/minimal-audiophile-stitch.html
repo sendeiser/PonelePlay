@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
+<title>PonelePlay V2 - Jukebox Colaborativa</title>
+<!-- Google Fonts & Material Symbols -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&amp;family=Outfit:wght@400;500;600;700;800&amp;family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-primary-fixed": "#40000c",
+            "error": "#ffb4ab",
+            "inverse-on-surface": "#313032",
+            "on-surface": "#e5e1e4",
+            "on-tertiary-fixed": "#002115",
+            "inverse-primary": "#be0036",
+            "outline": "#ad8888",
+            "secondary-fixed-dim": "#c6c6cf",
+            "surface-bright": "#39393b",
+            "surface-container-lowest": "#0e0e10",
+            "on-tertiary": "#003826",
+            "surface": "#131315",
+            "primary-fixed": "#ffdada",
+            "surface-container-highest": "#353437",
+            "on-primary": "#680019",
+            "on-secondary": "#2f3037",
+            "primary-container": "#ff5167",
+            "surface-container-high": "#2a2a2c",
+            "on-primary-container": "#5b0015",
+            "tertiary-fixed": "#82f9c6",
+            "on-secondary-fixed": "#1a1b22",
+            "secondary-container": "#45464e",
+            "on-error": "#690005",
+            "on-tertiary-container": "#003121",
+            "tertiary-container": "#1fa478",
+            "surface-variant": "#353437",
+            "secondary": "#c6c6cf",
+            "surface-tint": "#ffb3b5",
+            "on-secondary-container": "#b4b4bd",
+            "on-error-container": "#ffdad6",
+            "on-secondary-fixed-variant": "#45464e",
+            "surface-container-low": "#1c1b1d",
+            "on-background": "#e5e1e4",
+            "primary": "#ffb3b5",
+            "inverse-surface": "#e5e1e4",
+            "on-primary-fixed-variant": "#920027",
+            "secondary-fixed": "#e2e1eb",
+            "surface-dim": "#131315",
+            "on-surface-variant": "#e6bcbd",
+            "error-container": "#93000a",
+            "outline-variant": "#5d3f40",
+            "surface-container": "#201f22",
+            "background": "#131315",
+            "tertiary-fixed-dim": "#65dcab",
+            "on-tertiary-fixed-variant": "#005139",
+            "primary-fixed-dim": "#ffb3b5",
+            "tertiary": "#65dcab"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "margin-desktop": "2.5rem",
+            "space-sm": "0.5rem",
+            "space-lg": "1.5rem",
+            "margin-tablet": "1.5rem",
+            "space-xl": "2.5rem",
+            "gutter-desktop": "1.5rem",
+            "gutter": "1rem",
+            "space-xs": "0.25rem",
+            "space-md": "1rem",
+            "margin": "1rem"
+          },
+          "fontFamily": {
+            "display": ["Outfit"],
+            "title-code": ["Outfit"],
+            "body-sm": ["Plus Jakarta Sans"],
+            "headline-lg-mobile": ["Outfit"],
+            "display-mobile": ["Outfit"],
+            "metric-mono": ["JetBrains Mono"],
+            "headline-lg": ["Outfit"],
+            "body-lg": ["Plus Jakarta Sans"],
+            "label-mono": ["JetBrains Mono"],
+            "headline-md": ["Outfit"],
+            "body-md": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "display": ["40px", { "lineHeight": "48px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "title-code": ["24px", { "lineHeight": "28px", "letterSpacing": "0.08em", "fontWeight": "700" }],
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "headline-lg-mobile": ["22px", { "lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+            "display-mobile": ["30px", { "lineHeight": "36px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+            "metric-mono": ["11px", { "lineHeight": "14px", "letterSpacing": "0.04em", "fontWeight": "400" }],
+            "headline-lg": ["28px", { "lineHeight": "34px", "letterSpacing": "-0.015em", "fontWeight": "600" }],
+            "body-lg": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "label-mono": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "500" }],
+            "headline-md": ["20px", { "lineHeight": "26px", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      background-color: #09090B;
+      color: #FAFAFA;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+    .carbon-border {
+      border: 1px solid #27272A;
+    }
+    .carbon-border-b {
+      border-bottom: 1px solid #27272A;
+    }
+    .carbon-border-t {
+      border-top: 1px solid #27272A;
+    }
+    .carbon-card {
+      background-color: #121215;
+      border: 1px solid #27272A;
+    }
+    .carbon-panel {
+      background-color: #1C1C21;
+      border: 1px solid #27272A;
+    }
+    .accent-crimson {
+      color: #FF2D55;
+    }
+    .bg-crimson {
+      background-color: #FF2D55;
+    }
+    /* Hide scrollbars for clean audiophile presentation */
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col antialiased selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar (from Shared Components JSON) -->
+<header class="sticky top-0 z-40 bg-surface/95 backdrop-blur-md border-b border-outline-variant/30">
+<div class="flex justify-between items-center w-full px-4 h-14 max-w-7xl mx-auto">
+<!-- Brand & Left Info -->
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="speaker_group">speaker_group</span>
+<div class="flex flex-col">
+<span class="text-headline-md font-headline-md font-bold tracking-tight text-on-surface">PonelePlay V2</span>
+</div>
+</div>
+<!-- Center Status / Device Context (Subtle Audiophile metadata) -->
+<div class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-surface-container border border-outline-variant/30">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span>
+<span class="font-label-mono text-label-mono text-secondary">Smart TV Living</span>
+<span class="text-outline-variant">â€¢</span>
+<span class="font-metric-mono text-metric-mono text-on-surface-variant font-medium">320kbps AAC</span>
+</div>
+<!-- Trailing Action: Room Code -->
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-low border border-outline-variant/30">
+<span class="font-metric-mono text-metric-mono text-secondary">SALA</span>
+<span class="font-label-mono text-label-mono font-bold tracking-wider text-primary">PLAY42</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Sub-header Room Context for Mobile -->
+<div class="sm:hidden px-4 py-2 bg-surface-container-lowest border-b border-outline-variant/20 flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-secondary text-sm" data-icon="cast">cast</span>
+<span class="font-body-sm text-body-sm text-secondary">Living Tincho â€¢ Smart TV</span>
+</div>
+<span class="font-metric-mono text-metric-mono px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant/20 text-on-surface-variant">FLAC 48kHz</span>
+</div>
+<!-- Main Content Layout -->
+<main class="flex-1 max-w-4xl w-full mx-auto px-4 pt-4 pb-28 space-y-4">
+<!-- Section: Sonando Ahora (Now Playing Audiophile Card) -->
+<section>
+<div class="flex items-center justify-between mb-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-crimson animate-pulse"></span>
+<h2 class="font-label-mono text-label-mono tracking-wider uppercase text-secondary font-semibold">Sonando Ahora</h2>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="font-metric-mono text-metric-mono px-2 py-0.5 rounded carbon-panel text-on-surface-variant">Host sync: 100%</span>
+</div>
+</div>
+<div class="carbon-card rounded-xl p-4 transition-all duration-200">
+<div class="flex gap-4 items-center">
+<!-- Album Artwork 88x88 -->
+<div class="relative w-[88px] h-[88px] flex-shrink-0 rounded-lg overflow-hidden carbon-border">
+<img class="w-full h-full object-cover" data-alt="A vivid synthwave retro-futuristic metropolis album cover featuring glowing neon grids, towering skyscrapers under an intense violet sky, and sleek aerodynamic sports cars cruising damp reflective asphalt in high-contrast matte presentation." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9v4E_QZEK8XBNrYgW7S7i_E5s4vU6eHqOrc6FGZVJS4TYQNe8tXSdesZsDPAl1FaNSDQgA44GZCT51LIUYZrWgHBnqTOrcEt44QCM6UDjrbw56J2lfEoM7YWocklMvp_RzgSz8dCzwA3ojnzbO2lDU2vL9y5p9qWElwMSEFpKheUikQYmV6hygp7MoVz2OZ958XvFTw0aOCOFYsnrKAkmH7kDC0aykicvHVXbpczQUEgqsp0V-j_KAP2cdkZ4IezQsS820DwDvgQ"/>
+<div class="absolute bottom-1 right-1 bg-surface-container-lowest/80 backdrop-blur-sm px-1 rounded font-metric-mono text-[9px] text-on-surface">
+              HQ
+            </div>
+</div>
+<!-- Metadata & Master Controls -->
+<div class="flex-1 min-w-0 flex flex-col justify-center">
+<div class="flex items-start justify-between gap-2">
+<div class="truncate">
+<h3 class="font-headline-md text-headline-md font-bold text-on-surface truncate">Neon Pulse</h3>
+<p class="font-body-md text-body-md text-secondary truncate">Synthwave Dreams</p>
+<div class="flex items-center gap-1.5 mt-0.5">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="account_circle">account_circle</span>
+<span class="font-metric-mono text-metric-mono text-secondary truncate">AÃ±adido por @martina</span>
+</div>
+</div>
+<!-- Main Playback Actions -->
+<div class="flex items-center gap-1.5 flex-shrink-0">
+<button aria-label="Anterior" class="w-8 h-8 rounded flex items-center justify-center text-secondary hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="skip_previous">skip_previous</span>
+</button>
+<button aria-label="Pausa" class="w-11 h-11 rounded-full bg-crimson hover:bg-crimson/90 active:scale-95 text-white flex items-center justify-center transition-transform" type="button">
+<span class="material-symbols-outlined text-2xl" data-icon="pause" data-weight="fill" style="font-variation-settings: 'FILL' 1;">pause</span>
+</button>
+<button aria-label="Siguiente" class="w-8 h-8 rounded flex items-center justify-center text-secondary hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="skip_next">skip_next</span>
+</button>
+</div>
+</div>
+<!-- Progress Bar & Timestamps -->
+<div class="mt-3">
+<div class="relative w-full h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="absolute left-0 top-0 bottom-0 bg-crimson rounded-full" style="width: 52%;"></div>
+</div>
+<div class="flex justify-between items-center mt-1 font-metric-mono text-metric-mono text-secondary">
+<span>01:48</span>
+<span>03:24</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Micro Reactions Footer inside Card -->
+<div class="mt-3 pt-3 border-t border-outline-variant/20 flex items-center justify-between">
+<div class="flex items-center gap-1.5">
+<button class="carbon-panel hover:border-outline px-2.5 py-1 rounded flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span class="text-xs">ðŸ”¥</span>
+<span class="font-metric-mono text-metric-mono font-medium text-on-surface">14</span>
+</button>
+<button class="carbon-panel hover:border-outline px-2.5 py-1 rounded flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span class="text-xs">â¤ï¸</span>
+<span class="font-metric-mono text-metric-mono font-medium text-on-surface">9</span>
+</button>
+<button class="carbon-panel hover:border-outline px-2.5 py-1 rounded flex items-center gap-1.5 active:scale-95 transition-all" type="button">
+<span class="text-xs">âš¡</span>
+<span class="font-metric-mono text-metric-mono font-medium text-on-surface">6</span>
+</button>
+</div>
+<div class="flex items-center gap-3 text-secondary">
+<button class="hover:text-primary transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-base" data-icon="volume_up">volume_up</span>
+<span class="font-metric-mono text-metric-mono">75%</span>
+</button>
+<button class="hover:text-primary transition-colors" type="button">
+<span class="material-symbols-outlined text-base" data-icon="share">share</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Section: Search & Input Console -->
+<section class="space-y-3">
+<!-- Search Input Bar -->
+<div class="relative carbon-card rounded-lg flex items-center focus-within:border-primary transition-colors">
+<span class="material-symbols-outlined pl-3.5 text-secondary text-lg" data-icon="search">search</span>
+<input class="w-full bg-transparent py-3 px-3 font-body-md text-body-md text-on-surface placeholder:text-secondary focus:outline-none border-none focus:ring-0" placeholder="Buscar canciÃ³n o pegar link de YouTube / Spotify..." type="text"/>
+<div class="pr-2 flex items-center gap-1.5">
+<button class="carbon-panel hover:border-outline text-secondary hover:text-on-surface px-2.5 py-1 rounded font-label-mono text-label-mono flex items-center gap-1 transition-colors" type="button">
+<span class="material-symbols-outlined text-xs" data-icon="content_paste">content_paste</span>
+<span>Pegar</span>
+</button>
+</div>
+</div>
+<!-- Quota Counter Bar & Segmented Progress -->
+<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-surface-container-low border border-outline-variant/30 text-secondary">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="queue_music">queue_music</span>
+<span class="font-body-sm text-body-sm text-on-surface">Tus pedidos restantes: <strong class="text-primary font-bold">2/5</strong></span>
+</div>
+<div class="flex items-center gap-1">
+<span class="w-4 h-1.5 rounded-sm bg-crimson"></span>
+<span class="w-4 h-1.5 rounded-sm bg-crimson"></span>
+<span class="w-4 h-1.5 rounded-sm bg-surface-container-high"></span>
+<span class="w-4 h-1.5 rounded-sm bg-surface-container-high"></span>
+<span class="w-4 h-1.5 rounded-sm bg-surface-container-high"></span>
+</div>
+</div>
+</section>
+<!-- Section: Queue Tabs & List Header -->
+<section>
+<!-- Queue Segment Tabs -->
+<div class="flex items-center justify-between border-b border-outline-variant/30 mb-3 pb-1">
+<div class="flex items-center gap-4">
+<button class="relative pb-2 font-headline-md text-headline-md font-semibold text-primary transition-colors" type="button">
+            Cola en Vivo (8)
+            <span class="absolute bottom-0 left-0 right-0 h-0.5 bg-crimson rounded-full"></span>
+</button>
+<button class="pb-2 font-headline-md text-headline-md font-medium text-secondary hover:text-on-surface transition-colors" type="button">
+            Ya Sonaron (14)
+          </button>
+<button class="pb-2 font-headline-md text-headline-md font-medium text-secondary hover:text-on-surface transition-colors" type="button">
+            Participantes (19)
+          </button>
+</div>
+<button class="text-secondary hover:text-primary transition-colors flex items-center gap-1" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="swap_vert">swap_vert</span>
+<span class="font-metric-mono text-metric-mono">Votos</span>
+</button>
+</div>
+<!-- Ranked Song Queue List -->
+<div class="space-y-2.5">
+<!-- Track Rank #1 (Pinned Next) -->
+<div class="carbon-card rounded-xl p-3.5 flex items-center justify-between gap-3 relative overflow-hidden group hover:border-surface-bright transition-all">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-crimson"></div>
+<div class="flex items-center gap-3 min-w-0">
+<!-- Rank Tag & Artwork -->
+<div class="flex items-center gap-2">
+<span class="font-label-mono text-label-mono font-bold text-primary w-4 text-center">01</span>
+<div class="w-12 h-12 rounded-lg overflow-hidden carbon-border flex-shrink-0 relative">
+<img class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/ALJJyrBndl4pNEoKcvN5eYvWrauNPqeosXCSDtwlCkNttG6rbtPddwSainbk_w00Z23yxkl55vlY-BqSWthcrVkviDLLhtsNrheXwioL-IynJQsdfPqcxM7oCxY8eCkuuJXjW2TjA2JEwAfuKNgKxirD211KVQ92P0YvMFUGwOtelbCf_EGl_-kDMIxm_lGUA9N7yPYoEUMdv5xKPK5Axu7uffk3mOdSUilT46tC_pBeNVgh7hWYOGfzOnmzyQ"/>
+<div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-base" data-icon="play_arrow">play_arrow</span>
+</div>
+</div>
+</div>
+<!-- Track Info -->
+<div class="min-w-0">
+<div class="flex items-center gap-2">
+<h4 class="font-body-lg text-body-lg font-bold text-on-surface truncate">Neon RebeliÃ³n</h4>
+<span class="font-metric-mono text-[10px] px-1.5 py-0.2 rounded bg-primary-container/20 text-primary border border-primary/30 uppercase">Siguiente</span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary truncate">Luna Nova â€¢ <span class="font-metric-mono text-metric-mono">En 01:36</span></p>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[11px] text-secondary" data-icon="person">person</span>
+<span class="font-metric-mono text-metric-mono text-secondary">Pedido por @gonza</span>
+</div>
+</div>
+</div>
+<!-- Upvote/Downvote Pill Vertical -->
+<div class="flex flex-col items-center justify-between py-1 px-1.5 rounded-lg carbon-panel flex-shrink-0 min-w-[44px]">
+<button aria-label="Upvote" class="w-7 h-6 flex items-center justify-center text-primary active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up" data-weight="fill" style="font-variation-settings: 'FILL' 1;">keyboard_arrow_up</span>
+</button>
+<span class="font-metric-mono text-label-mono font-bold text-primary">12</span>
+<button aria-label="Downvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-on-surface active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+<!-- Track Rank #2 -->
+<div class="carbon-card rounded-xl p-3.5 flex items-center justify-between gap-3 hover:border-surface-bright transition-all">
+<div class="flex items-center gap-3 min-w-0">
+<!-- Rank Tag & Artwork -->
+<div class="flex items-center gap-2">
+<span class="font-label-mono text-label-mono font-medium text-secondary w-4 text-center">02</span>
+<div class="w-12 h-12 rounded-lg overflow-hidden carbon-border flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Dark stylized acoustic concert album cover showing a female pop artist bathed in dramatic stage spotlight with minimal moody shadows in deep neutral black." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUk2ijuLhLiIh5rFKQVablf3bIWQ03B2iVz5hIHR1WkwSMgpoPACQZg6hCLO5Ak20I2bmGspeLC7qLj8gM2QYzKmeD8dCHzyRSDAIoPN8XMybu_JVjhLt1NCb8iJtBdjq2N1wM46A9D35xBnyq4so2rExLssBaNt2LBBZPXwwLZu78GeF2UN3DW_jL6GbrnAvlWukqujdt_H0DGhxtaM73MZxhdo4QapTOl7oDO3z_mbHPEHidMy0mU7-ZidaUVdEfkwCgk0pYc2c"/>
+</div>
+</div>
+<!-- Track Info -->
+<div class="min-w-0">
+<h4 class="font-body-lg text-body-lg font-bold text-on-surface truncate">AutomÃ¡tico</h4>
+<p class="font-body-sm text-body-sm text-secondary truncate">Maria Becerra</p>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[11px] text-secondary" data-icon="person">person</span>
+<span class="font-metric-mono text-metric-mono text-secondary">Pedido por @flor</span>
+</div>
+</div>
+</div>
+<!-- Upvote/Downvote Pill Vertical -->
+<div class="flex flex-col items-center justify-between py-1 px-1.5 rounded-lg carbon-panel flex-shrink-0 min-w-[44px]">
+<button aria-label="Upvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-primary active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up">keyboard_arrow_up</span>
+</button>
+<span class="font-metric-mono text-label-mono font-medium text-on-surface">8</span>
+<button aria-label="Downvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-on-surface active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+<!-- Track Rank #3 -->
+<div class="carbon-card rounded-xl p-3.5 flex items-center justify-between gap-3 hover:border-surface-bright transition-all">
+<div class="flex items-center gap-3 min-w-0">
+<!-- Rank Tag & Artwork -->
+<div class="flex items-center gap-2">
+<span class="font-label-mono text-label-mono font-medium text-secondary w-4 text-center">03</span>
+<div class="w-12 h-12 rounded-lg overflow-hidden carbon-border flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Monochrome studio portrait of an urban hip hop musician wearing a hoodie, cast against an intensely dark carbon texture background with soft rim lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-cwNFISHfbN4EpN6bi4Ct6A3RLYEu--7uCzt3d234QbHSW_oQgDkffq3yKW0bYtBxnbCaTvKQxmZP3MdxvZOBFV3Gs9gEziG4yl_TlSex7MrwX5KhR9dvl3t_Uqa8zHu0f4MxczBQFeGbFBK2hX7Q46K_ewSSXl5rrubRXIzLmxewcC4mlP8I9J6B0qVBOlykaDf6WKTgDqCqEN746tQhPjkeic9xuDF_gfjUlb2f8fjThR08NOlZRNW_jJFwaTlZ_Ol23rtSmBI"/>
+</div>
+</div>
+<!-- Track Info -->
+<div class="min-w-0">
+<h4 class="font-body-lg text-body-lg font-bold text-on-surface truncate">RincÃ³n de la Noche</h4>
+<p class="font-body-sm text-body-sm text-secondary truncate">Duki</p>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[11px] text-secondary" data-icon="person">person</span>
+<span class="font-metric-mono text-metric-mono text-secondary">Pedido por @mati</span>
+</div>
+</div>
+</div>
+<!-- Upvote/Downvote Pill Vertical -->
+<div class="flex flex-col items-center justify-between py-1 px-1.5 rounded-lg carbon-panel flex-shrink-0 min-w-[44px]">
+<button aria-label="Upvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-primary active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up">keyboard_arrow_up</span>
+</button>
+<span class="font-metric-mono text-label-mono font-medium text-on-surface">5</span>
+<button aria-label="Downvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-on-surface active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+<!-- Track Rank #4 -->
+<div class="carbon-card rounded-xl p-3.5 flex items-center justify-between gap-3 hover:border-surface-bright transition-all">
+<div class="flex items-center gap-3 min-w-0">
+<!-- Rank Tag & Artwork -->
+<div class="flex items-center gap-2">
+<span class="font-label-mono text-label-mono font-medium text-secondary w-4 text-center">04</span>
+<div class="w-12 h-12 rounded-lg overflow-hidden carbon-border flex-shrink-0 bg-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="Abstract audiophile waveform graphic with subtle crimson gradients over deep black carbon canvas representing ambient electronic dream-pop music." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA4A03lMA3TV8yPbEGqHxeHEYpNq-yIvX52x3Wu7A65O3Iaxz3INPQHpf0qEbtiSpFqG0gyDzauoOcBTMM2k9X-Uy7D_rMGae-nnOcqNl9Ec09Jjs4CAr5vsPadw4WnFExq19zR4oDhaUwmAi7kbU2Z7H40LNeNh2BDkH1YlhMWNTlQFhf7iCP8AtGiJ0zWmrGbLNGeNwrKgQJUV2vsWyPywkvfODb2cnMdBfLl2k0oZ5HgXRiqhwEtRYU8cmgdRPElWvKGwuMaMfc"/>
+</div>
+</div>
+<!-- Track Info -->
+<div class="min-w-0">
+<h4 class="font-body-lg text-body-lg font-bold text-on-surface truncate">Midnight City</h4>
+<p class="font-body-sm text-body-sm text-secondary truncate">M83</p>
+<div class="flex items-center gap-1 mt-0.5">
+<span class="material-symbols-outlined text-[11px] text-secondary" data-icon="person">person</span>
+<span class="font-metric-mono text-metric-mono text-secondary">Pedido por @sofia</span>
+</div>
+</div>
+</div>
+<!-- Upvote/Downvote Pill Vertical -->
+<div class="flex flex-col items-center justify-between py-1 px-1.5 rounded-lg carbon-panel flex-shrink-0 min-w-[44px]">
+<button aria-label="Upvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-primary active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_up">keyboard_arrow_up</span>
+</button>
+<span class="font-metric-mono text-label-mono font-medium text-on-surface">3</span>
+<button aria-label="Downvote" class="w-7 h-6 flex items-center justify-center text-secondary hover:text-on-surface active:scale-90 transition-transform" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="keyboard_arrow_down">keyboard_arrow_down</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Add Track Action (FAB) aligned with screen purpose -->
+<div class="fixed bottom-20 right-4 z-40">
+<button class="bg-crimson hover:bg-crimson/90 text-white font-headline-md font-medium text-sm px-4 py-2.5 rounded-full flex items-center gap-2 shadow-lg active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="add">add</span>
+<span>+ Agregar Tema</span>
+</button>
+</div>
+<!-- BottomNavBar (from Shared Components JSON: Queue, History, Attendees) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 py-2 bg-surface-container-low/95 backdrop-blur-md border-t border-outline-variant/20">
+<!-- Queue Destination (Active: closest match to current live jukebox queue) -->
+<button class="flex flex-col items-center justify-center text-primary py-1 active:scale-95 transition-transform" type="button">
+<span class="material-symbols-outlined text-2xl" data-icon="queue_music" data-weight="fill" style="font-variation-settings: 'FILL' 1;">queue_music</span>
+<span class="font-metric-mono text-metric-mono mt-0.5">Queue</span>
+</button>
+<!-- History Destination -->
+<button class="flex flex-col items-center justify-center text-secondary hover:text-on-surface py-1 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-2xl" data-icon="history">history</span>
+<span class="font-metric-mono text-metric-mono mt-0.5">History</span>
+</button>
+<!-- Attendees Destination -->
+<button class="flex flex-col items-center justify-center text-secondary hover:text-on-surface py-1 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-2xl" data-icon="group">group</span>
+<span class="font-metric-mono text-metric-mono mt-0.5">Attendees</span>
+</button>
+</nav>
+</body></html>

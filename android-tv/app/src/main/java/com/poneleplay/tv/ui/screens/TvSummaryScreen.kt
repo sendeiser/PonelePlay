@@ -56,7 +56,7 @@ fun TvSummaryScreen(
                     Text(rank, color = PonelePlayTvColors.AmberGold, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(user, color = PonelePlayTvColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text(pts, color = PonelePlayTvColors.NeonGreen, fontSize = 18.sp)
+                    Text(pts, color = PonelePlayTvColors.BrandCrimson, fontSize = 18.sp)
                 }
             }
         }

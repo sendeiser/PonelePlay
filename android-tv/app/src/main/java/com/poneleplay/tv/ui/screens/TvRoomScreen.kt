@@ -51,13 +51,13 @@ fun TvRoomScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (audioOnTv) "MODO A: AUDIO EN PARLANTES DEL TV (YT MUSIC SIN PREMIUM)" else "MODO B: SOLO PANTALLA VISUAL SINCRONIZADA",
-                color = PonelePlayTvColors.NeonGreen,
+                text = if (audioOnTv) "AUDIO EN PARLANTES DEL TV · YOUTUBE MUSIC SIN PREMIUM" else "SOLO PANTALLA SINCRONIZADA",
+                color = PonelePlayTvColors.BrandCrimson,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Sala $roomCode · D-Pad Control",
+                text = "Sala $roomCode",
                 color = PonelePlayTvColors.TextMuted,
                 fontSize = 14.sp
             )
@@ -68,7 +68,6 @@ fun TvRoomScreen(
             horizontalArrangement = Arrangement.spacedBy(28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Panel Izquierdo: Portada HD (Video oculto) + Progreso
             Row(
                 modifier = Modifier
                     .weight(1.25f)
@@ -80,14 +79,14 @@ fun TvRoomScreen(
                 Box(
                     modifier = Modifier
                         .size(210.dp)
-                        .background(PonelePlayTvColors.BrandIndigo, RoundedCornerShape(20.dp)),
+                        .background(PonelePlayTvColors.BgElevated, RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("PORTADA HD", color = Color.White, fontWeight = FontWeight.Bold)
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("SONANDO AHORA", color = PonelePlayTvColors.NeonGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("SONANDO AHORA", color = PonelePlayTvColors.BrandCrimson, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text("Neon Pulse (Night City)", color = PonelePlayTvColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                     Text("Synthwave Dreams · @martina", color = PonelePlayTvColors.TextMuted, fontSize = 18.sp)
@@ -96,7 +95,6 @@ fun TvRoomScreen(
                 }
             }
 
-            // Panel Derecho: QR Gigante + Top 5 Cola
             Column(
                 modifier = Modifier
                     .weight(0.95f)
@@ -104,23 +102,23 @@ fun TvRoomScreen(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("ESCANEÁ PARA VOTAR · $roomCode", color = PonelePlayTvColors.NeonGreen, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("ESCANEÁ PARA VOTAR · $roomCode", color = PonelePlayTvColors.BrandCrimson, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text("#1 Neon Rebelión (+14) 📌", color = PonelePlayTvColors.TextPrimary, fontSize = 16.sp)
                 Text("#2 Automático — María Becerra (+9)", color = PonelePlayTvColors.TextMuted, fontSize = 15.sp)
                 Text("#3 Rincón de la Noche — Duki (+4)", color = PonelePlayTvColors.TextMuted, fontSize = 15.sp)
             }
         }
 
-        // Controles D-Pad en la parte inferior
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Button(
                 onClick = {},
                 colors = ButtonDefaults.colors(
-                    containerColor = PonelePlayTvColors.NeonGreen,
-                    contentColor = PonelePlayTvColors.OnNeonGreen,
-                    focusedContainerColor = Color.White
+                    containerColor = PonelePlayTvColors.BrandCrimson,
+                    contentColor = PonelePlayTvColors.OnBrandCrimson,
+                    focusedContainerColor = Color.White,
+                    focusedContentColor = PonelePlayTvColors.BgCanvas
                 ),
-                border = ButtonDefaults.border(focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.NeonGreen)))
+                border = ButtonDefaults.border(focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.BrandCrimson)))
             ) {
                 Text("Play / Pause", fontWeight = FontWeight.Bold)
             }
