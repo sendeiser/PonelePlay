@@ -31,9 +31,9 @@ export const PonelePlayLogo: React.FC<PonelePlayLogoProps> = ({
       >
         <defs>
           <linearGradient id={`${gradId}-bg`} x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#6366F1" />
-            <stop offset="52%" stopColor="#EC4899" />
-            <stop offset="100%" stopColor="#F97316" />
+            <stop offset="0%" stopColor="#4F46E5" />
+            <stop offset="52%" stopColor="#2563EB" />
+            <stop offset="100%" stopColor="#06B6D4" />
           </linearGradient>
           <linearGradient id={`${gradId}-sheen`} x1="12" y1="4" x2="36" y2="26" gradientUnits="userSpaceOnUse">
             <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.42" />

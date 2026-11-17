@@ -117,9 +117,9 @@ export const LandingPage: React.FC = () => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="eq-bar h-2.5 w-0.5 rounded-full bg-white" />
-                        <span className="eq-bar eq-bar-2 h-3.5 w-0.5 rounded-full bg-pink-400" />
-                        <span className="eq-bar eq-bar-3 h-2 w-0.5 rounded-full bg-orange-400" />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-pink-300">
+                        <span className="eq-bar eq-bar-2 h-3.5 w-0.5 rounded-full bg-sky-400" />
+                        <span className="eq-bar eq-bar-3 h-2 w-0.5 rounded-full bg-emerald-400" />
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-cyan-300">
                           En vivo · PLAY42
                         </span>
                       </div>
