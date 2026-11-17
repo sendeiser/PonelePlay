@@ -13,6 +13,7 @@ import {
   Tv,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { PonelePlayLogo } from '../components/PonelePlayLogo';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { RECENT_ROOMS_MOCK, formatDurationMs } from '../data/mockPartyData';
 
@@ -116,7 +117,7 @@ export const TvModePage: React.FC = () => {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
             <div className="relative space-y-5 lg:col-span-7">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-2 rounded-full bg-brand-soft px-3 py-1 font-mono text-xs font-bold uppercase text-brand">
+                <span className="inline-flex items-center gap-2 rounded-full bg-coral-soft px-3 py-1 font-mono text-xs font-bold uppercase text-coral">
                   <Radio className="h-3.5 w-3.5" />
                   {room.audioOutput === 'tv'
                     ? 'Audio en Smart TV · YouTube Music Sin Premium'
@@ -150,7 +151,7 @@ export const TvModePage: React.FC = () => {
 
                 <div className="min-w-0 flex-1 space-y-4 text-center sm:text-left">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-brand">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-coral">
                       Sonando Ahora · {nowPlaying?.proposedByAvatar} @{nowPlaying?.proposedByName}
                     </p>
                     <h1 className="mt-1 font-display text-2xl font-bold text-ink sm:text-4xl">
@@ -189,7 +190,7 @@ export const TvModePage: React.FC = () => {
 
             <div className="space-y-5 lg:col-span-5">
               <div className="flex flex-col items-center gap-4 rounded-3xl border border-stroke bg-elevated p-5 text-center sm:flex-row sm:text-left">
-                <div className="shrink-0 rounded-2xl bg-white p-3 shadow-sm">
+                <div className="shrink-0 rounded-2xl border border-stroke bg-white p-3 shadow-sm">
                   <QRCodeSVG value={joinUrl} size={136} level="M" />
                 </div>
                 <div className="min-w-0">
@@ -239,7 +240,7 @@ export const TvModePage: React.FC = () => {
         </section>
       )}
 
-      {/* MODO 2: APP NATIVA ANDROID TV (Kotlin + Jetpack Compose 10-foot UI) */}
+      {/* MODO 2: APP NATIVA ANDROID TV (100% coherente con el tema activo, cero mezcla dark/light) */}
       {tvSurface === 'android_tv_native' && (
         <section aria-label="App Nativa Android TV" className="space-y-4">
           <div className="flex flex-wrap gap-1.5 rounded-2xl border border-stroke bg-card p-2">
@@ -265,27 +266,20 @@ export const TvModePage: React.FC = () => {
             ))}
           </div>
 
-          <div className="rounded-3xl border border-slate-700 bg-[#0F172A] p-5 text-[#F8FAFC] shadow-elevated sm:p-8">
+          <div className="rounded-3xl border border-stroke bg-card p-5 text-ink shadow-elevated sm:p-8">
             {androidScreen === 'tv_home' && (
               <div className="space-y-7">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <span className="font-mono text-xs font-semibold uppercase tracking-widest text-[#38BDF8]">
-                      PONELEPLAY ANDROID TV
-                    </span>
-                    <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">
-                      Conecta tu Smart TV a la Fiesta
-                    </h1>
-                  </div>
-                  <p className="text-sm text-slate-400">Navegación por control remoto (D-Pad)</p>
+                  <PonelePlayLogo size="md" subtitle="App Smart TV · Control Remoto D-Pad" />
+                  <p className="text-sm text-muted">Navegación por flechas del control (D-Pad)</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                  <div className="rounded-3xl border-2 border-[#38BDF8] bg-[#1E293B] p-6">
-                    <span className="font-mono text-xs font-bold uppercase text-[#38BDF8]">
+                  <div className="rounded-3xl border-2 border-brand bg-elevated p-6">
+                    <span className="font-mono text-xs font-bold uppercase text-brand">
                       Foco Control Remoto
                     </span>
-                    <h2 className="mt-1 font-display text-2xl font-bold">Unirse con Código</h2>
+                    <h2 className="mt-1 font-display text-2xl font-bold text-ink">Unirse con Código</h2>
                     <div className="mt-5 grid grid-cols-6 gap-2">
                       {code
                         .toUpperCase()
@@ -297,8 +291,8 @@ export const TvModePage: React.FC = () => {
                             key={idx}
                             className={`flex h-14 items-center justify-center rounded-xl border-2 font-display text-2xl font-bold ${
                               idx === 0
-                                ? 'border-[#38BDF8] bg-[#38BDF8]/15 text-[#38BDF8]'
-                                : 'border-slate-700 bg-[#0F172A] text-white'
+                                ? 'border-brand bg-brand-soft text-brand'
+                                : 'border-stroke bg-card text-ink'
                             }`}
                           >
                             {char}
@@ -308,17 +302,17 @@ export const TvModePage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setAndroidScreen('tv_room')}
-                      className="mt-5 flex min-h-[48px] w-full items-center justify-center rounded-full bg-[#2563EB] text-sm font-bold text-white"
+                      className="mt-5 flex min-h-[48px] w-full items-center justify-center rounded-full bg-brand text-sm font-bold text-on-brand"
                     >
                       OK · Conectar TV a Sala
                     </button>
                   </div>
 
-                  <div className="flex flex-col justify-between rounded-3xl border border-slate-700 bg-[#1E293B] p-6">
+                  <div className="flex flex-col justify-between rounded-3xl border border-stroke bg-elevated p-6">
                     <div>
-                      <h2 className="font-display text-2xl font-bold">Crear Sala desde esta TV</h2>
-                      <p className="mt-2 text-sm text-slate-300">
-                        Usa <strong className="text-white">YouTube Music Sin Premium</strong> reproduciendo directo en los parlantes del televisor.
+                      <h2 className="font-display text-2xl font-bold text-ink">Crear Sala desde esta TV</h2>
+                      <p className="mt-2 text-sm text-muted">
+                        Usa <strong className="text-ink">YouTube Music Sin Premium</strong> reproduciendo directo en los parlantes del televisor.
                       </p>
                     </div>
                     <button
@@ -327,16 +321,16 @@ export const TvModePage: React.FC = () => {
                         updateRoom({ audioOutput: 'tv' });
                         setAndroidScreen('tv_room');
                       }}
-                      className="mt-5 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-slate-600 bg-[#334155] text-sm font-bold text-white hover:border-[#38BDF8]"
+                      className="mt-5 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-card text-sm font-bold text-ink hover:border-brand"
                     >
-                      <PlusCircle className="h-5 w-5 text-[#38BDF8]" />
+                      <PlusCircle className="h-5 w-5 text-brand" />
                       <span>Crear Sala con 1 Clic</span>
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="mb-3 font-display text-xs font-bold uppercase tracking-wider text-slate-400">
+                  <h3 className="mb-3 font-display text-xs font-bold uppercase tracking-wider text-muted">
                     Salas Recientes
                   </h3>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -345,13 +339,13 @@ export const TvModePage: React.FC = () => {
                         key={r.code}
                         type="button"
                         onClick={() => setAndroidScreen('tv_room')}
-                        className="flex min-h-[64px] items-center justify-between rounded-2xl border border-slate-700 bg-[#1E293B] px-5 py-4 text-left hover:border-[#38BDF8]"
+                        className="flex min-h-[64px] items-center justify-between rounded-2xl border border-stroke bg-elevated px-5 py-4 text-left hover:border-brand"
                       >
                         <div>
-                          <p className="font-display text-lg font-bold text-white">{r.name}</p>
-                          <p className="font-mono text-xs text-[#38BDF8]">{r.code}</p>
+                          <p className="font-display text-lg font-bold text-ink">{r.name}</p>
+                          <p className="font-mono text-xs text-brand">{r.code}</p>
                         </div>
-                        <span className="rounded-full bg-[#334155] px-3 py-1 text-xs text-slate-200">
+                        <span className="rounded-full border border-stroke bg-card px-3 py-1 text-xs font-medium text-muted">
                           Abrir
                         </span>
                       </button>
@@ -364,12 +358,15 @@ export const TvModePage: React.FC = () => {
             {androidScreen === 'tv_room' && (
               <div className="space-y-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="rounded-full bg-[#38BDF8]/15 px-3 py-1 font-mono text-xs font-bold text-[#38BDF8]">
-                    {room.audioOutput === 'tv'
-                      ? 'AUDIO ACTIVO EN SMART TV'
-                      : 'SOLO PANTALLA SINCRONIZADA'}
-                  </span>
-                  <span className="text-sm text-slate-300">{room.name}</span>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <PonelePlayLogo size="sm" showWordmark={false} />
+                    <span className="rounded-full bg-coral-soft px-3 py-1 font-mono text-xs font-bold text-coral">
+                      {room.audioOutput === 'tv'
+                        ? 'AUDIO ACTIVO EN SMART TV'
+                        : 'SOLO PANTALLA SINCRONIZADA'}
+                    </span>
+                  </div>
+                  <span className="text-sm font-medium text-muted">{room.name}</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-center">
@@ -377,36 +374,36 @@ export const TvModePage: React.FC = () => {
                     <img
                       src={nowPlaying?.song.imageUrl ?? '/covers/cover-synthwave.png'}
                       alt={nowPlaying?.song.title ?? 'Album'}
-                      className="h-52 w-52 shrink-0 rounded-2xl border border-slate-700 object-cover shadow-elevated"
+                      className="h-52 w-52 shrink-0 rounded-2xl border border-stroke object-cover shadow-elevated"
                     />
                     <div className="min-w-0 flex-1 space-y-3 text-center sm:text-left">
-                      <p className="font-mono text-xs uppercase text-[#38BDF8]">
+                      <p className="font-mono text-xs font-semibold uppercase text-coral">
                         YouTube Music Audio · Solo Portada HD
                       </p>
-                      <h2 className="font-display text-3xl font-bold leading-tight">
+                      <h2 className="font-display text-3xl font-bold leading-tight text-ink">
                         {nowPlaying?.song.title}
                       </h2>
-                      <p className="text-lg text-slate-300">{nowPlaying?.song.artist}</p>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                      <p className="text-lg text-muted">{nowPlaying?.song.artist}</p>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-elevated">
                         <div
-                          className="h-full rounded-full bg-[#38BDF8]"
+                          className="h-full rounded-full bg-brand"
                           style={{ width: `${progressPercent}%` }}
                         />
                       </div>
-                      <p className="font-mono text-xs text-slate-400">
+                      <p className="font-mono text-xs text-muted">
                         {formatDurationMs(room.progressMs)} / {formatDurationMs(currentDurationMs)} · @{nowPlaying?.proposedByName}
                       </p>
                     </div>
                   </div>
 
-                  <div className="space-y-3 rounded-3xl border border-slate-700 bg-[#1E293B] p-5 lg:col-span-5">
+                  <div className="space-y-3 rounded-3xl border border-stroke bg-elevated p-5 lg:col-span-5">
                     <div className="flex items-center gap-4">
-                      <div className="rounded-xl bg-white p-2">
+                      <div className="rounded-xl border border-stroke bg-white p-2">
                         <QRCodeSVG value={joinUrl} size={96} level="M" />
                       </div>
                       <div>
-                        <p className="text-xs uppercase text-slate-400">Escanea para votar</p>
-                        <p className="font-display text-3xl font-bold tracking-widest text-[#38BDF8]">
+                        <p className="text-xs uppercase text-muted">Escanea para votar</p>
+                        <p className="font-display text-3xl font-bold tracking-widest text-brand">
                           {code.toUpperCase()}
                         </p>
                       </div>
@@ -415,12 +412,12 @@ export const TvModePage: React.FC = () => {
                       {topFive.slice(0, 3).map((item, idx) => (
                         <div
                           key={item.id}
-                          className="flex items-center justify-between rounded-xl bg-[#0F172A] px-3 py-2 text-xs"
+                          className="flex items-center justify-between rounded-xl border border-stroke bg-card px-3 py-2 text-xs"
                         >
-                          <span className="truncate">
+                          <span className="truncate text-ink">
                             #{idx + 1} {item.song.title}
                           </span>
-                          <span className="ml-2 font-mono font-bold text-[#38BDF8]">
+                          <span className="ml-2 font-mono font-bold text-brand">
                             +{item.netScore}
                           </span>
                         </div>
@@ -429,7 +426,7 @@ export const TvModePage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 border-t border-slate-800 pt-4">
+                <div className="flex flex-wrap items-center gap-3 border-t border-stroke pt-4">
                   {dpadActions.map((act, idx) => {
                     const Icon = act.icon;
                     const focused = dpadFocusIndex === idx;
@@ -443,8 +440,8 @@ export const TvModePage: React.FC = () => {
                         }}
                         className={`flex min-h-[48px] items-center gap-2 rounded-full px-5 text-xs font-bold transition-all ${
                           focused
-                            ? 'border-2 border-white bg-[#2563EB] text-white'
-                            : 'border border-slate-700 bg-[#1E293B] text-slate-200 hover:border-slate-500'
+                            ? 'bg-brand text-on-brand shadow-surface'
+                            : 'border border-stroke bg-elevated text-ink hover:border-brand'
                         }`}
                       >
                         <Icon className="h-4 w-4" />
@@ -458,32 +455,32 @@ export const TvModePage: React.FC = () => {
 
             {androidScreen === 'tv_summary' && (
               <div className="space-y-6 text-center">
-                <Trophy className="mx-auto h-14 w-14 text-amber" />
-                <h2 className="font-display text-3xl font-bold sm:text-4xl">Fin de Fiesta en Smart TV</h2>
-                <p className="text-sm text-slate-400">
+                <Trophy className="mx-auto h-14 w-14 text-coral" />
+                <h2 className="font-display text-3xl font-bold text-ink sm:text-4xl">Fin de Fiesta en Smart TV</h2>
+                <p className="text-sm text-muted">
                   {played.length + 1} temas reproducidos · Podio de DJs de la noche
                 </p>
                 <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-amber/50 bg-[#1E293B] p-4">
-                    <p className="font-mono text-xs text-amber">1º PUESTO ORO</p>
-                    <p className="mt-1 text-2xl">🌟 @martina</p>
-                    <p className="font-mono text-sm text-[#38BDF8]">33 pts</p>
+                  <div className="rounded-2xl border border-coral/50 bg-elevated p-4">
+                    <p className="font-mono text-xs font-bold text-coral">1º PUESTO ORO</p>
+                    <p className="mt-1 text-2xl text-ink">🌟 @martina</p>
+                    <p className="font-mono text-sm font-bold text-brand">33 pts</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-600 bg-[#1E293B] p-4">
-                    <p className="font-mono text-xs text-slate-300">2º PUESTO PLATA</p>
-                    <p className="mt-1 text-2xl">🔥 @gonza</p>
-                    <p className="font-mono text-sm text-white">27 pts</p>
+                  <div className="rounded-2xl border border-stroke bg-elevated p-4">
+                    <p className="font-mono text-xs text-muted">2º PUESTO PLATA</p>
+                    <p className="mt-1 text-2xl text-ink">🔥 @gonza</p>
+                    <p className="font-mono text-sm font-bold text-ink">27 pts</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-700 bg-[#1E293B] p-4">
-                    <p className="font-mono text-xs text-slate-400">3º PUESTO BRONCE</p>
-                    <p className="mt-1 text-2xl">🎤 @flor</p>
-                    <p className="font-mono text-sm text-white">20 pts</p>
+                  <div className="rounded-2xl border border-stroke bg-elevated p-4">
+                    <p className="font-mono text-xs text-muted">3º PUESTO BRONCE</p>
+                    <p className="mt-1 text-2xl text-ink">🎤 @flor</p>
+                    <p className="font-mono text-sm font-bold text-ink">20 pts</p>
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setAndroidScreen('tv_home')}
-                  className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-[#2563EB] px-6 text-sm font-bold text-white"
+                  className="inline-flex min-h-[48px] items-center justify-center rounded-full bg-brand px-6 text-sm font-bold text-on-brand"
                 >
                   OK · Volver al Inicio de TV
                 </button>

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePartyPreview } from '../context/PartyPreviewContext';
+import { PonelePlayLogo } from '../components/PonelePlayLogo';
 import { FALLBACK_GENRES, RECENT_ROOMS_MOCK } from '../data/mockPartyData';
 import { AudioProvider } from '../types/jukebox';
 
@@ -62,13 +63,16 @@ export const LandingPage: React.FC = () => {
     <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:px-6 sm:py-10">
       {/* Hero Banner Minimalista */}
       <section className="rounded-3xl border border-stroke bg-card p-6 shadow-surface sm:p-10">
-        <div className="max-w-3xl space-y-4">
-          <p className="font-mono text-xs font-semibold uppercase tracking-widest text-brand">
-            YouTube Music Sin Premium · Spotify Opcional · Smart TV
-          </p>
+        <div className="max-w-3xl space-y-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <PonelePlayLogo size="md" showWordmark={false} />
+            <p className="font-mono text-xs font-semibold uppercase tracking-widest text-coral">
+              YouTube Music Sin Premium · Spotify Opcional · Smart TV
+            </p>
+          </div>
 
           <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
-            Tu fiesta, tus reglas. <span className="text-brand">Todos eligen</span> el próximo tema.
+            Tu fiesta, tus reglas. <span className="text-coral">Todos eligen</span> el próximo tema.
           </h1>
 
           <p className="text-sm leading-relaxed text-muted sm:text-base">
@@ -306,7 +310,7 @@ export const LandingPage: React.FC = () => {
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                       r.isActive
-                        ? 'bg-brand-soft text-brand'
+                        ? 'bg-coral-soft text-coral'
                         : 'bg-elevated text-muted'
                     }`}
                   >

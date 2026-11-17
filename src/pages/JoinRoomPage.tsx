@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePartyPreview } from '../context/PartyPreviewContext';
+import { PonelePlayLogo } from '../components/PonelePlayLogo';
 import { AVATAR_OPTIONS } from '../data/mockPartyData';
 import { JoinEdgeState } from '../types/jukebox';
 
@@ -46,7 +47,10 @@ export const JoinRoomPage: React.FC = () => {
       {edgeState === 'active' && (
         <section className="rounded-3xl border border-stroke bg-card p-6 shadow-elevated sm:p-8">
           <div className="space-y-2 border-b border-stroke pb-5 text-center">
-            <div className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand">
+            <div className="flex justify-center pb-1">
+              <PonelePlayLogo size="md" showWordmark={false} />
+            </div>
+            <div className="mx-auto inline-flex items-center gap-1.5 rounded-full bg-coral-soft px-3 py-1 text-xs font-semibold text-coral">
               <Music2 className="h-3.5 w-3.5" />
               <span>
                 {room.activeProvider === 'youtube_music'

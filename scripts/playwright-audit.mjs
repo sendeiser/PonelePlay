@@ -159,13 +159,22 @@ async function run() {
       report.push(await auditDom(page, `summary-${vp.name}`));
       await page.screenshot({ path: path.join(OUT_DIR, `11-summary-${vp.name}.png`), fullPage: true });
 
-      // 7. Dark Mode (secondary) verification on Live Room
+      // 7. Dark Mode (100% separated) verification on Live Room & Smart TV
       if (vp.name === 'desktop' || vp.name === 'mobile') {
         await page.goto(`${BASE_URL}/room/PLAY42?role=host`, { waitUntil: 'networkidle' });
         await page.getByRole('button', { name: /Cambiar a modo oscuro/i }).click();
         await page.waitForTimeout(300);
         report.push(await auditDom(page, `room-dark-${vp.name}`));
         await page.screenshot({ path: path.join(OUT_DIR, `12-room-dark-${vp.name}.png`), fullPage: true });
+
+        if (vp.name === 'desktop') {
+          await page.goto(`${BASE_URL}/room/PLAY42/tv`, { waitUntil: 'networkidle' });
+          await page.getByRole('button', { name: /Cambiar a modo oscuro/i }).click();
+          await page.getByRole('button', { name: /App Smart TV/i }).click();
+          await page.waitForTimeout(300);
+          report.push(await auditDom(page, 'android-tv-dark-desktop'));
+          await page.screenshot({ path: path.join(OUT_DIR, '13-tv-dark-desktop.png'), fullPage: true });
+        }
       }
 
       await context.close();

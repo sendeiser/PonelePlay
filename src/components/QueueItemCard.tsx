@@ -61,7 +61,7 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               {item.isPinned && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand">
+                <span className="inline-flex items-center gap-1 rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-coral">
                   <Pin className="h-3 w-3" />
                   Siguiente
                 </span>

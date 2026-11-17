@@ -42,7 +42,7 @@ export const PartySummaryPage: React.FC = () => {
       {/* Cabecera celebratoria limpia */}
       <section className="rounded-3xl border border-stroke bg-card p-6 text-center shadow-surface sm:p-10">
         <div className="space-y-3">
-          <p className="font-mono text-xs font-bold uppercase tracking-widest text-brand">
+          <p className="font-mono text-xs font-bold uppercase tracking-widest text-coral">
             Fin de Fiesta · Sala {code.toUpperCase()}
           </p>
           <h1 className="font-display text-3xl font-extrabold text-ink sm:text-4xl">{room.name}</h1>
@@ -109,9 +109,9 @@ export const PartySummaryPage: React.FC = () => {
       {/* Canción Reina + Acciones de Exportación */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {queenTrack && (
-          <div className="rounded-3xl border border-brand/40 bg-card p-6 shadow-surface lg:col-span-7">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand">
-              <Crown className="h-4 w-4 text-brand" />
+          <div className="rounded-3xl border border-coral/40 bg-card p-6 shadow-surface lg:col-span-7">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-coral">
+              <Crown className="h-4 w-4 text-coral" />
               <span>Canción Reina de la Fiesta</span>
             </div>
             <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row">

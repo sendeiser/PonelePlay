@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Disc3,
   Download,
   Moon,
   Sun,
@@ -13,6 +12,7 @@ import {
   Home,
 } from 'lucide-react';
 import { usePartyPreview } from '../context/PartyPreviewContext';
+import { PonelePlayLogo } from './PonelePlayLogo';
 
 interface AppShellHeaderProps {
   onOpenAccountModal: () => void;
@@ -35,16 +35,9 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:px-6">
         <Link
           to="/"
-          className="flex min-h-[44px] items-center gap-2.5 rounded-xl px-1 py-1 transition-opacity hover:opacity-85"
+          className="flex min-h-[44px] items-center rounded-xl px-1 py-1 transition-opacity hover:opacity-90"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-on-brand shadow-surface">
-            <Disc3 className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <span className="font-display text-lg font-bold tracking-tight text-ink sm:text-xl">
-              PonelePlay
-            </span>
-          </div>
+          <PonelePlayLogo size="sm" />
         </Link>
 
         {/* Navegación limpia de vistas */}
@@ -93,9 +86,9 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
             aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
             {theme === 'dark' ? (
-              <Sun className="h-4 w-4 text-muted" />
+              <Sun className="h-4 w-4 text-coral" />
             ) : (
-              <Moon className="h-4 w-4 text-muted" />
+              <Moon className="h-4 w-4 text-brand" />
             )}
           </button>
 

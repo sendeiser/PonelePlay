@@ -72,11 +72,11 @@ export const NowPlayingHero: React.FC = () => {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex h-3.5 items-end gap-0.5">
-                <span className={`eq-bar h-2.5 w-0.5 rounded-full bg-brand ${!room.isPlaying ? 'animate-none h-1.5' : ''}`} />
-                <span className={`eq-bar eq-bar-2 h-3.5 w-0.5 rounded-full bg-brand ${!room.isPlaying ? 'animate-none h-2' : ''}`} />
-                <span className={`eq-bar eq-bar-3 h-2 w-0.5 rounded-full bg-brand ${!room.isPlaying ? 'animate-none h-1.5' : ''}`} />
+                <span className={`eq-bar h-2.5 w-0.5 rounded-full bg-coral ${!room.isPlaying ? 'animate-none h-1.5' : ''}`} />
+                <span className={`eq-bar eq-bar-2 h-3.5 w-0.5 rounded-full bg-coral ${!room.isPlaying ? 'animate-none h-2' : ''}`} />
+                <span className={`eq-bar eq-bar-3 h-2 w-0.5 rounded-full bg-coral ${!room.isPlaying ? 'animate-none h-1.5' : ''}`} />
               </div>
-              <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-brand">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-coral">
                 {isEmptyAutoplay ? 'Autoplay respaldo' : 'Sonando ahora'}
               </span>
               {nowPlaying && (
@@ -131,7 +131,7 @@ export const NowPlayingHero: React.FC = () => {
               <button
                 type="button"
                 onClick={skipCurrentTrack}
-                className="flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 text-xs font-semibold text-ink transition-colors hover:bg-canvas active:scale-95"
+                className="flex h-11 min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 text-xs font-semibold text-ink transition-colors hover:border-brand active:scale-95"
                 aria-label="Pasar a la siguiente canción"
               >
                 <SkipForward className="h-4 w-4" />
@@ -164,7 +164,7 @@ export const NowPlayingHero: React.FC = () => {
               key={emoji}
               type="button"
               onClick={() => sendReaction(emoji)}
-              className="flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 text-xs font-semibold text-ink transition-colors hover:border-brand/60 active:scale-95"
+              className="flex min-h-[44px] min-w-[44px] items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 text-xs font-semibold text-ink transition-colors hover:border-coral active:scale-95"
               aria-label={`Enviar reacción ${emoji}`}
             >
               <span className="text-sm">{emoji}</span>
@@ -185,7 +185,7 @@ export const NowPlayingHero: React.FC = () => {
                 onClick={() => updateRoom({ activeProvider: 'youtube_music' })}
                 className={`flex min-h-[44px] min-w-[44px] items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition-colors ${
                   room.activeProvider === 'youtube_music'
-                    ? 'bg-brand text-on-brand'
+                    ? 'bg-coral text-on-coral'
                     : 'text-muted hover:text-ink'
                 }`}
               >

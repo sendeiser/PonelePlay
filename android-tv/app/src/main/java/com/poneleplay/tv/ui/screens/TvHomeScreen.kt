@@ -57,7 +57,7 @@ fun TvHomeScreen(
         Column {
             Text(
                 text = "PONELEPLAY TV",
-                color = PonelePlayTvColors.SkyAccent,
+                color = PonelePlayTvColors.CoralAccent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -98,7 +98,7 @@ fun TvHomeScreen(
                             ) {
                                 Text(
                                     text = ch.toString(),
-                                    color = PonelePlayTvColors.SkyAccent,
+                                    color = PonelePlayTvColors.BrandTeal,
                                     fontSize = 24.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -109,13 +109,13 @@ fun TvHomeScreen(
                     Button(
                         onClick = { onConnectRoom(initialCode) },
                         colors = ButtonDefaults.colors(
-                            containerColor = PonelePlayTvColors.BrandBlue,
-                            contentColor = PonelePlayTvColors.OnBrandBlue,
+                            containerColor = PonelePlayTvColors.BrandTeal,
+                            contentColor = PonelePlayTvColors.OnBrandTeal,
                             focusedContainerColor = Color.White,
                             focusedContentColor = PonelePlayTvColors.BgCanvas
                         ),
                         border = ButtonDefaults.border(
-                            focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.SkyAccent))
+                            focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.BrandTeal))
                         )
                     ) {
                         Text("OK · Conectar a $initialCode", fontWeight = FontWeight.Bold)
@@ -148,8 +148,8 @@ fun TvHomeScreen(
                         colors = ButtonDefaults.colors(
                             containerColor = PonelePlayTvColors.BgElevated,
                             contentColor = PonelePlayTvColors.TextPrimary,
-                            focusedContainerColor = PonelePlayTvColors.BrandBlue,
-                            focusedContentColor = PonelePlayTvColors.OnBrandBlue
+                            focusedContainerColor = PonelePlayTvColors.BrandTeal,
+                            focusedContentColor = PonelePlayTvColors.OnBrandTeal
                         )
                     ) {
                         Text("Crear Sala Ahora", fontWeight = FontWeight.Bold)
@@ -175,13 +175,13 @@ fun TvHomeScreen(
                             focusedContainerColor = PonelePlayTvColors.BgElevated
                         ),
                         border = ClickableSurfaceDefaults.border(
-                            focusedBorder = Border(BorderStroke(2.dp, PonelePlayTvColors.SkyAccent))
+                            focusedBorder = Border(BorderStroke(2.dp, PonelePlayTvColors.BrandTeal))
                         ),
                         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(16.dp))
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
                             Text(room.name, color = PonelePlayTvColors.TextPrimary, fontWeight = FontWeight.Bold)
-                            Text("Código ${room.code} · Host ${room.host}", color = PonelePlayTvColors.SkyAccent, fontSize = 13.sp)
+                            Text("Código ${room.code} · Host ${room.host}", color = PonelePlayTvColors.BrandTeal, fontSize = 13.sp)
                         }
                     }
                 }
