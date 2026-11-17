@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Pause,
   Play,
@@ -33,6 +33,29 @@ export const NowPlayingHero: React.FC = () => {
   const currentDurationMs = nowPlaying?.song.durationMs ?? 204_000;
   const progressPercent = Math.min(100, Math.max(0, Math.round((room.progressMs / currentDurationMs) * 100)));
 
+  useEffect(() => {
+    if (!room.isPlaying || !isHost) return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+    };
+    if (nav.wakeLock?.request) {
+      void nav.wakeLock
+        .request('screen')
+        .then((lock) => {
+          sentinel = lock;
+        })
+        .catch(() => {
+          // ignore unsupported / backgrounded wakeLock failures
+        });
+    }
+    return () => {
+      if (sentinel) {
+        void sentinel.release().catch(() => {});
+      }
+    };
+  }, [room.isPlaying, isHost]);
+
   return (
     <section
       aria-label="Reproductor Sonando Ahora"
@@ -48,7 +71,13 @@ export const NowPlayingHero: React.FC = () => {
       <div aria-hidden="true" className="ambient-scrim pointer-events-none absolute inset-0" />
 
       {/* Contenedor técnico oculto para YouTube IFrame Audio (Cero video visible) */}
-      <div className="sr-only" aria-hidden="true" data-audio-engine={room.activeProvider}>
+      <div
+        className="sr-only"
+        aria-hidden="true"
+        data-audio-engine={room.activeProvider}
+        data-youtube-video-id={nowPlaying?.song.youtubeVideoId ?? 'yt_neon_pulse'}
+        data-audio-output-active={String(room.isPlaying && ((isHost && room.audioOutput === 'host_device') || room.audioOutput === 'tv'))}
+      >
         Reproductor de audio oculto YouTube IFrame Audio-Only (solo portada HD visible)
       </div>
 

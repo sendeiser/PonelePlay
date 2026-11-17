@@ -18,23 +18,43 @@ export const JoinRoomPage: React.FC = () => {
   const { code = 'PLAY42' } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { room, setDemoRole } = usePartyPreview();
+  const { room, joinRoom, loadRoomByCode, setDemoRole } = usePartyPreview();
 
   const [nickname, setNickname] = useState('luqui');
   const [avatar, setAvatar] = useState('⚡');
+  const [dbEdgeState, setDbEdgeState] = useState<JoinEdgeState | null>(null);
 
   const paramState = searchParams.get('state');
+
+  React.useEffect(() => {
+    if (paramState) return;
+    let mounted = true;
+    void loadRoomByCode(code).then((state) => {
+      if (mounted) setDbEdgeState(state);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [code, paramState, loadRoomByCode]);
+
   const edgeState: JoinEdgeState =
     paramState === 'ended' || paramState === 'banned' || paramState === 'not_found'
       ? paramState
+      : dbEdgeState !== null
+      ? dbEdgeState
       : !room.isActive
       ? 'ended'
       : 'active';
 
-  const handleJoin = (e: React.FormEvent) => {
+  const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (nickname.trim().length < 2) {
       toast.error('Tu apodo debe tener al menos 2 caracteres');
+      return;
+    }
+    const status = await joinRoom(code, nickname.trim(), avatar);
+    if (status !== 'active') {
+      setDbEdgeState(status);
       return;
     }
     setDemoRole('guest');

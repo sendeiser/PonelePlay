@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Award,
@@ -16,7 +16,11 @@ import { formatDurationMs } from '../data/mockPartyData';
 export const PartySummaryPage: React.FC = () => {
   const { code = 'PLAY42' } = useParams();
   const navigate = useNavigate();
-  const { room, played, nowPlaying, participants } = usePartyPreview();
+  const { room, played, nowPlaying, participants, loadRoomByCode } = usePartyPreview();
+
+  useEffect(() => {
+    void loadRoomByCode(code);
+  }, [code, loadRoomByCode]);
 
   const allSessionTracks = nowPlaying ? [nowPlaying, ...played] : played;
   const queenTrack = [...allSessionTracks].sort((a, b) => b.netScore - a.netScore)[0];

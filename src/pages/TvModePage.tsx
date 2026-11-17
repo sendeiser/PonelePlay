@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -15,7 +15,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { PonelePlayLogo } from '../components/PonelePlayLogo';
 import { usePartyPreview } from '../context/PartyPreviewContext';
-import { RECENT_ROOMS_MOCK, formatDurationMs } from '../data/mockPartyData';
+import { formatDurationMs } from '../data/mockPartyData';
 
 type TvModeView = 'web_tv' | 'android_tv_native';
 type AndroidTvScreen = 'tv_home' | 'tv_room' | 'tv_summary';
@@ -25,6 +25,8 @@ export const TvModePage: React.FC = () => {
   const navigate = useNavigate();
   const {
     room,
+    recentRooms,
+    loadRoomByCode,
     updateRoom,
     nowPlaying,
     queue,
@@ -33,6 +35,10 @@ export const TvModePage: React.FC = () => {
     reactionCounts,
     skipCurrentTrack,
   } = usePartyPreview();
+
+  useEffect(() => {
+    void loadRoomByCode(code);
+  }, [code, loadRoomByCode]);
 
   const [tvSurface, setTvSurface] = useState<TvModeView>('web_tv');
   const [androidScreen, setAndroidScreen] = useState<AndroidTvScreen>('tv_room');
@@ -352,7 +358,7 @@ export const TvModePage: React.FC = () => {
                       Salas Recientes
                     </h3>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      {RECENT_ROOMS_MOCK.map((r) => (
+                      {recentRooms.map((r) => (
                         <button
                           key={r.code}
                           type="button"

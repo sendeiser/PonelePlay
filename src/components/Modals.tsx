@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -18,6 +18,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { FALLBACK_GENRES, SEARCH_CATALOG_MOCK, formatDurationMs } from '../data/mockPartyData';
+import { Song } from '../types/jukebox';
 
 interface ModalProps {
   open: boolean;
@@ -25,12 +26,29 @@ interface ModalProps {
 }
 
 export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
-  const { queue, nowPlaying, blockedSongIds, proposeSong, cooldownRemaining } = usePartyPreview();
+  const { queue, nowPlaying, blockedSongIds, proposeSong, searchCatalog, cooldownRemaining } = usePartyPreview();
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Song[]>(SEARCH_CATALOG_MOCK);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      void searchCatalog(query).then((songs) => {
+        if (active && songs.length >= 0) {
+          setResults(songs);
+        }
+      });
+    }, 120);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [open, query, searchCatalog]);
 
   if (!open) return null;
 
-  const filtered = SEARCH_CATALOG_MOCK.filter((song) => {
+  const filtered = results.filter((song) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     return (
@@ -41,10 +59,32 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
     );
   });
 
-  const getSongStatus = (songId: string) => {
-    if (blockedSongIds.includes(songId)) return 'blocked';
-    if (nowPlaying?.song.id === songId) return 'playing';
-    if (queue.some((item) => item.song.id === songId)) return 'in_queue';
+  const getSongStatus = (song: Song) => {
+    if (
+      blockedSongIds.includes(song.id) ||
+      (song.spotifyTrackId && blockedSongIds.includes(song.spotifyTrackId)) ||
+      (song.youtubeVideoId && blockedSongIds.includes(song.youtubeVideoId))
+    ) {
+      return 'blocked';
+    }
+    if (
+      nowPlaying &&
+      (nowPlaying.song.id === song.id ||
+        (song.spotifyTrackId && nowPlaying.song.spotifyTrackId === song.spotifyTrackId) ||
+        (song.youtubeVideoId && nowPlaying.song.youtubeVideoId === song.youtubeVideoId))
+    ) {
+      return 'playing';
+    }
+    if (
+      queue.some(
+        (item) =>
+          item.song.id === song.id ||
+          (song.spotifyTrackId && item.song.spotifyTrackId === song.spotifyTrackId) ||
+          (song.youtubeVideoId && item.song.youtubeVideoId === song.youtubeVideoId)
+      )
+    ) {
+      return 'in_queue';
+    }
     return 'available';
   };
 
@@ -111,7 +151,7 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
               </div>
             ) : (
               filtered.map((song) => {
-                const status = getSongStatus(song.id);
+                const status = getSongStatus(song);
                 return (
                   <div
                     key={song.id}

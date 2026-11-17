@@ -15,12 +15,12 @@ import {
 import { toast } from 'sonner';
 import { PonelePlayLogo } from '../components/PonelePlayLogo';
 import { usePartyPreview } from '../context/PartyPreviewContext';
-import { FALLBACK_GENRES, RECENT_ROOMS_MOCK } from '../data/mockPartyData';
+import { FALLBACK_GENRES } from '../data/mockPartyData';
 import { AudioProvider } from '../types/jukebox';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { updateRoom, setDemoRole } = usePartyPreview();
+  const { createRoom, recentRooms, setDemoRole } = usePartyPreview();
 
   const [roomName, setRoomName] = useState('Previa en lo de Tincho');
   const [provider, setProvider] = useState<AudioProvider>('youtube_music');
@@ -30,23 +30,22 @@ export const LandingPage: React.FC = () => {
   const [fallbackGenre, setFallbackGenre] = useState('party_hits');
   const [joinCode, setJoinCode] = useState('PLAY42');
 
-  const handleCreateRoom = (e: React.FormEvent) => {
+  const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (roomName.trim().length < 2) {
       toast.error('Ingresa un nombre de sala válido (mínimo 2 caracteres)');
       return;
     }
-    updateRoom({
+    const newCode = await createRoom({
       name: roomName.trim(),
       activeProvider: provider,
       maxPendingPerUser: maxPending,
       cooldownSeconds: cooldown,
       fallbackGenre,
-      isActive: true,
     });
     setDemoRole('host');
-    toast.success('Sala creada y lista para compartir');
-    navigate('/room/PLAY42');
+    toast.success(`Sala ${newCode} creada y lista para compartir`);
+    navigate(`/room/${newCode}`);
   };
 
   const handleJoinSubmit = (e: React.FormEvent) => {
@@ -358,7 +357,7 @@ export const LandingPage: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {RECENT_ROOMS_MOCK.map((r) => (
+          {recentRooms.map((r) => (
             <div
               key={r.code}
               className="glass-card flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stroke p-4 transition-all hover:border-brand/40"

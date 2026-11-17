@@ -32,6 +32,8 @@ export const LiveRoomPage: React.FC = () => {
     setDemoRole,
     setQueueEmptyPreview,
     room,
+    currentUserId,
+    loadRoomByCode,
     queue,
     played,
     participants,
@@ -49,6 +51,10 @@ export const LiveRoomPage: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
+    void loadRoomByCode(code);
+  }, [code, loadRoomByCode]);
+
+  useEffect(() => {
     const roleParam = searchParams.get('role');
     if (roleParam === 'guest' || roleParam === 'host') {
       setDemoRole(roleParam);
@@ -58,7 +64,9 @@ export const LiveRoomPage: React.FC = () => {
   }, [searchParams, setDemoRole, setQueueEmptyPreview]);
 
   const isHost = demoRole === 'host';
-  const myPendingCount = queue.filter((q) => q.proposedById === 'u-guest-you').length;
+  const myPendingCount = queue.filter(
+    (q) => q.proposedById === currentUserId || q.proposedById === 'u-guest-you'
+  ).length;
 
   const copyCode = async () => {
     try {

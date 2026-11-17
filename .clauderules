@@ -1,0 +1,20 @@
+# Reglas de Proyecto — PonelePlay V2 (`.clauderules`)
+
+## 1. Arquitectura y Base de Datos (Supabase Cloud)
+- Proyecto Supabase Cloud: `ydoviusjpgmjsxpspexu` (PostgreSQL 17, Auth anónima/híbrida, RLS, Realtime, Edge Functions). Nunca usar Docker local.
+- Las mutaciones críticas de cola, votos y transiciones de pista deben pasar por las funciones RPC con `SECURITY DEFINER`:
+  - `upsert_party_user`
+  - `propose_or_upvote_song` (anti-duplicados `+1` automático sin consumir cupo/cooldown, límites `max_pending_per_user` y `cooldown_seconds` exentos solo para `host`)
+  - `cast_queue_vote` (restricción estricta `UNIQUE(queue_item_id, user_id)` en `public.votes`)
+  - `advance_room_playback` (`playing -> played`, orden determinístico `is_pinned DESC, net_score DESC, created_at ASC`, fallback Autoplay en cola vacía)
+- **Seguridad (AgentShield):** `.env` y `.env.*` deben estar siempre en `.gitignore`. Nunca incluir `SUPABASE_SERVICE_ROLE_KEY`, claves privadas de Google/Spotify Secret ni tokens `sbp_` en código cliente (`src/`).
+
+## 2. Identidad Visual y Temas (Electric Sapphire & Emerald Studio)
+- **Separación estricta de temas:** Modo Claro (**Arctic Sapphire Studio**, `#F2F6FC`) y Modo Oscuro (**Abyssal Sapphire**, `#060913`) deben mantenerse 100% separados en todas las vistas (incluyendo Modo TV Web y App Smart TV), sin mezclar tarjetas oscuras dentro del modo claro ni viceversa.
+- **Restricción cromática:** No usar tonos rosados, fucsias, magenta ni anaranjados en CSS, SVG, iconos, Tailwind o portadas. Usar exclusivamente Índigo `#4F46E5`, Zafiro `#2563EB`, Cyan `#06B6D4` / `#22D3EE` y Esmeralda `#059669` / `#34D399`.
+- **Tipografía:** `Outfit` (display), `Plus Jakarta Sans` (body), `JetBrains Mono` (números tabulares y códigos). Nunca usar `background-clip: text` con gradientes (`impeccable` `gradient-text`).
+
+## 3. Reproducción de Audio, Solo Portada y Multiplataforma
+- **Solo Portada HD:** El motor de YouTube Music (sin Premium) mantiene su contenedor técnico oculto con `sr-only` (`data-audio-engine`). Nunca mostrar recuadro de video visible sobre *Sonando Ahora* ni sobre TV.
+- **Coordinación Host vs Smart TV:** Respetar `playback_state.audio_output` (`'host_device' | 'tv'`) para evitar reproducción simultánea duplicada.
+- **Accesibilidad:** Todos los botones interactivos web/móvil deben medir mínimo `44x44px`, con cero desbordamiento horizontal en `375px`, `768px` y `1440px`.
