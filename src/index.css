@@ -3,34 +3,34 @@
 @tailwind utilities;
 
 :root,
-[data-theme='dark'] {
-  --bg-primary: #09090B;
-  --bg-card: #121215;
-  --bg-elevated: #1C1C21;
-  --text-primary: #FAFAFA;
-  --text-muted: #A1A1AA;
-  --brand-primary: #FF2D55;
-  --on-brand: #FFFFFF;
-  --brand-soft: rgba(255, 45, 85, 0.12);
-  --accent-amber: #F59E0B;
-  --accent-danger: #EF4444;
-  --border-subtle: #27272A;
-  --ring-focus: #FF2D55;
-}
-
 [data-theme='light'] {
-  --bg-primary: #FAFAFA;
+  --bg-primary: #F8FAFC;
   --bg-card: #FFFFFF;
-  --bg-elevated: #F4F4F5;
-  --text-primary: #09090B;
-  --text-muted: #52525B;
-  --brand-primary: #E11D48;
+  --bg-elevated: #F1F5F9;
+  --text-primary: #0F172A;
+  --text-muted: #475569;
+  --brand-primary: #2563EB;
   --on-brand: #FFFFFF;
-  --brand-soft: rgba(225, 29, 72, 0.10);
+  --brand-soft: rgba(37, 99, 235, 0.10);
   --accent-amber: #D97706;
   --accent-danger: #DC2626;
-  --border-subtle: #E4E4E7;
-  --ring-focus: #E11D48;
+  --border-subtle: #E2E8F0;
+  --ring-focus: #2563EB;
+}
+
+[data-theme='dark'] {
+  --bg-primary: #0F172A;
+  --bg-card: #1E293B;
+  --bg-elevated: #334155;
+  --text-primary: #F8FAFC;
+  --text-muted: #94A3B8;
+  --brand-primary: #3B82F6;
+  --on-brand: #FFFFFF;
+  --brand-soft: rgba(56, 189, 248, 0.15);
+  --accent-amber: #F59E0B;
+  --accent-danger: #EF4444;
+  --border-subtle: #334155;
+  --ring-focus: #38BDF8;
 }
 
 @layer base {

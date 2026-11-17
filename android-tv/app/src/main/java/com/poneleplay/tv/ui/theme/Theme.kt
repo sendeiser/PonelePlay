@@ -7,14 +7,15 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 
 object PonelePlayTvColors {
-    val BgCanvas = Color(0xFF09090B)
-    val BgCard = Color(0xFF121215)
-    val BgElevated = Color(0xFF1C1C21)
-    val BrandCrimson = Color(0xFFFF2D55)
-    val OnBrandCrimson = Color(0xFFFFFFFF)
-    val TextPrimary = Color(0xFFFAFAFA)
-    val TextMuted = Color(0xFFA1A1AA)
-    val BorderSubtle = Color(0xFF27272A)
+    val BgCanvas = Color(0xFF0F172A)
+    val BgCard = Color(0xFF1E293B)
+    val BgElevated = Color(0xFF334155)
+    val BrandBlue = Color(0xFF3B82F6)
+    val SkyAccent = Color(0xFF38BDF8)
+    val OnBrandBlue = Color(0xFFFFFFFF)
+    val TextPrimary = Color(0xFFF8FAFC)
+    val TextMuted = Color(0xFF94A3B8)
+    val BorderSubtle = Color(0xFF334155)
     val AmberGold = Color(0xFFF59E0B)
 }
 
@@ -23,10 +24,10 @@ object PonelePlayTvColors {
 fun PonelePlayTvTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = PonelePlayTvColors.BrandCrimson,
-            onPrimary = PonelePlayTvColors.OnBrandCrimson,
-            secondary = PonelePlayTvColors.BgElevated,
-            onSecondary = PonelePlayTvColors.TextPrimary,
+            primary = PonelePlayTvColors.BrandBlue,
+            onPrimary = PonelePlayTvColors.OnBrandBlue,
+            secondary = PonelePlayTvColors.SkyAccent,
+            onSecondary = PonelePlayTvColors.BgCanvas,
             background = PonelePlayTvColors.BgCanvas,
             onBackground = PonelePlayTvColors.TextPrimary,
             surface = PonelePlayTvColors.BgCard,

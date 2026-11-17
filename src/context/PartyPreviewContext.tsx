@@ -60,7 +60,7 @@ function sortQueue(items: QueueItem[]): QueueItem[] {
 }
 
 export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [theme, setTheme] = useState<ThemeMode>('light');
   const [demoRole, setDemoRole] = useState<UserRole>('host');
   const [queueEmptyPreview, setQueueEmptyPreview] = useState(false);
   const [room, setRoom] = useState<RoomSettings>(INITIAL_ROOM);

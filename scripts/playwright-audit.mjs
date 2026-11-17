@@ -159,13 +159,13 @@ async function run() {
       report.push(await auditDom(page, `summary-${vp.name}`));
       await page.screenshot({ path: path.join(OUT_DIR, `11-summary-${vp.name}.png`), fullPage: true });
 
-      // 7. Light Mode verification on Live Room
+      // 7. Dark Mode (secondary) verification on Live Room
       if (vp.name === 'desktop' || vp.name === 'mobile') {
         await page.goto(`${BASE_URL}/room/PLAY42?role=host`, { waitUntil: 'networkidle' });
-        await page.getByRole('button', { name: /Cambiar a modo claro/i }).click();
+        await page.getByRole('button', { name: /Cambiar a modo oscuro/i }).click();
         await page.waitForTimeout(300);
-        report.push(await auditDom(page, `room-light-${vp.name}`));
-        await page.screenshot({ path: path.join(OUT_DIR, `12-room-light-${vp.name}.png`), fullPage: true });
+        report.push(await auditDom(page, `room-dark-${vp.name}`));
+        await page.screenshot({ path: path.join(OUT_DIR, `12-room-dark-${vp.name}.png`), fullPage: true });
       }
 
       await context.close();

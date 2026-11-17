@@ -23,8 +23,8 @@ export default {
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       boxShadow: {
-        surface: '0 8px 24px -4px rgba(0, 0, 0, 0.35)',
-        elevated: '0 16px 40px -8px rgba(0, 0, 0, 0.48)',
+        surface: '0 4px 20px -2px rgba(15, 23, 42, 0.06)',
+        elevated: '0 12px 32px -4px rgba(15, 23, 42, 0.12)',
       }
     }
   },
