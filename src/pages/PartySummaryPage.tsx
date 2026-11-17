@@ -109,29 +109,38 @@ export const PartySummaryPage: React.FC = () => {
       {/* Canción Reina + Acciones de Exportación */}
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {queenTrack && (
-          <div className="rounded-3xl border border-coral/40 bg-card p-6 shadow-surface lg:col-span-7">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-coral">
-              <Crown className="h-4 w-4 text-coral" />
-              <span>Canción Reina de la Fiesta</span>
-            </div>
-            <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row">
-              <img
-                src={queenTrack.song.imageUrl}
-                alt={queenTrack.song.title}
-                className="h-28 w-28 shrink-0 rounded-2xl border border-stroke object-cover"
-              />
-              <div className="w-full min-w-0 flex-1 text-center sm:text-left">
-                <h3 className="break-words font-display text-xl font-bold leading-snug text-ink sm:text-2xl">
-                  {queenTrack.song.title}
-                </h3>
-                <p className="mt-0.5 truncate text-sm text-muted">{queenTrack.song.artist}</p>
-                <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
-                  <span className="rounded-full bg-brand-soft px-3 py-1 font-mono text-xs font-bold text-brand">
-                    +{queenTrack.netScore} votos netos
-                  </span>
-                  <span className="text-xs text-muted">
-                    Propuesta por {queenTrack.proposedByAvatar} @{queenTrack.proposedByName}
-                  </span>
+          <div className="relative overflow-hidden rounded-3xl border border-coral/40 bg-card p-6 shadow-elevated lg:col-span-7">
+            <img
+              src={queenTrack.song.imageUrl}
+              alt=""
+              aria-hidden="true"
+              className="ambient-cover-blur pointer-events-none absolute inset-0 h-full w-full object-cover"
+            />
+            <div aria-hidden="true" className="ambient-scrim pointer-events-none absolute inset-0" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-coral">
+                <Crown className="h-4 w-4 text-coral" />
+                <span>Canción Reina de la Fiesta</span>
+              </div>
+              <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row">
+                <img
+                  src={queenTrack.song.imageUrl}
+                  alt={queenTrack.song.title}
+                  className="h-28 w-28 shrink-0 rounded-2xl border border-stroke object-cover shadow-elevated"
+                />
+                <div className="w-full min-w-0 flex-1 text-center sm:text-left">
+                  <h3 className="break-words font-display text-xl font-bold leading-snug text-ink sm:text-2xl">
+                    {queenTrack.song.title}
+                  </h3>
+                  <p className="mt-0.5 truncate text-sm text-muted">{queenTrack.song.artist}</p>
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                    <span className="bg-brand-gradient rounded-full px-3 py-1 font-mono text-xs font-bold">
+                      +{queenTrack.netScore} votos netos
+                    </span>
+                    <span className="text-xs text-muted">
+                      Propuesta por {queenTrack.proposedByAvatar} @{queenTrack.proposedByName}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -149,7 +158,7 @@ export const PartySummaryPage: React.FC = () => {
             <button
               type="button"
               onClick={() => toast.success('Playlist creada en tu cuenta de Spotify')}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-on-brand shadow-surface"
+              className="bg-brand-gradient flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full px-4 text-sm font-bold shadow-aurora"
             >
               <Disc3 className="h-4 w-4" />
               <span>Guardar como Playlist en Spotify</span>

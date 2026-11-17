@@ -33,44 +33,46 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
 
   const scoreColor =
     item.netScore > 0
-      ? 'text-brand'
+      ? 'text-coral'
       : item.netScore < 0
       ? 'text-danger'
       : 'text-muted';
 
   return (
     <article
-      className={`relative rounded-2xl border p-3.5 transition-colors sm:p-4 ${
+      className={`glass-card relative rounded-2xl border p-3.5 transition-all sm:p-4 ${
         item.isPinned
-          ? 'border-brand/50 bg-card shadow-surface'
-          : 'border-stroke bg-card hover:bg-elevated/40'
+          ? 'border-coral/50 shadow-surface'
+          : 'border-stroke hover:border-brand/40'
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {/* Posición + Portada + Info limpia */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <span className="w-6 shrink-0 text-center font-mono text-xs font-semibold tabular-nums-mono text-muted">
+          <span className="w-6 shrink-0 text-center font-mono text-xs font-bold tabular-nums-mono text-muted">
             {String(rank).padStart(2, '0')}
           </span>
-          <img
-            src={item.song.imageUrl}
-            alt={`Portada de ${item.song.title}`}
-            className="h-12 w-12 shrink-0 rounded-xl border border-stroke object-cover sm:h-14 sm:w-14"
-          />
+          <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-stroke shadow-sm sm:h-14 sm:w-14">
+            <img
+              src={item.song.imageUrl}
+              alt={`Portada de ${item.song.title}`}
+              className="h-full w-full object-cover"
+            />
+          </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               {item.isPinned && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-coral-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-coral">
+                <span className="bg-brand-gradient inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-sm">
                   <Pin className="h-3 w-3" />
                   Siguiente
                 </span>
               )}
-              <h3 className="truncate text-sm font-semibold text-ink sm:text-base">
+              <h3 className="truncate text-sm font-bold text-ink sm:text-base">
                 {item.song.title}
               </h3>
             </div>
-            <p className="truncate text-xs text-muted sm:text-sm">
+            <p className="truncate text-xs font-medium text-muted sm:text-sm">
               {item.song.artist}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted">
@@ -84,7 +86,7 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
         </div>
 
         {/* Controles de votación (min 44x44px) + menú Host */}
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-stroke/60 pt-2.5 sm:justify-end sm:border-t-0 sm:pt-0">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-stroke pt-2.5 sm:justify-end sm:border-t-0 sm:pt-0">
           <span className="text-[11px] font-medium text-muted sm:hidden">Votar tema</span>
           <div className="flex items-center gap-1.5">
             <div className="flex items-center gap-1 rounded-full border border-stroke bg-elevated p-1">
@@ -93,9 +95,9 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
                 onClick={() => onVote(item.id, 1)}
                 aria-label={`Votar a favor de ${item.song.title}`}
                 aria-pressed={item.userVote === 1}
-                className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors active:scale-95 ${
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all active:scale-95 ${
                   item.userVote === 1
-                    ? 'bg-brand text-on-brand'
+                    ? 'bg-brand-gradient shadow-aurora'
                     : 'text-muted hover:bg-card hover:text-ink'
                 }`}
               >
@@ -137,7 +139,7 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
                 {menuOpen && (
                   <div
                     role="menu"
-                    className="absolute right-0 top-12 z-30 w-48 rounded-2xl border border-stroke bg-elevated p-1.5 shadow-elevated"
+                    className="glass-card absolute right-0 top-12 z-30 w-48 rounded-2xl border border-stroke p-1.5 shadow-elevated"
                   >
                     <button
                       type="button"
@@ -145,9 +147,9 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
                         onTogglePin(item.id);
                         setMenuOpen(false);
                       }}
-                      className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-ink hover:bg-card"
+                      className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-ink hover:bg-elevated"
                     >
-                      <Pin className="h-4 w-4 text-brand" />
+                      <Pin className="h-4 w-4 text-coral" />
                       <span>{item.isPinned ? 'Quitar fijación' : 'Fijar arriba (Pin)'}</span>
                     </button>
                     <button
@@ -156,9 +158,9 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
                         onPlayNow(item.id);
                         setMenuOpen(false);
                       }}
-                      className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-ink hover:bg-card"
+                      className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-ink hover:bg-elevated"
                     >
-                      <Play className="h-4 w-4 text-ink" />
+                      <Play className="h-4 w-4 text-brand" />
                       <span>Reproducir ahora</span>
                     </button>
                     <button
@@ -167,7 +169,7 @@ export const QueueItemCard: React.FC<QueueItemCardProps> = ({
                         onBlock(item.id);
                         setMenuOpen(false);
                       }}
-                      className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-danger hover:bg-card"
+                      className="flex min-h-[44px] w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold text-danger hover:bg-elevated"
                     >
                       <Ban className="h-4 w-4" />
                       <span>Bloquear canción</span>

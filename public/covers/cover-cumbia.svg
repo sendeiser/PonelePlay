@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
-  <rect width="400" height="400" fill="#0A1F2C"/>
-  <circle cx="200" cy="180" r="150" fill="#22C55E" fill-opacity="0.28"/>
-  <circle cx="320" cy="320" r="110" fill="#F59E0B" fill-opacity="0.35"/>
-  <polygon points="200,84 296,260 104,260" stroke="#F59E0B" stroke-width="6" fill="#F59E0B" fill-opacity="0.14"/>
-  <text x="200" y="346" text-anchor="middle" fill="#F8FAFC" font-family="sans-serif" font-weight="700" font-size="22" letter-spacing="4">FIESTA TROPICAL</text>
-</svg>

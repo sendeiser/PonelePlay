@@ -9,7 +9,7 @@ interface PonelePlayLogoProps {
 const SIZES = {
   sm: { box: 'h-9 w-9', text: 'text-lg sm:text-xl' },
   md: { box: 'h-11 w-11', text: 'text-2xl' },
-  lg: { box: 'h-14 w-14', text: 'text-3xl' },
+  lg: { box: 'h-14 w-14', text: 'text-3xl sm:text-4xl' },
 };
 
 export const PonelePlayLogo: React.FC<PonelePlayLogoProps> = ({
@@ -18,50 +18,69 @@ export const PonelePlayLogo: React.FC<PonelePlayLogoProps> = ({
   subtitle,
 }) => {
   const cfg = SIZES[size];
+  const gradId = React.useId();
 
   return (
-    <div className="inline-flex items-center gap-2.5">
+    <div className="inline-flex items-center gap-3">
       <svg
         viewBox="0 0 48 48"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        className={`${cfg.box} shrink-0`}
+        className={`${cfg.box} shrink-0 drop-shadow-sm`}
         aria-hidden="true"
       >
-        {/* Base Squircle Turquesa Océano */}
-        <rect width="48" height="48" rx="14" fill="var(--brand-primary)" />
-        {/* Surco sutil de vinilo */}
-        <circle
-          cx="24"
-          cy="24"
-          r="18.5"
-          stroke="var(--on-brand)"
-          strokeOpacity="0.22"
-          strokeWidth="1.5"
-          strokeDasharray="18 6 8 6"
+        <defs>
+          <linearGradient id={`${gradId}-bg`} x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#6366F1" />
+            <stop offset="52%" stopColor="#EC4899" />
+            <stop offset="100%" stopColor="#F97316" />
+          </linearGradient>
+          <linearGradient id={`${gradId}-sheen`} x1="12" y1="4" x2="36" y2="26" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.42" />
+            <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
+        {/* Emblema squircle Sonic Prism */}
+        <rect width="48" height="48" rx="15" fill={`url(#${gradId}-bg)`} />
+        <rect
+          x="1"
+          y="1"
+          width="46"
+          height="46"
+          rx="14"
+          stroke="#FFFFFF"
+          strokeOpacity="0.28"
+          strokeWidth="1.25"
         />
-        {/* Primera P geométrica */}
+        {/* Brillo especular superior cristalino */}
         <path
-          d="M12.5 34V14H20.5C24.2 14 26.5 16.2 26.5 19.6C26.5 23 24.2 25.2 20.5 25.2H16"
-          stroke="var(--on-brand)"
-          strokeWidth="3.2"
+          d="M4 15C4 8.92487 8.92487 4 15 4H33C39.0751 4 44 8.92487 44 15V19C34 15 14 15 4 19V15Z"
+          fill={`url(#${gradId}-sheen)`}
+        />
+
+        {/* Ondas acústicas curvas izquierda */}
+        <path
+          d="M11.5 18.5C9.7 21.8 9.7 26.2 11.5 29.5"
+          stroke="#FFFFFF"
+          strokeOpacity="0.72"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
+
+        {/* Letra P aerodinámica + Play iluminado en el núcleo */}
+        <path
+          d="M17.5 34.5V13.5H26.2C30.4 13.5 33 16 33 19.9C33 23.8 30.4 26.3 26.2 26.3H21.2"
+          stroke="#FFFFFF"
+          strokeWidth="3.4"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {/* Segunda P entrelazada */}
-        <path
-          d="M18.5 34V18H25.2C28.4 18 30.5 19.8 30.5 22.8C30.5 25.8 28.4 27.6 25.2 27.6H21.2"
-          stroke="var(--on-brand)"
-          strokeOpacity="0.88"
-          strokeWidth="2.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {/* Triángulo Play central en Coral */}
-        <path d="M21 19.5L29.5 24L21 28.5V19.5Z" fill="var(--brand-coral)" />
-        {/* 3 ondas de audio ascendentes */}
-        <rect x="33" y="21" width="2.5" height="9" rx="1.25" fill="var(--on-brand)" />
-        <rect x="37" y="16" width="2.5" height="14" rx="1.25" fill="var(--brand-coral)" />
+        <path d="M22.2 16.5L30.2 20.5L22.2 24.5V16.5Z" fill="#FFFFFF" />
+
+        {/* Ondas acústicas derechas */}
+        <rect x="35.5" y="21" width="2.8" height="10" rx="1.4" fill="#FFFFFF" fillOpacity="0.92" />
+        <rect x="40" y="16.5" width="2.8" height="15" rx="1.4" fill="#FFFFFF" fillOpacity="0.72" />
       </svg>
 
       {showWordmark && (
@@ -69,10 +88,9 @@ export const PonelePlayLogo: React.FC<PonelePlayLogoProps> = ({
           <div className={`font-display font-extrabold tracking-tight ${cfg.text}`}>
             <span className="text-ink">Ponele</span>
             <span className="text-brand">Play</span>
-            <span className="text-coral">.</span>
           </div>
           {subtitle && (
-            <p className="mt-0.5 text-[11px] font-medium text-muted">{subtitle}</p>
+            <p className="mt-1 text-[11px] font-medium text-muted">{subtitle}</p>
           )}
         </div>
       )}

@@ -31,7 +31,7 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
   ];
 
   return (
-    <header className="sticky top-0 z-40 border-b border-stroke bg-canvas/90 backdrop-blur-md">
+    <header className="glass-card sticky top-0 z-40 border-b border-stroke">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-2.5 sm:px-6">
         <Link
           to="/"
@@ -40,7 +40,7 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
           <PonelePlayLogo size="sm" />
         </Link>
 
-        {/* Navegación limpia de vistas */}
+        {/* Navegación moderna con píldora gradiente activa */}
         <nav
           aria-label="Navegación principal"
           className="order-3 flex w-full items-center gap-1 overflow-x-auto pb-0.5 pt-1 lg:order-2 lg:w-auto lg:pb-0 lg:pt-0"
@@ -52,13 +52,13 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
               <Link
                 key={item.to}
                 to={item.to}
-                className={`flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-colors sm:text-sm ${
+                className={`flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold transition-all sm:text-sm ${
                   active
-                    ? 'bg-elevated font-semibold text-ink'
-                    : 'text-muted hover:bg-card hover:text-ink'
+                    ? 'bg-brand-gradient shadow-aurora'
+                    : 'text-muted hover:bg-elevated hover:text-ink'
                 }`}
               >
-                <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-brand' : ''}`} />
+                <Icon className="h-4 w-4 shrink-0" />
                 <span>{item.label}</span>
               </Link>
             );
@@ -70,7 +70,7 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
           <button
             type="button"
             onClick={triggerPwaInstall}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-stroke bg-card px-3 text-xs font-medium text-ink transition-colors hover:bg-elevated"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 text-xs font-semibold text-ink transition-colors hover:border-brand"
             title="Instalar App PWA en tu dispositivo"
             aria-label="Instalar App PWA"
           >
@@ -81,12 +81,12 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
           <button
             type="button"
             onClick={toggleTheme}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-stroke bg-card text-ink transition-colors hover:bg-elevated"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-stroke bg-elevated text-ink transition-colors hover:border-coral"
             title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
             aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
             {theme === 'dark' ? (
-              <Sun className="h-4 w-4 text-coral" />
+              <Sun className="h-4 w-4 text-amber" />
             ) : (
               <Moon className="h-4 w-4 text-brand" />
             )}
@@ -95,7 +95,7 @@ export const AppShellHeader: React.FC<AppShellHeaderProps> = ({ onOpenAccountMod
           <button
             type="button"
             onClick={onOpenAccountModal}
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-xl border border-stroke bg-card px-3 text-xs font-medium text-ink transition-colors hover:bg-elevated"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 text-xs font-semibold text-ink transition-colors hover:border-brand"
             title="Cuenta y vinculación opcional"
             aria-label="Vincular cuenta"
           >

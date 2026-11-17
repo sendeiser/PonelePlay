@@ -136,7 +136,7 @@ export const SearchSongModal: React.FC<ModalProps> = ({ open, onClose }) => {
                         type="button"
                         disabled={cooldownRemaining > 0}
                         onClick={() => proposeSong(song)}
-                        className="flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-full bg-brand px-4 text-xs font-semibold text-on-brand disabled:cursor-not-allowed disabled:opacity-50"
+                        className="bg-brand-gradient flex min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-full px-4 text-xs font-semibold shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <Plus className="h-4 w-4" />
                         <span>Proponer</span>
@@ -238,7 +238,7 @@ export const ShareQrModal: React.FC<ModalProps> = ({ open, onClose }) => {
             href={`https://wa.me/?text=${encodeURIComponent(`¡Sumate a votar la música en ${room.name}! Entrá sin instalar nada: ${joinUrl}`)}`}
             target="_blank"
             rel="noreferrer"
-            className="flex min-h-[44px] items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-on-brand"
+            className="bg-brand-gradient flex min-h-[44px] items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold shadow-aurora"
           >
             <Share2 className="h-4 w-4" />
             <span>WhatsApp</span>
@@ -443,7 +443,7 @@ export const AccountLinkModal: React.FC<ModalProps> = ({ open, onClose }) => {
               toast.success('Cuenta vinculada con Google');
               onClose();
             }}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-on-brand"
+            className="bg-brand-gradient flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold shadow-aurora"
           >
             <Link2 className="h-4 w-4" />
             <span>Continuar con Google</span>

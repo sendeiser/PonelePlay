@@ -13,8 +13,8 @@ import {
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { usePartyPreview } from '../context/PartyPreviewContext';
 import { PonelePlayLogo } from '../components/PonelePlayLogo';
+import { usePartyPreview } from '../context/PartyPreviewContext';
 import { FALLBACK_GENRES, RECENT_ROOMS_MOCK } from '../data/mockPartyData';
 import { AudioProvider } from '../types/jukebox';
 
@@ -61,34 +61,93 @@ export const LandingPage: React.FC = () => {
 
   return (
     <main className="mx-auto max-w-6xl space-y-8 px-4 py-6 sm:px-6 sm:py-10">
-      {/* Hero Banner Minimalista */}
-      <section className="rounded-3xl border border-stroke bg-card p-6 shadow-surface sm:p-10">
-        <div className="max-w-3xl space-y-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <PonelePlayLogo size="md" showWordmark={false} />
-            <p className="font-mono text-xs font-semibold uppercase tracking-widest text-coral">
-              YouTube Music Sin Premium · Spotify Opcional · Smart TV
+      {/* Hero Showcase Editorial estilo Streaming Profesional */}
+      <section className="glass-card relative overflow-hidden rounded-3xl border border-stroke p-6 shadow-elevated sm:p-10">
+        <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
+          <div className="space-y-5 lg:col-span-7">
+            <div className="flex flex-wrap items-center gap-3">
+              <PonelePlayLogo size="md" showWordmark={false} />
+              <p className="font-mono text-xs font-bold uppercase tracking-widest text-coral">
+                YouTube Music Sin Premium · Spotify · Smart TV
+              </p>
+            </div>
+
+            <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
+              Tu fiesta, tus reglas.{' '}
+              <span className="text-brand">Todos eligen</span> el próximo tema.
+            </h1>
+
+            <p className="text-sm leading-relaxed text-muted sm:text-base">
+              Crea una sala en segundos, proyecta el código QR en tu Smart TV o compártelo por link y deja que tus invitados propongan y voten canciones en vivo sin instalar nada.
             </p>
+
+            <div className="flex flex-wrap gap-2 pt-1 text-xs">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 py-2 font-semibold text-ink">
+                <Smartphone className="h-3.5 w-3.5 text-brand" /> PWA Instalable + Mobile
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 py-2 font-semibold text-ink">
+                <Tv className="h-3.5 w-3.5 text-coral" /> App Android TV Nativa
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 py-2 font-semibold text-ink">
+                <ShieldCheck className="h-3.5 w-3.5 text-amber" /> 1 Voto Único por Canción
+              </span>
+            </div>
           </div>
 
-          <h1 className="font-display text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
-            Tu fiesta, tus reglas. <span className="text-coral">Todos eligen</span> el próximo tema.
-          </h1>
-
-          <p className="text-sm leading-relaxed text-muted sm:text-base">
-            Crea una sala en segundos, proyecta el código QR en tu Smart TV o compártelo por link y deja que tus invitados propongan y voten canciones sin instalar nada.
-          </p>
-
-          <div className="flex flex-wrap gap-2 pt-1 text-xs text-muted">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
-              <Smartphone className="h-3.5 w-3.5 text-brand" /> PWA Instalable + Mobile
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
-              <Tv className="h-3.5 w-3.5 text-brand" /> App Android TV Nativa
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-stroke bg-elevated px-3 py-1.5 font-medium text-ink">
-              <ShieldCheck className="h-3.5 w-3.5 text-brand" /> 1 Voto Único por Canción
-            </span>
+          {/* Showcase Fotográfico con Overlay Editorial y Portadas */}
+          <div className="lg:col-span-5">
+            <div className="relative overflow-hidden rounded-3xl border border-stroke shadow-elevated">
+              <img
+                src="/covers/hero-party.jpg"
+                alt="Amigos escuchando música juntos con PonelePlay"
+                className="aspect-[4/3] w-full object-cover"
+              />
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"
+              />
+              <div className="absolute inset-x-0 bottom-0 p-4 text-white">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <img
+                      src="/covers/cover-synthwave.png"
+                      alt="Neon Pulse"
+                      className="h-11 w-11 shrink-0 rounded-xl border border-white/25 object-cover shadow"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="eq-bar h-2.5 w-0.5 rounded-full bg-white" />
+                        <span className="eq-bar eq-bar-2 h-3.5 w-0.5 rounded-full bg-pink-400" />
+                        <span className="eq-bar eq-bar-3 h-2 w-0.5 rounded-full bg-orange-400" />
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-pink-300">
+                          En vivo · PLAY42
+                        </span>
+                      </div>
+                      <p className="truncate font-display text-sm font-bold text-white">
+                        Neon Pulse (Night City)
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex -space-x-2">
+                    <img
+                      src="/covers/cover-trap.png"
+                      alt="Siguiente 1"
+                      className="h-8 w-8 rounded-full border-2 border-white/80 object-cover"
+                    />
+                    <img
+                      src="/covers/cover-urban.jpg"
+                      alt="Siguiente 2"
+                      className="h-8 w-8 rounded-full border-2 border-white/80 object-cover"
+                    />
+                    <img
+                      src="/covers/cover-cumbia.jpg"
+                      alt="Siguiente 3"
+                      className="h-8 w-8 rounded-full border-2 border-white/80 object-cover"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -98,17 +157,17 @@ export const LandingPage: React.FC = () => {
         {/* Tarjeta A: Crear Sala */}
         <form
           onSubmit={handleCreateRoom}
-          className="flex flex-col justify-between rounded-3xl border border-stroke bg-card p-6 shadow-surface"
+          className="glass-card flex flex-col justify-between rounded-3xl border border-stroke p-6 shadow-surface"
         >
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-xs font-semibold uppercase tracking-widest text-brand">
+                <p className="font-mono text-xs font-bold uppercase tracking-widest text-coral">
                   Para Anfitriones
                 </p>
                 <h2 className="mt-1 font-display text-2xl font-bold text-ink">Crear Sala</h2>
               </div>
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">
+              <span className="bg-brand-gradient flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm">
                 <PlusCircle className="h-6 w-6" />
               </span>
             </div>
@@ -133,13 +192,13 @@ export const LandingPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setProvider('youtube_music')}
-                  className={`flex min-h-[60px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-colors ${
+                  className={`flex min-h-[64px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
                     provider === 'youtube_music'
-                      ? 'border-brand bg-brand-soft'
-                      : 'border-stroke bg-elevated hover:border-muted'
+                      ? 'border-coral bg-coral-soft shadow-sm'
+                      : 'border-stroke bg-elevated hover:border-brand/50'
                   }`}
                 >
-                  <Music2 className={`mt-0.5 h-5 w-5 shrink-0 ${provider === 'youtube_music' ? 'text-brand' : 'text-muted'}`} />
+                  <Music2 className={`mt-0.5 h-5 w-5 shrink-0 ${provider === 'youtube_music' ? 'text-coral' : 'text-muted'}`} />
                   <div>
                     <p className="text-xs font-bold text-ink">YouTube Music Audio</p>
                     <p className="text-[11px] text-muted">100% gratis · Sin Premium</p>
@@ -149,13 +208,13 @@ export const LandingPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setProvider('spotify')}
-                  className={`flex min-h-[60px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-colors ${
+                  className={`flex min-h-[64px] items-start gap-2.5 rounded-2xl border p-3 text-left transition-all ${
                     provider === 'spotify'
-                      ? 'border-brand bg-brand-soft'
-                      : 'border-stroke bg-elevated hover:border-muted'
+                      ? 'border-emerald-500 bg-emerald-500/10 shadow-sm'
+                      : 'border-stroke bg-elevated hover:border-brand/50'
                   }`}
                 >
-                  <Radio className={`mt-0.5 h-5 w-5 shrink-0 ${provider === 'spotify' ? 'text-brand' : 'text-muted'}`} />
+                  <Radio className={`mt-0.5 h-5 w-5 shrink-0 ${provider === 'spotify' ? 'text-emerald-500' : 'text-muted'}`} />
                   <div>
                     <p className="text-xs font-bold text-ink">Spotify Premium</p>
                     <p className="text-[11px] text-muted">Web Player & Connect</p>
@@ -165,7 +224,7 @@ export const LandingPage: React.FC = () => {
             </div>
 
             {/* Acordeón Opciones Avanzadas */}
-            <div className="rounded-2xl border border-stroke bg-elevated/60">
+            <div className="rounded-2xl border border-stroke bg-elevated/70">
               <button
                 type="button"
                 onClick={() => setAdvancedOpen((o) => !o)}
@@ -229,7 +288,7 @@ export const LandingPage: React.FC = () => {
 
           <button
             type="submit"
-            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-on-brand shadow-surface transition-opacity hover:opacity-95 active:scale-[0.99]"
+            className="bg-brand-gradient mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-bold shadow-aurora transition-opacity hover:opacity-95 active:scale-[0.99]"
           >
             <PlusCircle className="h-5 w-5" />
             <span>Crear Sala y Empezar</span>
@@ -239,17 +298,17 @@ export const LandingPage: React.FC = () => {
         {/* Tarjeta B: Unirse a una Sala */}
         <form
           onSubmit={handleJoinSubmit}
-          className="flex flex-col justify-between rounded-3xl border border-stroke bg-card p-6 shadow-surface"
+          className="glass-card flex flex-col justify-between rounded-3xl border border-stroke p-6 shadow-surface"
         >
           <div className="space-y-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-xs font-semibold uppercase tracking-widest text-muted">
+                <p className="font-mono text-xs font-bold uppercase tracking-widest text-brand">
                   Para Invitados
                 </p>
                 <h2 className="mt-1 font-display text-2xl font-bold text-ink">Unirse a una Sala</h2>
               </div>
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-elevated text-ink">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-brand-soft text-brand">
                 <DoorOpen className="h-6 w-6" />
               </span>
             </div>
@@ -273,7 +332,7 @@ export const LandingPage: React.FC = () => {
               />
             </div>
 
-            <div className="rounded-2xl border border-stroke bg-elevated/60 p-4 text-xs text-muted">
+            <div className="rounded-2xl border border-stroke bg-elevated/70 p-4 text-xs text-muted">
               <p className="font-semibold text-ink">¿Tienes Android Smart TV en casa?</p>
               <p className="mt-1">
                 Abre la app <strong className="text-ink">PonelePlay TV</strong> en tu televisor, vincula este código y usa el TV como parlante principal o pantalla visual.
@@ -283,7 +342,7 @@ export const LandingPage: React.FC = () => {
 
           <button
             type="submit"
-            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-5 text-sm font-semibold text-ink transition-colors hover:border-brand hover:text-brand active:scale-[0.99]"
+            className="mt-6 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-5 text-sm font-bold text-ink transition-colors hover:border-brand hover:text-brand active:scale-[0.99]"
           >
             <DoorOpen className="h-5 w-5" />
             <span>Entrar a la Sala</span>
@@ -302,15 +361,15 @@ export const LandingPage: React.FC = () => {
           {RECENT_ROOMS_MOCK.map((r) => (
             <div
               key={r.code}
-              className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stroke bg-card p-4 transition-colors hover:bg-elevated/40"
+              className="glass-card flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-stroke p-4 transition-all hover:border-brand/40"
             >
               <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-xs font-bold text-brand">{r.code}</span>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                    className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
                       r.isActive
-                        ? 'bg-coral-soft text-coral'
+                        ? 'bg-brand-gradient'
                         : 'bg-elevated text-muted'
                     }`}
                   >

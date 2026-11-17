@@ -48,7 +48,6 @@ export const LiveRoomPage: React.FC = () => {
   const [qrOpen, setQrOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Soporte silencioso por URL para pruebas E2E sin barras artificiales en la UI
   useEffect(() => {
     const roleParam = searchParams.get('role');
     if (roleParam === 'guest' || roleParam === 'host') {
@@ -72,8 +71,8 @@ export const LiveRoomPage: React.FC = () => {
 
   return (
     <main className="mx-auto max-w-4xl space-y-4 px-3 py-4 sm:px-6 sm:py-6">
-      {/* Top Bar minimalista de Sala */}
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stroke bg-card p-3 sm:px-5 sm:py-3.5">
+      {/* Top Bar de Sala */}
+      <section className="glass-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stroke p-3 shadow-surface sm:px-5 sm:py-3.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <Link
             to="/"
@@ -116,9 +115,9 @@ export const LiveRoomPage: React.FC = () => {
             type="button"
             onClick={() => navigate(`/room/${code.toUpperCase()}/tv`)}
             aria-label="Modo TV"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 text-xs font-semibold text-ink hover:border-brand"
+            className="flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-stroke bg-elevated px-3.5 text-xs font-semibold text-ink hover:border-coral"
           >
-            <Tv className="h-4 w-4 text-ink" />
+            <Tv className="h-4 w-4 text-coral" />
             <span className="hidden sm:inline">Modo TV</span>
           </button>
 
@@ -135,11 +134,11 @@ export const LiveRoomPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Reproductor Compacto y Elegante */}
+      {/* Reproductor Profesional con Ambient Blur */}
       <NowPlayingHero />
 
       {/* Buscador + Cupo */}
-      <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-2xl border border-stroke bg-card p-2.5 sm:flex-nowrap">
+      <div className="glass-card flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-2xl border border-stroke p-2.5 shadow-surface sm:flex-nowrap">
         <button
           type="button"
           onClick={() => setSearchOpen(true)}
@@ -150,7 +149,7 @@ export const LiveRoomPage: React.FC = () => {
         </button>
 
         <div className="flex shrink-0 items-center gap-2">
-          <span className="rounded-xl bg-brand-soft px-3 py-2 font-mono text-xs font-semibold tabular-nums-mono text-brand">
+          <span className="rounded-xl bg-brand-soft px-3 py-2 font-mono text-xs font-bold tabular-nums-mono text-brand">
             {isHost ? 'HOST ∞' : `${myPendingCount}/${room.maxPendingPerUser} cupo`}
           </span>
           {cooldownRemaining > 0 && (
@@ -161,20 +160,20 @@ export const LiveRoomPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tabs de Cola / Historial / Participantes */}
+      {/* Tabs con píldora gradiente activa */}
       <div
         role="tablist"
         aria-label="Secciones de la sala"
-        className="grid grid-cols-3 gap-1.5 rounded-2xl border border-stroke bg-card p-1.5"
+        className="glass-card grid grid-cols-3 gap-1.5 rounded-2xl border border-stroke p-1.5"
       >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'queue'}
           onClick={() => setActiveTab('queue')}
-          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-colors sm:text-sm ${
+          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-all sm:text-sm ${
             activeTab === 'queue'
-              ? 'bg-brand text-on-brand'
+              ? 'bg-brand-gradient shadow-sm'
               : 'text-muted hover:text-ink'
           }`}
         >
@@ -187,9 +186,9 @@ export const LiveRoomPage: React.FC = () => {
           role="tab"
           aria-selected={activeTab === 'played'}
           onClick={() => setActiveTab('played')}
-          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-colors sm:text-sm ${
+          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-all sm:text-sm ${
             activeTab === 'played'
-              ? 'bg-brand text-on-brand'
+              ? 'bg-brand-gradient shadow-sm'
               : 'text-muted hover:text-ink'
           }`}
         >
@@ -202,9 +201,9 @@ export const LiveRoomPage: React.FC = () => {
           role="tab"
           aria-selected={activeTab === 'participants'}
           onClick={() => setActiveTab('participants')}
-          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-colors sm:text-sm ${
+          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-all sm:text-sm ${
             activeTab === 'participants'
-              ? 'bg-brand text-on-brand'
+              ? 'bg-brand-gradient shadow-sm'
               : 'text-muted hover:text-ink'
           }`}
         >
@@ -217,8 +216,8 @@ export const LiveRoomPage: React.FC = () => {
       {activeTab === 'queue' && (
         <div role="tabpanel" className="space-y-3">
           {queue.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-stroke bg-card p-8 text-center">
-              <Music className="mx-auto h-10 w-10 text-brand" />
+            <div className="glass-card rounded-3xl border border-dashed border-stroke p-8 text-center">
+              <Music className="mx-auto h-10 w-10 text-coral" />
               <h2 className="mt-3 font-display text-xl font-bold text-ink">La cola está vacía</h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-muted">
                 El <strong className="text-ink">Autoplay de respaldo</strong> mantiene la música sonando. ¡Busca el próximo tema y sé el primero en ponerle ritmo!
@@ -226,7 +225,7 @@ export const LiveRoomPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-on-brand"
+                className="bg-brand-gradient mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-full px-5 text-sm font-bold shadow-aurora"
               >
                 <Search className="h-4 w-4" />
                 <span>Proponer Primer Tema</span>
@@ -255,7 +254,7 @@ export const LiveRoomPage: React.FC = () => {
           {played.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-stroke bg-card p-3 sm:p-4"
+              className="glass-card flex items-center justify-between gap-3 rounded-2xl border border-stroke p-3 sm:p-4"
             >
               <div className="flex min-w-0 items-center gap-3">
                 <img
@@ -289,8 +288,8 @@ export const LiveRoomPage: React.FC = () => {
           {participants.map((p) => (
             <div
               key={p.id}
-              className={`flex items-center justify-between gap-3 rounded-2xl border p-3.5 ${
-                p.isBanned ? 'border-danger/40 bg-danger/5 opacity-75' : 'border-stroke bg-card'
+              className={`glass-card flex items-center justify-between gap-3 rounded-2xl border p-3.5 ${
+                p.isBanned ? 'border-danger/40 bg-danger/5 opacity-75' : 'border-stroke'
               }`}
             >
               <div className="flex min-w-0 items-center gap-3">
@@ -301,7 +300,7 @@ export const LiveRoomPage: React.FC = () => {
                   <div className="flex flex-wrap items-center gap-1.5">
                     <p className="truncate text-sm font-semibold text-ink">@{p.displayName}</p>
                     {p.role === 'host' && (
-                      <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase text-brand">
+                      <span className="bg-brand-gradient rounded-full px-2 py-0.5 text-[10px] font-bold uppercase">
                         Anfitrión
                       </span>
                     )}

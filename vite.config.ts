@@ -7,13 +7,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['covers/*.png', 'covers/*.svg', 'icons/*.svg'],
+      includeAssets: ['covers/*.png', 'covers/*.jpg', 'icons/*.svg'],
       manifest: {
         name: 'PonelePlay V2 — Social Party Jukebox',
         short_name: 'PonelePlay',
         description: 'Jukebox colaborativo en tiempo real para fiestas con YouTube Music (sin Premium) y Spotify.',
-        theme_color: '#0D9488',
-        background_color: '#F0FDFA',
+        theme_color: '#6366F1',
+        background_color: '#F4F5FA',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',

@@ -45,7 +45,7 @@ export const JoinRoomPage: React.FC = () => {
   return (
     <main className="mx-auto max-w-xl px-4 py-8 sm:px-6 sm:py-12">
       {edgeState === 'active' && (
-        <section className="rounded-3xl border border-stroke bg-card p-6 shadow-elevated sm:p-8">
+        <section className="glass-card rounded-3xl border border-stroke p-6 shadow-elevated sm:p-8">
           <div className="space-y-2 border-b border-stroke pb-5 text-center">
             <div className="flex justify-center pb-1">
               <PonelePlayLogo size="md" showWordmark={false} />
@@ -106,7 +106,7 @@ export const JoinRoomPage: React.FC = () => {
 
             <button
               type="submit"
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-brand px-5 text-sm font-semibold text-on-brand shadow-surface transition-opacity hover:opacity-95 active:scale-[0.99]"
+              className="bg-brand-gradient flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full px-5 text-sm font-bold shadow-aurora transition-opacity hover:opacity-95 active:scale-[0.99]"
             >
               <span>Entrar a Votar y Proponer</span>
               <ArrowRight className="h-4 w-4" />

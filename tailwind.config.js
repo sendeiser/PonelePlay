@@ -26,8 +26,9 @@ export default {
         mono: ['"JetBrains Mono"', 'monospace'],
       },
       boxShadow: {
-        surface: '0 4px 20px -2px rgba(13, 148, 136, 0.08)',
-        elevated: '0 12px 32px -4px rgba(15, 23, 42, 0.12)',
+        surface: '0 8px 30px -6px rgba(99, 102, 241, 0.14)',
+        elevated: '0 20px 44px -10px rgba(15, 23, 42, 0.22)',
+        aurora: '0 12px 32px -6px rgba(236, 72, 153, 0.32)',
       }
     }
   },
