@@ -1,233 +1,59 @@
-# Design System Master File
+# Design System Master File — Electric Sapphire & Emerald Studio
 
-> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
-> If that file exists, its rules **override** this Master file.
-> If not, strictly follow the rules below.
+**Project:** PonelePlay V2  
+**Updated:** 2026-11-16  
+**Logo:** **Sonic Prism** — Squircle diagonal Indigo -> Zafiro -> Cyan (`#4F46E5 -> #2563EB -> #06B6D4`) con brillo cristalino, ondas acústicas y núcleo `P + Play`, acompañado de wordmark `Ponele` + `Play` ([PonelePlayLogo.tsx](file:///d:/PonelePlay%20V2/src/components/PonelePlayLogo.tsx))  
+**Rule:** Modo Claro (**Arctic Sapphire Studio**) y Modo Oscuro (**Abyssal Sapphire**) 100% separados por tema activo (cero mezcla entre temas en una misma vista, incluyendo Modo TV y App Smart TV, y cero tonos rosados, fucsias o anaranjados).
 
----
+## Color Tokens
 
-**Project:** PonelePlay V2
-**Generated:** 2026-11-16 20:14:09
-**Category:** Music Streaming
-**Design Dials:** Variance 7/10 (Balanced / Modern) | Motion 7/10 (Standard) | Density 6/10 (Standard)
+### Light Mode — Arctic Sapphire Studio (`:root, [data-theme='light']`)
+| Role | Value | CSS Variable |
+|---|---|---|
+| Canvas | `#F2F6FC` | `--bg-primary` |
+| Ambient Mesh | `radial-gradient` Sapphire (`0.13`), Cyan (`0.12`), Emerald (`0.09`) | `--bg-mesh` |
+| Card (Glass) | `rgba(255, 255, 255, 0.90)` | `--bg-card` |
+| Elevated | `#E6EEF8` | `--bg-elevated` |
+| Ink Primary | `#090E1A` | `--text-primary` |
+| Ink Muted | `#475569` | `--text-muted` |
+| Brand Sapphire | `#2563EB` | `--brand-primary` |
+| On Brand | `#FFFFFF` | `--on-brand` |
+| Brand Soft | `rgba(37, 99, 235, 0.11)` | `--brand-soft` |
+| Accent Sky / Cyan | `#0284C7` | `--brand-coral` |
+| On Accent | `#FFFFFF` | `--on-coral` |
+| Accent Soft | `rgba(6, 182, 212, 0.12)` | `--coral-soft` |
+| Emerald Accent | `#059669` | `--brand-amber` / `--accent-amber` |
+| Hairline Border | `rgba(15, 23, 42, 0.09)` | `--border-subtle` |
+| Ambient Opacity / Scrim | `0.22` / `rgba(255, 255, 255, 0.76)` | `--ambient-opacity` / `--ambient-scrim` |
 
----
+### Dark Mode — Abyssal Sapphire (`[data-theme='dark']`)
+| Role | Value | CSS Variable |
+|---|---|---|
+| Canvas | `#060913` | `--bg-primary` |
+| Ambient Mesh | `radial-gradient` Sapphire (`0.24`), Cyan (`0.18`), Emerald (`0.12`) | `--bg-mesh` |
+| Card (Glass) | `rgba(13, 19, 34, 0.86)` | `--bg-card` |
+| Elevated | `rgba(23, 33, 56, 0.92)` | `--bg-elevated` |
+| Ink Primary | `#F8FAFC` | `--text-primary` |
+| Ink Muted | `#94A3B8` | `--text-muted` |
+| Brand Sky Blue | `#60A5FA` | `--brand-primary` |
+| On Brand | `#050914` | `--on-brand` |
+| Brand Soft | `rgba(59, 130, 246, 0.16)` | `--brand-soft` |
+| Accent Cyber Cyan | `#22D3EE` | `--brand-coral` |
+| On Accent | `#041E24` | `--on-coral` |
+| Accent Soft | `rgba(34, 211, 238, 0.15)` | `--coral-soft` |
+| Emerald Accent | `#34D399` | `--brand-amber` / `--accent-amber` |
+| Hairline Border | `rgba(255, 255, 255, 0.10)` | `--border-subtle` |
+| Ambient Opacity / Scrim | `0.34` / `rgba(6, 9, 19, 0.70)` | `--ambient-opacity` / `--ambient-scrim` |
 
-## Global Rules
+### Brand Gradient & Ambient Effects
+- `.bg-brand-gradient`: `linear-gradient(135deg, #4F46E5 0%, #2563EB 52%, #06B6D4 100%)`, `color: #FFFFFF` (uso exclusivo en botones primarios, badges activos, emblema Sonic Prism y controles focales; texto siempre en tonos sólidos de alto contraste)
+- `.glass-card`: `background-color: var(--bg-card); backdrop-filter: blur(22px);`
+- `.ambient-cover-blur` + `.ambient-scrim`: halo cromático difuminado de portada (`blur(46px) saturate(1.55)`) con scrim de contraste garantizado (`>= 4.5:1`)
+- Shadow Aurora (`shadow-aurora`): `0 12px 32px -6px rgba(6, 182, 212, 0.34)`
 
-### Color Palette
-
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#1E1B4B` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#4338CA` | `--color-secondary` |
-| On Secondary | `#FFFFFF` | `--color-on-secondary` |
-| Accent/CTA | `#22C55E` | `--color-accent` |
-| On Accent/CTA | `#0F172A` | `--color-on-accent` |
-| Background | `#0F0F23` | `--color-background` |
-| Foreground | `#F8FAFC` | `--color-foreground` |
-| Card | `#1B1B30` | `--color-card` |
-| Card Foreground | `#F8FAFC` | `--color-card-foreground` |
-| Muted | `#27273B` | `--color-muted` |
-| Muted Foreground | `#94A3B8` | `--color-muted-foreground` |
-| Border | `#312E81` | `--color-border` |
-| Destructive | `#EF4444` | `--color-destructive` |
-| On Destructive | `#000000` | `--color-on-destructive` |
-| Ring | `#FFFFFF` | `--color-ring` |
-
-**Color Notes:** Dark audio + play green
-
-### Typography
-
-- **Heading Font:** Righteous
-- **Body Font:** Poppins
-- **Mood:** music, entertainment, fun, energetic, bold, performance
-- **Google Fonts:** [Righteous + Poppins](https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap)
-
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap');
-```
-
-### Spacing Variables
-
-*Density: 6/10 — Standard*
-
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding |
-
-### Shadow Depths
-
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
-
----
-
-## Component Specs
-
-### Buttons
-
-```css
-/* Primary Button */
-.btn-primary {
-  background: #22C55E;
-  color: #0F172A;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #F8FAFC;
-  border: 2px solid #1E1B4B;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #0F0F23;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #1E1B4B;
-  outline: none;
-  box-shadow: 0 0 0 3px #1E1B4B20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
-
-## Style Guidelines
-
-**Style:** Dark Mode (OLED)
-
-**Keywords:** Dark theme, low light, high contrast, deep black, midnight blue, eye-friendly, OLED, night mode, power efficient
-
-**Best For:** Night-mode apps, coding platforms, entertainment, eye-strain prevention, OLED devices, low-light
-
-**Key Effects:** Minimal glow (text-shadow: 0 0 10px), dark-to-light transitions, low white emission, high readability, visible focus
-
-### Page Pattern
-
-**Pattern Name:** Feature-Rich Showcase
-
-- **Conversion Strategy:** Clear feature hierarchy. One key message per card. Strong CTA repetition.
-- **CTA Placement:** Hero (sticky) + After features + Bottom
-- **Section Order:** Hero (value prop) > Feature grid/cards (4-6) > Use cases or benefits > Social proof or logos > CTA
-
----
-
-## Motion
-
-**Stagger List** (Standard) — Trigger: load or scroll | Duration: 300-450ms | Easing: `back.out(1.4)`
-
-```js
-gsap.from('.grid-item', { opacity: 0, scale: 0.92, y: 16, duration: 0.4, stagger: { each: 0.06, from: 'start', grid: 'auto' }, ease: 'back.out(1.4)' });
-```
-
-**Framework notes:** grid: 'auto' lets GSAP infer rows/columns from a CSS grid layout for a natural wave stagger; Use matchMedia('(prefers-reduced-motion: reduce)') to skip non-essential motion and render the final state immediately
-
-- ✅ Combine with from: 'center' for a bento-grid layout to draw the eye inward first
-- ❌ Don't use back.out on dense data tables; the overshoot reads as sloppy on informational UI
-- ⚡ Group DOM writes; avoid interleaving layout reads (getBoundingClientRect) between staggered tweens
-
----
-
-## Anti-Patterns (Do NOT Use)
-
-- ❌ Cluttered layout
-- ❌ Poor audio player UX
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+## Typography & Interaction
+- **Display:** `Outfit` (500, 600, 700, 800)
+- **Body / UI:** `Plus Jakarta Sans` (400, 500, 600, 700)
+- **Tabular Numbers:** `JetBrains Mono` (500, 600, 700)
+- **Touch Targets:** Todos los controles interactivos mantienen mínimo `44x44px` (`min-h-[44px]`)
+- **Album Art Rule:** Portadas cuadradas fotográficas (`/covers/*.jpg`, `/covers/*.png`); nunca video IFrame visible
