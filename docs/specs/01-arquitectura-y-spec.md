@@ -1,891 +1,339 @@
-# PonelePlay — Spec de Arquitectura y Comportamiento v1
+# Spec Maestro de Arquitectura y Producto — PonelePlay V2
 
-- **Proyecto:** PonelePlay
-- **Tipo:** Aplicación web con tres superficies: cliente móvil por QR, panel del bar y reproductor de la PC del local.
-- **Stack base:** Next.js 15 + TypeScript + Tailwind CSS v4 + Supabase (Postgres, Auth anónimo, Realtime, Storage, Edge Functions) + Vercel.
-- **Idioma de UI:** español (es-AR).
-- **Fecha:** 31/10/2026
-- **Estado:** aprobado por el dueño el 31/10/2026.
+**Metodología:** PEVC V6 (Vibe Coding Profesional)  
+**Estado:** Pendiente de aprobación del usuario (`Spec aprobado`) para iniciar Fase 2  
+**Última actualización:** 2026-11-16
 
 ---
 
-## 1. Resumen del sistema
+## 1. Resumen Ejecutivo y Propósito del Sistema (`PonelePlay V2`)
 
-PonelePlay es un sistema de votación y cola musical en vivo para un pool bar. Los clientes escanean un QR desde su teléfono, ven la cola y la canción que suena, proponen temas y votan para ordenar la cola. Cada voto cuesta un crédito. Los créditos se obtienen con un código de único uso que el dueño o los mozos generan al vender una consumición; el staff elige cuántos créditos otorga. No existe voto gratuito. Los códigos y los créditos vencen al cierre de la noche.
+**PonelePlay V2** es un ecosistema musical colaborativo en tiempo real tipo *jukebox social* para fiestas, juntadas y eventos donde un **Anfitrión (Host)** conecta la música al sistema de sonido (celular, PC o Smart TV) y los **Invitados (Guests)** proponen y votan canciones al instante sin instalar nada ni requerir cuentas pagas.
 
-El panel del bar, en la PC del negocio, controla la noche, el catálogo, los códigos y la moderación. Un reproductor web a pantalla completa, vinculado a esa PC, reproduce YouTube y archivos MP3 subidos por el dueño, avanza solo y usa una playlist de fondo cuando la cola está vacía. El cliente nunca reproduce audio: solo vota y propone.
+### Ecosistema Multi-Plataforma Completo
 
-La cola se ordena por cantidad de votos descendente y, en empate, por la propuesta más antigua. Un cliente no puede acumular más de un voto sobre la misma canción en la misma noche. El staff puede saltar la canción actual o vetar cualquier tema de la cola, sin devolución de créditos.
+1. **Web + PWA Instalable (Celulares Android/iOS y Desktop):**
+   - Los invitados entran al instante por enlace o QR desde el navegador sin instalar nada.
+   - Tanto el Anfitrión como los Invitados frecuentes pueden instalar la app como **PWA** (*"Agregar a pantalla de inicio"* mediante `vite-plugin-pwa`, `manifest.webmanifest`, Service Worker offline-ready e iconos adaptativos `192x192` / `512x512`).
+   - Incluye soporte de **Screen Wake Lock API** (`navigator.wakeLock`) para evitar que la pantalla del celular del Host se apague mientras está reproduciendo música, y detección de `beforeinstallprompt` para ofrecer un botón nativo de instalación en UI.
+2. **App Mobile Android (`Capacitor`):**
+   - Empaquetado nativo mediante **`@capacitor/core` y `@capacitor/android`** (carpeta `/android-mobile`) compartiendo el 100% de la interfaz y lógica de la SPA React + Vite para generar e instalar el **APK nativo en celulares Android**.
+3. **App Android Nativa para Smart TV (`/android-tv` — Kotlin + Jetpack Compose for TV):**
+   - Aplicación nativa dedicada para **Android TV / Google TV** construida con **Kotlin + Jetpack Compose for TV (`androidx.tv:tv-material`)**, declarada para **Android TV Leanback Launcher** (`CATEGORY_LEANBACK_LAUNCHER` y banner TV) con diseño **10-foot UI (1920x1080)** pensado para leerse cómodamente a 3 metros de distancia.
+   - Operable al **100% con Control Remoto (D-Pad)** mediante foco visual de alto contraste (`FocusRequester`, escala + borde luminoso en cada tarjeta/botón, navegación `Up/Down/Left/Right`, `OK/Select`, `Back` y teclas multimedia `Play/Pause` y `Media Next`).
 
----
+### Arquitectura Dual de Reproducción de Audio (Modo Universal)
 
-## 2. Objetivos y no objetivos
+Para eliminar la barrera de exigir una cuenta paga al anfitrión, **PonelePlay V2** implementa dos motores de audio intercambiables en tiempo real:
 
-### Objetivos v1
-
-1. Acceso instantáneo del cliente por QR, sin registro ni instalación.
-2. Cola musical colaborativa en tiempo real, ordenada por votos.
-3. Créditos de voto emitidos por el staff con código de único uso, impreso, mostrado o dictado.
-4. Propuestas de clientes por búsqueda interna de YouTube o pegando un link, con deduplicación y filtro de contenido explícito.
-5. Catálogo propio del dueño con YouTube, MP3 subidos y playlists de fondo.
-6. Reproductor automático en la PC del bar con YouTube y MP3, tolerante a errores de video.
-7. Control operativo del staff: skip, veto, generación de códigos y apertura/cierre de noche.
-8. Seguridad de datos con RLS, funciones atómicas y registro de auditoría de acciones del staff.
-
-### No objetivos v1
-
-- Apps nativas Android/iOS.
-- Pagos o cobros dentro de la app.
-- Servicio de mesa, pedidos de bebidas o integración con el POS.
-- Karaoke, letras sincronizadas o descarga de audio de YouTube.
-- Voto gratuito, voto por compartir o incentivos automáticos.
-- Impresión silenciosa por driver (QZ Tray u otro). La impresión es vía diálogo del navegador.
-- Analítica avanzada, multi-sucursal como producto SaaS o personalización por mesa.
-- Funcionamiento offline de votación.
+1. **Motor 1 — YouTube Music Audio (Sin Cuenta Premium / 100% Gratuito):**
+   - Reproduce canciones completas (pistas *Official Audio / Topic* de YouTube Music) mediante **`YouTube IFrame Player API` (`YT.Player`)** en Web/PWA/Mobile y mediante el reproductor embebido en modo audio en Android TV.
+   - **Experiencia visual "Solo Portada de Álbum":** El contenedor de video permanece técnicamente activo para procesar el audio (`playVideo`, `pauseVideo`, `seekTo`, `setVolume`, detección de fin de pista `ENDED`), pero **visualmente oculto** (`sr-only` / capa técnica oculta). La UI muestra **exclusivamente la portada HD del álbum**, metadatos limpios, barra de progreso sincronizada y controles de reproductor musical.
+   - No requiere suscripción YouTube Music Premium ni iniciar sesión en YouTube.
+2. **Motor 2 — Spotify Premium (Web Playback SDK + Spotify Connect):**
+   - Permite a anfitriones con **Spotify Premium** autenticarse vía **OAuth 2.0 PKCE** para reproducir en el navegador (**Web Playback SDK**) o controlar remotamente la app de Spotify en su celular, PC o Smart TV (**Spotify Connect API**).
+3. **Coordinación Multi-Dispositivo de Salida de Audio (`audio_output`):**
+   - Mediante `rooms.playback_state.audio_output` (`'host_device' | 'tv'`), la sala coordina en tiempo real si el sonido sale por el dispositivo del Anfitrión o directamente por los parlantes de la Smart TV, **evitando reproducción duplicada en ambos dispositivos a la vez**.
 
 ---
 
-## 3. Decisiones cerradas de la entrevista
+## 2. Módulos, Roles de Usuario y Reglas de Negocio Exactas
 
-| Tema | Decisión |
-|---|---|
-| Plataforma | Web móvil por QR. Panel web en la PC del bar. Sin app nativa. |
-| Acceso del cliente | Anónimo. Supabase Auth anónimo por dispositivo; sin email ni teléfono. |
-| Roles | Dueño (email/contraseña), staff (PIN), cliente anónimo, reproductor vinculado. |
-| Fuentes de audio v1 | YouTube (IFrame Player API) y MP3 subidos. Playlist de fondo del dueño. |
-| Spotify | Fase 2 opcional, solo con cuenta Premium y OAuth. No bloquea v1. |
-| Catálogo | Lo carga el dueño. Búsqueda interna de YouTube y pegado de links. |
-| Propuestas | Los clientes proponen libremente; entran directo a la cola. Modo catálogo y propuestas conviven. |
-| Moderación | Deduplicación activa, filtro de títulos explícitos configurable, veto del staff. |
-| Votos | Ordenan la cola. Un crédito por voto. Máximo un voto por persona por canción por noche. No se apilan votos en una canción. |
-| Desempate | Gana la propuesta más antigua (`created_at` ascendente). |
-| Créditos | Solo por código emitido por dueño o staff. El staff elige N créditos (1–50). |
-| Códigos | 8 caracteres, único uso, vencen al cerrar la noche. Se dictan, muestran e imprimen. |
-| Noche | Una sesión abierta por local a la vez. Al cerrar vencen códigos, créditos y cola. |
-| Cola vacía | Suena la playlist de fondo del dueño en orden y en loop. |
-| Marca | PonelePlay. Estética pool bar: fieltro verde, neón ámbar, ticket de consumición. |
+### 2.1 Rol 1: Anfitrión (Host)
 
----
+El usuario que crea la sala adquiere el rol `host` en `room_participants` y coincide con `rooms.host_id`.
 
-## 4. Roles y permisos
+- **Configuración inicial y edición de sala:**
+  - Nombre de la sala (ej. *"Cumple de Tincho"*).
+  - Generación automática de código corto alfanumérico único de 6 caracteres (ej. `PLAY42`), URL directa (`/join/PLAY42`) y Código QR descargable/proyectable.
+  - Selección de motor de reproducción activo (`youtube_music` sin Premium por defecto, o `spotify`).
+  - Configuración de límites anti-spam:
+    - `max_pending_per_user`: máximo de canciones en estado `pending` simultáneas por invitado (defecto: `5`, rango: `1` a `20`).
+    - `cooldown_seconds`: segundos mínimos de espera entre propuestas de un mismo invitado (defecto: `10` segundos, rango: `0` a `300`).
+  - Configuración de playlist/género de respaldo (**Autoplay** en cola vacía): categoría musical base (`party_hits`, `cumbia_cachengue`, `pop_electronica`, `rock_nacional`, `urbano_latino`) o playlist de respaldo.
+- **Controles exclusivos de reproducción:**
+  - `Play / Pause`, `Skip` (pasar a la siguiente canción mejor votada), `Seek` (mover barra de progreso), `Volumen / Mute`.
+  - Conmutador de fuente (`YouTube Music Audio` ↔ `Spotify Web Player` ↔ `Spotify Connect Device`).
+  - Selector de salida de audio (`Este dispositivo` ↔ `Smart TV conectada`).
+- **Poderes de moderación sobre la sala:**
+  - **Fijar arriba (`Pin to top`):** Marca `is_pinned = true` en un `queue_item` para que suene inmediatamente después del tema actual sin importar los votos.
+  - **Reproducir ahora (`Play now`):** Marca la canción actual como `played` y pasa de inmediato el `queue_item` seleccionado a `playing`.
+  - **Eliminar / Bloquear canción (`status = 'blocked'`):** Retira el tema de la cola activa y bloquea su `spotify_track_id` / `youtube_video_id` dentro de esa sala para impedir que cualquier invitado vuelva a proponerlo.
+  - **Expulsar / Bloquear invitado (`is_banned = true`):** Revoca en tiempo real la participación del invitado en `room_participants`. La sesión expulsada pierde acceso RLS de lectura/escritura en la sala.
+  - **Finalizar / Cerrar sala (`is_active = false`):** Congela la cola, detiene la reproducción y redirige a todos los participantes (y a la Smart TV) al **Resumen de Fin de Fiesta**.
 
-### 4.1 Dueño
+### 2.2 Rol 2: Invitado (Guest) — Identidad Híbrida
 
-- Crea su cuenta con email y contraseña.
-- Administra el local, el catálogo, la playlist de fondo, los keywords del filtro y el personal.
-- Abre y cierra la noche.
-- Genera códigos y opera skip/veto.
-- Vincula y revoca el reproductor de la PC.
-- Puede conectar Spotify (fase 2).
-- Ve historial de códigos y resumen de la noche.
+- **Entrada rápida sin registro (Flujo principal):**
+  - El invitado accede escaneando el QR de la Smart TV o del celular del Host, entrando por link directo o ingresando el código de 6 caracteres.
+  - No requiere instalar ninguna app ni tener cuentas pagas.
+  - Ingresa su **Apodo (`display_name`)** (2 a 24 caracteres) y elige un **Avatar/Emoji** (`avatar_emoji`).
+  - En segundo plano, el cliente inicia sesión con **Supabase Anonymous Auth** (`supabase.auth.signInAnonymously()`), crea/actualiza su perfil en `public.users` y lo registra en `public.room_participants`. Esto garantiza un `auth.uid()` real en PostgreSQL para hacer cumplir `UNIQUE(queue_item_id, user_id)` y RLS.
+- **Vinculación opcional de cuenta:**
+  - Botón para vincular la sesión anónima con **Google OAuth o Email** (`supabase.auth.linkIdentity()` / `updateUser()`) y conservar su historial de salas, temas propuestos y trofeos de "DJ de la noche" entre dispositivos.
 
-### 4.2 Staff (mozos)
+### 2.3 Reglas de Votación, Cola Dinámica y Casos Borde
 
-- Ingresa con PIN de 6 dígitos asignado por el dueño.
-- Genera códigos eligiendo créditos (1–50) para una consumición.
-- Reimprime o dicta códigos generados en la noche.
-- Salta la canción actual y veta temas de la cola.
-- Abre y cierra la noche con confirmación explícita.
-- Activa o desactiva propuestas de clientes durante la noche.
-- No accede a ajustes, catálogo, personal ni emparejamiento del reproductor.
-
-### 4.3 Cliente anónimo
-
-- Escanea el QR y entra sin registro.
-- Ve canción actual, cola ordenada, su saldo de créditos y su actividad.
-- Busca en YouTube, propone temas y vota.
-- Canjea códigos.
-- No puede ver datos de otros clientes, códigos ajenos ni información interna del local.
-
-### 4.4 Reproductor
-
-- Dispositivo de confianza vinculado por el dueño mediante token revocable.
-- Consulta la cola y la playlist de fondo.
-- Reporta `playing`, `finished`, `failed` y latido de conexión.
-- No puede administrar nada.
-
----
-
-## 5. Arquitectura
-
-### 5.1 Componentes
-
-```
-┌──────────────────────────────┐        ┌──────────────────────────────┐
-│ Cliente móvil (Next.js)      │        │ Panel del bar (Next.js)      │
-│ /p/[slug]                    │        │ /panel/[slug]                │
-│ - cola en vivo               │        │ - noche, cola, códigos       │
-│ - búsqueda y propuestas      │        │ - catálogo y ajustes         │
-│ - canje de códigos           │        │ - staff, pairing             │
-└──────────────┬───────────────┘        └──────────────┬───────────────┘
-               │ HTTPS + Supabase JS (anon key, RLS)   │
-               ▼                                       ▼
-┌───────────────────────────────────────────────────────────────────────┐
-│ Supabase                                                              │
-│ Auth anónimo/email · Postgres + RLS · Realtime · Storage (MP3)       │
-│ Edge Functions: staff, propose-track, youtube-search, player,         │
-│                 spotify (fase 2)                                      │
-└──────────────┬───────────────────────────────────────┬────────────────┘
-               │                                       │
-               ▼                                       ▼
-┌──────────────────────────────┐        ┌──────────────────────────────┐
-│ YouTube Data API v3          │        │ Reproductor de la PC          │
-│ búsqueda y metadata          │        │ /player/[slug] en Chrome      │
-│ YouTube IFrame Player API    │◄───────│ YouTube IFrame + <audio> MP3  │
-└──────────────────────────────┘        │ polling 5s + heartbeat 15s   │
-                                        └──────────────────────────────┘
-```
-
-- **Next.js** aloja las tres superficies y sirve el QR. No hay servidor propio de estado: todo pasa por Supabase.
-- **Supabase Edge Functions** concentran operaciones sensibles: validación de YouTube, límites de uso, PIN del staff, token del reproductor y Spotify.
-- **Supabase Realtime** empuja cambios de `queue_items`, `night_sessions` y estado del reproductor al cliente y al panel. Si el socket cae, el cliente hace polling cada 10 s.
-- **El reproductor** usa polling cada 5 s a una Edge Function con su token de dispositivo. Es un único cliente; el polling evita problemas de autorización Realtime con tokens custom.
-- **Storage** guarda MP3 en un bucket privado. El reproductor recibe URLs firmadas de corta duración.
-- **Vercel** hostea Next.js. **Supabase Cloud** hostea datos y funciones.
-
-### 5.2 Flujo de una noche
-
-1. El dueño/staff abre la noche desde el panel. Se crea `night_sessions` en estado `open`.
-2. El dueño enciende el reproductor en la PC; queda vinculado y muestra el QR de acceso.
-3. Los clientes escanean el QR, se crea un `participant` anónimo para esa noche y reciben saldo 0.
-4. El staff vende una consumición, elige créditos (por defecto 5) y genera un código. Se imprime, muestra o dicta.
-5. El cliente canjea el código y obtiene créditos.
-6. El cliente propone temas o vota los existentes. La cola se reordena en vivo.
-7. El reproductor toca la primera canción. Al terminar, la marca `played` y toca la siguiente. Si no hay cola, suena la playlist de fondo.
-8. El staff puede saltar o vetar. Los créditos gastados no se devuelven.
-9. Al cerrar la noche: códigos no canjeados pasan a `expired`, saldos a 0, cola cerrada, y el reproductor pasa a playlist de fondo si está configurada. La próxima noche empieza limpia.
+1. **Voto Único por Usuario y Canción:**
+   - Restricción estricta en base de datos: `UNIQUE(queue_item_id, user_id)` en la tabla `votes`.
+   - Cada participante activo no baneado puede emitir **Upvote (`+1`)**, **Downvote (`-1`)**, cambiar entre ambos o retirar su voto.
+2. **Cálculo de Puntaje Neto y Downvotes:**
+   - `net_score = upvotes_count - downvotes_count` (columna generada almacenada en PostgreSQL).
+   - Los votos negativos bajan la canción en la cola pero **nunca eliminan automáticamente una canción** (solo el Host puede eliminar/bloquear).
+3. **Ordenamiento Determinístico en Tiempo Real:**
+   - Toda la cola pendiente (`status = 'pending'`) se ordena mediante:
+     1. `is_pinned DESC` (canciones fijadas por el Host primero).
+     2. `net_score DESC` (mayor puntaje neto primero).
+     3. `created_at ASC` (en caso de empate, gana la propuesta más antigua — FIFO).
+4. **Regla Anti-Duplicados Inteligente:**
+   - Si un usuario intenta proponer una canción ya existente en la sala:
+     - En `status = 'pending'`: no se duplica; si no la había votado positivamente, registra automáticamente un **Upvote (`+1`)** y muestra toast *"¡Esta canción ya está en la cola! Sumamos tu voto (+1)"*. Si ya tenía su `+1`, muestra *"Esta canción ya está en la cola y ya tiene tu voto"*.
+     - En `status = 'playing'`: muestra *"¡Esta canción está sonando ahora mismo!"*.
+     - En `status = 'blocked'`: muestra *"El anfitrión bloqueó esta canción en esta sala"*.
+     - En `status = 'played'`: permite proponerla nuevamente como nuevo `queue_item`.
+5. **Regla Anti-Spam por Invitado:**
+   - Validada en UI y en PostgreSQL RPC `propose_or_upvote_song`:
+     - El Host está exento de límites.
+     - Un invitado no puede superar `rooms.max_pending_per_user` temas simultáneos en `pending` propuestos por él ni proponer una canción nueva antes de cumplirse `rooms.cooldown_seconds` desde `room_participants.last_proposed_at` (sumar `+1` a un duplicado no consume cupo ni cooldown).
+6. **Autoplay / Respaldo en Cola Vacía (Empty Queue Fallback):**
+   - Cuando termina la canción actual y no hay `queue_items` en `pending`:
+     - El reproductor activo (Host o Smart TV según `audio_output`) toma automáticamente una pista del género de respaldo configurado (`rooms.fallback_genre`) e indica *"Autoplay de respaldo — ¡Proponé un tema para tomar el control!"*.
+     - En cuanto entra una propuesta nueva, suena al terminar la pista actual o al presionar Skip.
+7. **Reacciones Rápidas en Vivo (Floating Reactions):**
+   - Botones `🔥`, `❤️`, `🕺`, `👎` sobre *Sonando Ahora*, transmitidos por **Supabase Realtime Broadcast** en el canal `room:{room_id}` (evento `reaction`) con throttling de 400ms para animarse tanto en celulares/Web como en la app nativa de Smart TV.
 
 ---
 
-## 6. Modelo de datos (Supabase / Postgres)
+## 3. Arquitectura del Buscador Dual Inteligente con Caché (`music-search`)
 
-### 6.1 Enums
+Los invitados nunca necesitan cuenta de Spotify ni YouTube para buscar canciones.
+
+### Flujo de Búsqueda y Resolución (`Edge Function: music-search`)
+
+1. **Entrada soportada:** Texto libre (canción, artista, álbum) o pegado directo de URLs de **YouTube** (`youtube.com/watch?v=...`, `youtu.be/...`), **YouTube Music** (`music.youtube.com/watch?v=...`) o **Spotify** (`open.spotify.com/track/...`).
+2. **Paso 1 — Caché local en Supabase (`public.songs`):** Busca coincidencias previas por ID externo o texto normalizado con `youtube_video_id` y metadatos completos para respuesta inmediata sin cuota externa.
+3. **Paso 2 — Metadatos Musicales Limpios:** Consulta **Spotify Web API** (`/v1/search` / `/v1/tracks/:id`) con credenciales de servidor en Supabase (`SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`) o token del Host, obteniendo `spotify_track_id`, título limpio, artista, álbum, duración y portada HD cuadrada (`600x600`). Para links de YouTube/YTM resuelve oEmbed/metadatos públicos.
+4. **Paso 3 — Resolución Gratuita de `youtube_video_id`:** Resuelve el ID de video/audio oficial (`Official Audio` / `Topic` embebible en IFrame) mediante resolución pública / instancias Piped-Invidious con fallback configurable a YouTube Data API v3, y **persiste el resultado en `public.songs`** para reutilización gratuita indefinida.
+
+---
+
+## 4. Inventario Completo de Pantallas: Web / PWA / Mobile y App Android Nativa Smart TV
+
+### 4.1 Pantallas Web / PWA / Mobile (`React + Vite + Capacitor`)
+
+1. **Vista 1 — Landing / Inicio (`/`):**
+   - Header con logotipo `PonelePlay V2`, toggle Dark Mode (por defecto) / Light Mode, botón **"Instalar App (PWA)"** (visible cuando `beforeinstallprompt` está disponible o guía rápida iOS) y menú de perfil/vinculación.
+   - Tarjeta A: **"Crear Sala como Anfitrión"** (nombre de sala, motor por defecto `YouTube Music Sin Premium` o `Spotify Premium`, acordeón de opciones anti-spam y Autoplay).
+   - Tarjeta B: **"Unirse a una Sala"** (código de 6 caracteres con auto-mayúsculas).
+   - Sección **"Mis Salas Recientes"** con estado (`En vivo` / `Finalizada`).
+2. **Vista 2 — Onboarding / Entrada Rápida (`/join/:code`):**
+   - Muestra nombre de sala, Host y motor activo.
+   - Input de Apodo, selector de 12 Avatares Emoji, botón **"Entrar a Votar y Proponer"**, y enlace secundario *"Vincular Google / Email"*.
+   - Estados de borde: Sala no encontrada (`404`), Sala finalizada (redirige a `/room/:code/summary`), Usuario baneado.
+3. **Vista 3 — Sala en Vivo (`/room/:code` — Adaptativa Host / Guest):**
+   - **Top Bar:** Nombre de sala, badge de motor (`YouTube Music Audio` / `Spotify`), chip de código copiable, botón **Compartir / QR**, botón **Modo TV Web** (`/room/:code/tv`), indicador de salida de audio (`Audio en Host` / `Audio en Smart TV`) y botón **Ajustes / Cerrar Fiesta** (Host).
+   - **Tarjeta Hero "Sonando Ahora":** Portada cuadrada HD (video siempre oculto), título, artista, *"Propuesta por @apodo"*, barra de progreso sincronizada, lluvia de reacciones flotantes (`🔥`, `❤️`, `🕺`, `👎`), y **Panel de Control del Host** (`Play/Pause`, `Skip`, `Seek`, `Volumen`, selector de motor y selector de salida `Host ↔ Smart TV`, más botón *"Activar Audio"* si el navegador bloqueó autoplay inicial y control de Screen Wake Lock).
+   - **Barra de Búsqueda Rápida + Indicador de Cupo:** Botón sticky *"Buscar canción o pegar link..."* + badge *"Pendientes: 2/5"* / countdown de cooldown.
+   - **Tabs:** `Cola en Vivo (N)` (posición, portada, título, artista, duración, proponente, Upvote `▲`, `net_score`, Downvote `▼`, menú Host `⋮` con Pin/Reproducir ya/Bloquear), `Ya Sonaron (N)`, `Participantes (N)` (con puntos DJ y botón Host Expulsar).
+   - **Empty States:** Cola vacía con Autoplay activo invitando a proponer tema; búsqueda sin resultados; historial vacío.
+4. **Vista 4 — Modo TV Web (`/room/:code/tv`):**
+   - Layout panorámico 16:9 para proyectar desde navegador: portada HD gigante (sin video), ondas animadas, progreso, reacciones flotantes, QR gigante + código `PLAY42` y Top 5 de próximas canciones.
+5. **Vista 5 — Resumen de Fin de Fiesta (`/room/:code/summary`):**
+   - Podio Top 3 DJs de la noche, Canción Reina, métricas globales, botón **"Guardar como Playlist en Spotify"** y **"Copiar Tracklist / Exportar para YouTube Music"**.
+6. **Modales Transversales:** Buscador de canciones (con debounce 350ms, skeletons, `+ Proponer` / `+1 Voto`), Modal Compartir/QR (QR descargable + WhatsApp + Link), Modal Ajustes del Host (límites, género Autoplay, Spotify OAuth, Finalizar Fiesta con confirmación) y Modal Vincular Cuenta.
+
+### 4.2 Pantallas App Android Nativa para Smart TV (`/android-tv` — Kotlin + Jetpack Compose for TV)
+
+Diseñada con **`androidx.tv:tv-material`**, resolución base **1920x1080 (10-foot UI)**, tipografía grande legible a distancia, y **navegación 100% por D-Pad del control remoto** con estados claros de foco (borde iluminado neón + escala `1.05x`):
+
+1. **`TvHomeScreen` — Inicio y Vinculación en Smart TV:**
+   - Banner superior con identidad `PonelePlay TV` y selector de modo de conexión.
+   - **Opción 1 — "Unirse a Sala con Código":** Selector numérico/alfabético de 6 casillas optimizado para D-Pad (sin depender de teclado físico) para ingresar el código de la sala del Host y conectarse al instante.
+   - **Opción 2 — "Crear Sala Nueva desde esta TV":** Con un solo clic del botón `OK` del control remoto, crea una sala lista usando YouTube Music Audio (sin cuenta Premium) teniendo a la propia TV como Host/Reproductor principal.
+   - **Lista "Salas Recientes en esta TV":** Tarjetas enfocables horizontalmente (`TvLazyRow`) para reconectarse con un toque del control remoto.
+2. **`TvRoomScreen` — Sala en Vivo en Smart TV (Modo Dual):**
+   - **Selector / Conmutador Dual accesible con D-Pad:**
+     - **Modo A — TV como Reproductor Principal de la Fiesta (`audio_output = 'tv'`):**
+       - La app de Android TV reproduce el audio completo de la canción en los parlantes del televisor / barra de sonido usando el motor YouTube Music Audio (sin cuenta Premium y con video oculto, mostrando únicamente la portada HD del álbum).
+       - Al finalizar cada canción, la app avanza automáticamente a la siguiente canción mejor votada en Supabase (`advance_room_playback`) o dispara el Autoplay de respaldo si la cola está vacía.
+       - Soporta teclas multimedia y D-Pad: `OK/Play-Pause` para pausar/reanudar, botón `Siguiente` para saltar canción, y botón `Cambiar a Solo Pantalla` para ceder el audio al Host.
+     - **Modo B — Pantalla Visual Sincronizada (`audio_output = 'host_device'`):**
+       - El televisor silencia su reproductor local y se mantiene sincronizado en tiempo real vía Supabase Realtime con lo que reproduce el dispositivo del Host.
+   - **Layout 10-foot UI en `TvRoomScreen`:**
+     - **Panel Izquierdo (~55%):** Portada gigante cuadrada HD del álbum con aura ambiental dinámica, indicador `Reproduciendo en TV` vs `Audio en dispositivo del Host`, título en tipografía display grande, artista, badge *"Propuesta por @apodo"*, ecualizador animado, barra de progreso y **lluvia de reacciones flotantes en vivo (`🔥`, `❤️`, `🕺`, `👎`)**.
+     - **Panel Derecho (~45%):** Tarjeta destacada con **Código QR gigante** de alto contraste + código `PLAY42` en tipografía monospace extra grande para escanear desde el sillón + lista **"A continuación (Top 5)"** con puntaje neto (`▲ +12`) actualizándose en tiempo real.
+     - **Barra inferior de controles D-Pad:** Botones enfocables `Play/Pause`, `Siguiente Tema`, `Alternar Reproductor TV / Solo Pantalla`, `Finalizar Fiesta` (si es Host de la TV) y `Desconectar`.
+3. **`TvSummaryScreen` — Resumen de Fin de Fiesta en Smart TV:**
+   - Se muestra automáticamente cuando la sala pasa a `is_active = false`:
+   - Podio gigante animado del **Top 3 DJs de la Noche**, **Canción Reina de la Fiesta** con su portada y votos totales, estadísticas globales y botón enfocable con D-Pad **"Volver al Inicio"** / **"Crear Nueva Fiesta"**.
+
+---
+
+## 5. Pila Tecnológica Confirmada (Etapa B)
+
+| Capa / Plataforma | Tecnología Elegida | Justificación y Alcance |
+| :--- | :--- | :--- |
+| **Web & PWA** | **React 18+ + Vite + TypeScript + `vite-plugin-pwa`** | SPA ultra rápida, instalable como PWA en Android/iOS/Desktop con Service Worker y Screen Wake Lock API. |
+| **Mobile Android** | **Capacitor (`@capacitor/core`, `@capacitor/android`)** | Empaqueta la web/PWA en APK nativo Android (`/android-mobile`) sin duplicar lógica ni pantallas. |
+| **Smart TV Nativa** | **Kotlin + Jetpack Compose for TV (`androidx.tv:tv-material`)** | App Android TV nativa (`/android-tv`) con Leanback Launcher, navegación D-Pad, reproducción de audio y sincronización Realtime. |
+| **Routing Web** | **React Router DOM v6/v7** | Rutas `/`, `/join/:code`, `/room/:code`, `/room/:code/tv`, `/room/:code/summary`. |
+| **Estilos Web** | **Tailwind CSS + CSS Variables Tokens** | Dark Mode inmersivo por defecto + Light Mode, 100% responsive (375px, 768px, 1440px). |
+| **Iconos & Utilidades Web** | **`lucide-react` + `sonner` + `qrcode.react`** | Iconografía vectorial, toasts no intrusivos y generación de QR en cliente. |
+| **Backend & DB (Cloud)** | **Supabase Cloud (Sin Docker)** | Proyecto nuevo exclusivo `poneleplay-v2`. PostgreSQL 17, Auth, RLS, Realtime y Edge Functions compartidos por Web, PWA, Mobile y Android TV. |
+| **Tiempo Real** | **Supabase Realtime** | `postgres_changes` (salas, cola, votos, participantes) + `broadcast` (reacciones flotantes y pulso de progreso) consumido tanto por `@supabase/supabase-js` como por `supabase-kt` (Android TV). |
+| **Motores de Audio** | **YouTube IFrame Player API + Spotify Web Playback/Connect** | Audio gratuito sin cuenta Premium (solo portada HD) + soporte opcional de Spotify Premium OAuth PKCE. |
+| **Testing & Verificación** | **Playwright + `impeccable` + `compose-preview` + `android-cli` + `android-device-hub`** | Cobertura total: E2E/visual web en 1440px/768px/375px y verificación de `@Preview` 1080p + emulador Android TV / dispositivo físico. |
+
+---
+
+## 6. Estrategia de Diseño UI/UX Confirmada (Etapa C)
+
+Se ejecutará la **Opción 3: Dúo Dinámico UI/UX ⭐**:
+
+1. **Inteligencia de Nicho (`ui-ux-pro-max`):**
+   - Extracción de paleta cromática para nicho musical/jukebox nocturno (Dark Mode inmersivo por defecto + Light Mode limpio), tipografías de alta legibilidad y cumplimiento WCAG (contraste `>= 4.5:1`, área táctil móvil `>= 44x44px` y áreas de foco claras en TV 10-foot UI).
+2. **Estructuración Formal y Prompt Maestro (`frontend-design` ➔ Google Stitch MCP):**
+   - Generación del pliego de tokens unificado y `docs/specs/02-stitch-master-prompt.md` compartiendo identidad visual entre Web/PWA/Mobile y la app nativa de Android TV.
+   - Maquetación base vía **MCP de Google Stitch** en Web/PWA y definición de pantallas `@Preview` de Jetpack Compose for TV.
+3. **Auditoría Multimodal (`playwright` + `impeccable` + `compose-preview`):**
+   - Web/PWA/Mobile: capturas en **Desktop (1440px)**, **Tablet (768px)** y **Mobile (375px)** en Dark y Light Mode + reparación total con `impeccable`.
+   - Android TV: renderizado de `@Preview` en resolución TV 1080p mediante **`compose-preview`** y pruebas en dispositivo/emulador TV mediante **`android-cli` / `android-device-hub`**.
+
+---
+
+## 7. Esquema Entidad-Relación en Supabase PostgreSQL y Políticas RLS
+
+### 7.1 Diagrama de Tablas y Columnas
 
 ```sql
-create type track_source     as enum ('youtube', 'upload', 'spotify');
-create type track_creator    as enum ('owner', 'client');
-create type queue_status     as enum ('queued', 'playing', 'played', 'skipped', 'vetoed', 'failed');
-create type code_status      as enum ('active', 'redeemed', 'expired');
-create type night_status     as enum ('open', 'closed');
-create type actor_kind       as enum ('owner', 'staff', 'system');
-create type credit_reason    as enum ('code_redeem', 'vote', 'night_close');
+-- 1. PERFILES DE USUARIO (vinculado a auth.users)
+create table public.users (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text not null check (char_length(trim(display_name)) between 2 and 32),
+  avatar_emoji text not null default '🎧',
+  is_anonymous boolean not null default true,
+  spotify_user_id text null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- 2. SALAS (incluye coordinación audio_output para Host vs Smart TV)
+create table public.rooms (
+  id uuid primary key default gen_random_uuid(),
+  code varchar(8) not null unique,
+  name text not null check (char_length(trim(name)) between 2 and 60),
+  host_id uuid not null references public.users(id) on delete cascade,
+  is_active boolean not null default true,
+  active_provider text not null default 'youtube_music' check (active_provider in ('youtube_music', 'spotify')),
+  max_pending_per_user int not null default 5 check (max_pending_per_user between 1 and 20),
+  cooldown_seconds int not null default 10 check (cooldown_seconds between 0 and 300),
+  fallback_genre text not null default 'party_hits',
+  current_queue_item_id uuid null,
+  playback_state jsonb not null default '{
+    "is_playing": false,
+    "progress_ms": 0,
+    "audio_output": "host_device",
+    "is_autoplay": false,
+    "autoplay_track": null,
+    "updated_at": null
+  }'::jsonb,
+  created_at timestamptz not null default now(),
+  ended_at timestamptz null,
+  constraint rooms_playback_audio_output_check check (
+    (playback_state->>'audio_output') in ('host_device', 'tv')
+  )
+);
+
+-- 3. PARTICIPANTES DE SALA
+create table public.room_participants (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
+  role text not null default 'guest' check (role in ('host', 'guest')),
+  is_banned boolean not null default false,
+  last_proposed_at timestamptz null,
+  joined_at timestamptz not null default now(),
+  unique (room_id, user_id)
+);
+
+-- 4. CATÁLOGO Y CACHÉ DE CANCIONES
+create table public.songs (
+  id uuid primary key default gen_random_uuid(),
+  spotify_track_id text unique null,
+  youtube_video_id text unique null,
+  title text not null,
+  artist text not null,
+  album text null,
+  duration_ms int not null default 0 check (duration_ms >= 0),
+  image_url text not null,
+  created_at timestamptz not null default now(),
+  constraint songs_at_least_one_external_id check (
+    spotify_track_id is not null or youtube_video_id is not null
+  )
+);
+
+-- 5. COLA DE REPRODUCCIÓN
+create table public.queue_items (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  song_id uuid not null references public.songs(id) on delete restrict,
+  proposed_by uuid not null references public.users(id) on delete cascade,
+  upvotes_count int not null default 1 check (upvotes_count >= 0),
+  downvotes_count int not null default 0 check (downvotes_count >= 0),
+  net_score int generated always as (upvotes_count - downvotes_count) stored,
+  is_pinned boolean not null default false,
+  status text not null default 'pending' check (status in ('pending', 'playing', 'played', 'blocked')),
+  created_at timestamptz not null default now(),
+  played_at timestamptz null
+);
+
+alter table public.rooms
+  add constraint rooms_current_queue_item_fk
+  foreign key (current_queue_item_id) references public.queue_items(id) on delete set null;
+
+-- 6. VOTOS ÚNICOS POR USUARIO Y CANCIÓN
+create table public.votes (
+  id uuid primary key default gen_random_uuid(),
+  queue_item_id uuid not null references public.queue_items(id) on delete cascade,
+  room_id uuid not null references public.rooms(id) on delete cascade,
+  user_id uuid not null references public.users(id) on delete cascade,
+  vote_type smallint not null check (vote_type in (1, -1)),
+  created_at timestamptz not null default now(),
+  unique (queue_item_id, user_id)
+);
 ```
 
-### 6.2 Tablas
+### 7.2 Regla de Coordinación de Salida de Audio (`audio_output`)
 
-**venues** — local.
+- `playback_state.audio_output` tiene exactamente dos valores posibles:
+  - `'host_device'`: Solo el dispositivo del Host (Web/PWA/Mobile) decodifica y reproduce audio. La App Android TV funciona como pantalla visual silenciosa (QR + Portada + Cola + Reacciones).
+  - `'tv'`: Solo la App Nativa de Smart TV (`/android-tv`) decodifica y reproduce el audio en el televisor/barra de sonido. El navegador/celular del Host permanece silenciado y actúa como control remoto de la sala.
+- Cuando la App Nativa de Android TV crea una sala propia o activa *"Reproducir audio en esta TV"*, actualiza `playback_state.audio_output = 'tv'` en Supabase; al instante todos los clientes conectados se sincronizan por `postgres_changes` y silencian o activan su motor local para impedir eco o audio duplicado.
 
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | `gen_random_uuid()` |
-| owner_id | uuid | FK `auth.users`, obligatorio |
-| name | text | Nombre del bar |
-| slug | text | Único, URL pública |
-| accent_color | text | Color de marca |
-| logo_url | text | Opcional |
-| join_message | text | Mensaje del cliente |
-| created_at | timestamptz | default now() |
+### 7.3 Índices, Triggers, RPCs y Políticas RLS
 
-**venue_settings** — configuración privada, 1:1 con venue.
-
-| Columna | Tipo | Default |
-|---|---|---|
-| venue_id | uuid PK | FK venues |
-| explicit_filter_enabled | boolean | true |
-| explicit_keywords | text[] | lista base en español/inglés |
-| max_song_duration_seconds | int | 480 |
-| max_proposals_per_participant | int | 3 |
-| default_credits_per_code | int | 5 |
-| max_credits_per_code | int | 50 |
-| max_queue_size | int | 30 |
-| proposals_enabled | boolean | true |
-| updated_at | timestamptz | now() |
-
-**tracks** — catálogo y temas propuestos.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | FK venues |
-| source | track_source | youtube / upload / spotify |
-| title | text | |
-| artist | text | Canal o artista |
-| duration_seconds | int | Validado en YouTube, declarado en MP3 |
-| thumbnail_url | text | |
-| youtube_video_id | text | Solo source=youtube |
-| storage_path | text | Solo source=upload |
-| spotify_uri | text | Solo source=spotify (fase 2) |
-| is_explicit | boolean | Marcado por filtro o dueño |
-| status | text | `active` / `archived` |
-| dedupe_key | text | `yt:<videoId>`, `file:<sha256>`, `sp:<trackId>` |
-| created_by_kind | track_creator | owner / client |
-| created_at | timestamptz | |
-
-Restricciones: `unique(venue_id, dedupe_key)`. Índice por `status`.
-
-**night_sessions** — una noche del local.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | FK venues |
-| status | night_status | |
-| opened_by_kind | actor_kind | |
-| opened_by_id | uuid | owner o staff |
-| opened_at | timestamptz | |
-| closed_at | timestamptz | |
-
-Restricción clave: índice único parcial `(venue_id) where status = 'open'`.
-
-**participants** — cliente anónimo dentro de una noche.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| night_session_id | uuid | FK night_sessions |
-| auth_user_id | uuid | FK auth.users (anónimo) |
-| credits_balance | int | `>= 0` |
-| proposals_used | int | `>= 0` |
-| created_at | timestamptz | |
-| last_seen_at | timestamptz | |
-
-`unique(night_session_id, auth_user_id)`.
-
-**queue_items** — cola de la noche.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| night_session_id | uuid | |
-| track_id | uuid | FK tracks |
-| status | queue_status | |
-| vote_count | int | Desnormalizado, `>= 0` |
-| proposed_by_participant_id | uuid | Puede ser null si viene del catálogo |
-| created_at | timestamptz | Orden de desempate |
-| started_at | timestamptz | |
-| ended_at | timestamptz | |
-
-Índices:
-
-```sql
-create unique index queue_no_duplicate_active
-  on queue_items (night_session_id, track_id)
-  where status in ('queued', 'playing');
-
-create index queue_order
-  on queue_items (night_session_id, status, vote_count desc, created_at asc);
-```
-
-**votes** — voto individual.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| night_session_id | uuid | |
-| participant_id | uuid | FK participants |
-| queue_item_id | uuid | FK queue_items |
-| track_id | uuid | FK tracks |
-| created_at | timestamptz | |
-
-`unique(night_session_id, participant_id, track_id)` impide votar dos veces la misma canción aunque vuelva a encolarse.
-
-**vote_codes** — códigos de créditos.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| night_session_id | uuid | |
-| code | text | Único, 8 caracteres sin ambigüedad |
-| credits | int | 1–50 |
-| status | code_status | |
-| created_by_kind | actor_kind | owner / staff |
-| created_by_owner_id | uuid | Nullable |
-| created_by_staff_id | uuid | Nullable |
-| redeemed_by_participant_id | uuid | Nullable |
-| printed_count | int | Default 0 |
-| created_at | timestamptz | |
-| redeemed_at | timestamptz | |
-
-Decisión: el código se guarda en texto plano porque debe poder reimprimirse y dictarse durante la noche; es de bajo valor, único uso y vence al cierre. El acceso está restringido por RLS/Edge Functions.
-
-**credit_transactions** — ledger de créditos.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| participant_id | uuid | |
-| delta | int | Positivo o negativo |
-| balance_after | int | Auditoría |
-| reason | credit_reason | |
-| vote_code_id | uuid | Nullable |
-| queue_item_id | uuid | Nullable |
-| created_at | timestamptz | |
-
-**staff_members** — personal.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| name | text | |
-| pin_hash | text | bcrypt cost 10 |
-| active | boolean | |
-| failed_attempts | int | |
-| locked_until | timestamptz | |
-| created_at | timestamptz | |
-| last_login_at | timestamptz | |
-
-**staff_sessions** — sesiones de PIN.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| staff_id | uuid | |
-| token_hash | text | SHA-256 del token |
-| created_at | timestamptz | |
-| expires_at | timestamptz | 12 h |
-| revoked_at | timestamptz | |
-
-**player_devices** — PC vinculada.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| name | text | |
-| token_hash | text | SHA-256 |
-| paired_by_owner_id | uuid | |
-| last_seen_at | timestamptz | Latido 15 s |
-| revoked_at | timestamptz | |
-| created_at | timestamptz | |
-
-**fallback_tracks** — playlist de fondo ordenada.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| track_id | uuid | FK tracks |
-| position | int | Orden explícito; se renumera al reordenar |
-
-**staff_actions** — auditoría.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| id | uuid PK | |
-| venue_id | uuid | |
-| night_session_id | uuid | Nullable |
-| actor_kind | actor_kind | |
-| actor_id | uuid | |
-| action | text | `generate_code`, `skip`, `veto`, `toggle_proposals`, `open_night`, `close_night` |
-| payload | jsonb | |
-| created_at | timestamptz | |
-
-**rate_limits** — control de abuso de Edge Functions.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| key | text | `ip:<hash>`, `user:<uuid>`, `staff:<uuid>` + acción |
-| window_start | timestamptz | |
-| count | int | |
-| expires_at | timestamptz | |
-
-**youtube_search_cache** — caché de búsquedas.
-
-| Columna | Tipo | Notas |
-|---|---|---|
-| query_key | text PK | query + región + límite, normalizada |
-| results | jsonb | |
-| created_at | timestamptz | |
-| expires_at | timestamptz | 24 h |
-
-### 6.3 Funciones y Edge Functions
-
-**RPC públicas (Supabase, `SECURITY DEFINER`, validadas con `auth.uid()`):**
-
-| Nombre | Descripción |
-|---|---|
-| `get_night_state(p_venue_slug)` | Devuelve local público, noche abierta, canción actual, cola top 30, saldo del participante, flags y hora del servidor. |
-| `join_night(p_venue_slug)` | Idempotente. Crea o recupera el participante anónimo de la noche abierta. |
-| `redeem_code(p_code)` | Atómico: valida código activo de la noche, lo marca `redeemed`, acredita saldo y escribe ledger. |
-| `cast_vote(p_queue_item_id)` | Atómico: valida noche, item `queued`, saldo, no duplicado por track; descuenta 1 crédito, inserta voto e incrementa `vote_count`. |
-| `get_my_participation()` | Saldo, votos y propuestas del participante actual. |
-| `owner_generate_code(p_credits)` | Genera código como dueño autenticado. |
-| `owner_open_night()` / `owner_close_night()` | Ciclo de noche del dueño. |
-| `owner_queue_action(p_item_id, p_action)` | Skip/veto del dueño. |
-| `archive_track(p_track_id)` | Archiva un track del catálogo sin romper la cola. |
-
-**Edge Functions:**
-
-| Nombre | Auth | Responsabilidad |
-|---|---|---|
-| `propose-track` | JWT anónimo | Valida metadata de YouTube (duración, embeddable, no live), aplica filtro explícito, dedupe, límites y cupo de cola; inserta track/queue. |
-| `youtube-search` | JWT anónimo o dueño | Proxy de YouTube Data API con caché, rate limit y filtrado de resultados. |
-| `staff` | Token de staff | `login`, `logout`, `generate_code`, `skip`, `veto`, `toggle_proposals`, `open_night`, `close_night`, `night_state`. Verifica PIN/sesión y escribe auditoría. |
-| `player` | Token de dispositivo | `state`, `heartbeat`, `started`, `finished`, `failed`. Devuelve estado, URLs firmadas y playlist de fondo. |
-| `spotify` | Dueño (fase 2) | OAuth PKCE, refresh token y control de reproducción Premium. |
-
-**Reglas de implementación:**
-
-- Edge Functions que escriben usan service role solo del lado servidor, verifican el actor y el local, y registran auditoría.
-- Todas las escrituras de votos/códigos son transaccionales con `SELECT ... FOR UPDATE` sobre el saldo o el código.
-- No se expone `service_role` ni `YOUTUBE_API_KEY` al navegador.
+- **Índices:** `idx_rooms_code`, `idx_queue_items_room_status_order(room_id, status, is_pinned desc, net_score desc, created_at asc)`, `idx_votes_queue_item`, `idx_room_participants_user`, e índice textual en `songs(title, artist)`.
+- **Trigger `sync_queue_item_vote_counts()`:** Recalcula atómicamente `upvotes_count` y `downvotes_count` tras `INSERT/UPDATE/DELETE` en `votes`.
+- **RPC `propose_or_upvote_song(...)`:** Valida sala activa, participante no baneado, bloqueo de canciones, anti-duplicados (`+1` automático si ya está `pending`), y límites anti-spam (`max_pending_per_user`, `cooldown_seconds`).
+- **RPC `advance_room_playback(p_room_id uuid, p_next_queue_item_id uuid default null)`:** Invocable por el Host o por la Smart TV cuando `playback_state->>'audio_output' = 'tv'` y está vinculada como reproductor autorizado de la sala, garantizando transición atómica de `playing -> played` y selección del siguiente tema mejor votado.
+- **Políticas RLS (`ENABLE ROW LEVEL SECURITY` en todas las tablas):**
+  - `users`: lectura para miembros que comparten sala o propio usuario; escritura solo `auth.uid() = id`.
+  - `rooms`: lectura por código para unirse/resumen; creación con `host_id = auth.uid()`; edición/cierre para `host_id = auth.uid()` (y actualización controlada del estado de playback por la sesión autorizada cuando `audio_output = 'tv'`).
+  - `room_participants`: inserción propia si sala activa y no está baneado; expulsión (`is_banned = true`) exclusiva de `host_id`.
+  - `queue_items` & `votes`: inserción/voto exclusivo de participantes activos no baneados en salas activas; moderación (`is_pinned`, `status = 'blocked'`) exclusiva del Host.
 
 ---
 
-## 7. Seguridad y RLS
-
-### 7.1 Matriz de acceso a tablas
-
-| Tabla | Cliente anónimo | Staff | Dueño | Reproductor |
-|---|---|---|---|---|
-| venues | SELECT público | SELECT vía función | CRUD propio | SELECT público |
-| venue_settings | Sin acceso directo; flags públicos vía RPC | Sin acceso directo | CRUD propio | Sin acceso |
-| tracks | SELECT activos | Sin acceso directo | CRUD propio | Sin acceso directo |
-| night_sessions | SELECT noche abierta del local | Vía función | CRUD propio | Vía función |
-| participants | SELECT propio | Sin acceso | SELECT del local | Sin acceso |
-| queue_items | SELECT de la noche abierta | Vía función | CRUD propio | Vía función |
-| votes | SELECT propios | Sin acceso | SELECT del local | Sin acceso |
-| vote_codes | Sin acceso | Vía función | SELECT del local | Sin acceso |
-| credit_transactions | SELECT propios | Sin acceso | SELECT del local | Sin acceso |
-| staff_members | Sin acceso | Sin acceso | CRUD propio | Sin acceso |
-| staff_sessions | Sin acceso | Sin acceso | Sin acceso | Sin acceso |
-| player_devices | Sin acceso | Sin acceso | CRUD propio | Vía función |
-| fallback_tracks | Sin acceso | Sin acceso | CRUD propio | Vía función |
-| staff_actions | Sin acceso | Sin acceso | SELECT del local | Sin acceso |
-| rate_limits | Sin acceso | Sin acceso | Sin acceso | Sin acceso |
-| youtube_search_cache | Sin acceso | Sin acceso | Sin acceso | Sin acceso |
-
-- Políticas de dueño basadas en `venues.owner_id = auth.uid()`.
-- Políticas de participante basadas en `participants.auth_user_id = auth.uid()` y noche abierta.
-- El cliente **no** escribe tablas directamente: solo llama RPC/Edge Functions.
-- Las tablas `staff_sessions`, `rate_limits` y `youtube_search_cache` solo son accesibles con service role.
-- Supabase Auth anónimo habilitado; el JWT incluye `is_anonymous`. Los usuarios anónimos solo pueden operar como participantes.
-
-### 7.2 Códigos y créditos
-
-- Código: 8 caracteres del alfabeto `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` (sin `I`, `O`, `0`, `1`).
-- Generado en servidor con `crypto.getRandomValues`, reintento ante colisión.
-- Canjeado una sola vez; el saldo queda ligado al participante de esa noche.
-- El participante puede canjear varios códigos en la misma noche; los créditos se acumulan.
-- Cada voto descuenta exactamente 1 crédito. No se permite votar sin saldo.
-- No hay devolución de créditos por skip/veto/error de reproducción.
-- Al cerrar la noche: códigos `active` → `expired`, saldo → 0 con transacción `night_close`, votos y cola cerrados.
-
-### 7.3 PIN y sesiones de staff
-
-- PIN de 6 dígitos, hash bcrypt (cost 10). Nunca se devuelve al cliente.
-- 5 intentos fallidos en 15 minutos bloquean el PIN 15 minutos.
-- Sesión de staff: token aleatorio de 32 bytes, guardado como SHA-256, expira a las 12 h; se puede revocar.
-- El dueño puede resetear el PIN de un mozo.
-- Cada acción sensible del staff se registra en `staff_actions` con staff_id.
-
-### 7.4 Reproductor
-
-- El dueño vincula la PC desde el panel y recibe un token de dispositivo de 32 bytes, mostrado una vez y guardado en `localStorage` del navegador.
-- El servidor guarda solo el hash; el token es revocable.
-- El reproductor no tiene acceso a datos del dueño ni al panel.
-- El reproductor debe poder re-vincularse si se limpia el navegador.
-
-### 7.5 Límites de abuso
-
-| Acción | Límite |
-|---|---|
-| Búsqueda YouTube | 10 por minuto y 30 por noche por participante |
-| Propuesta | 1 cada 30 s y 3 por noche por participante |
-| Canje de código | 5 intentos fallidos por 10 min por participante/IP |
-| Voto | 10 por minuto por participante (además de saldo y unicidad) |
-| Login de staff | 5 fallos / 15 min / PIN |
-| Generación de códigos | 200 por noche por staff; máximo 50 créditos por código |
-| Cola | Máximo 30 temas activos |
-| Búsqueda del dueño | 30 por minuto |
-
-- IP anonimizada con hash + sal para rate limiting; retención 24 h.
-- Los límites se implementan en Edge Functions con la tabla `rate_limits`; limpieza diaria con `pg_cron`.
-
-### 7.6 Datos personales
-
-- Clientes: sin nombre, email ni teléfono. Solo ID anónimo, saldo, votos y propuestas.
-- Staff: nombre y PIN hasheado.
-- Dueño: email de Supabase Auth.
-- No se usan cookies de terceros ni analytics con datos personales.
-
----
-
-## 8. Reglas de negocio
-
-### 8.1 Noche
-
-- Solo puede existir una noche `open` por local (índice único parcial).
-- Abrir/cerrar requiere confirmación; se registra en `staff_actions`.
-- Con la noche cerrada: no se aceptan propuestas, votos ni canjes; el cliente ve "Noche cerrada".
-- Cerrar la noche invalida códigos no canjeados y saldos restantes.
-- El reproductor, al cerrar, termina la canción actual y pasa a playlist de fondo si existe; si no, queda en espera.
-
-### 8.2 Catálogo
-
-- El dueño agrega temas por búsqueda interna, link de YouTube o subida de MP3.
-- YouTube se valida con `videos.list`: existe, es embeddable, no es live, duración ≤ 8 min (configurable).
-- MP3: máximo 25 MB, MIME de audio validado, bucket privado, duración leída al subir.
-- El dueño define la playlist de fondo: orden explícito, loop.
-- Archivar un track no afecta una cola activa; solo lo oculta del catálogo.
-- Spotify solo aparece si el dueño conectó una cuenta Premium (fase 2).
-
-### 8.3 Propuestas
-
-- Requieren noche abierta y `proposals_enabled = true`.
-- Entran directo a la cola, sin aprobación previa.
-- Búsqueda interna: YouTube, región AR, top 10 resultados; se bloquean lives, videos de más de 8 min y no embeddables.
-- También se acepta link de YouTube (`watch?v=`, `youtu.be`, `shorts`); se normaliza al video ID.
-- Deduplicación:
-  - Si el track ya está en la cola activa (`queued`/`playing`), no se crea otro item; la UI ofrece votarlo.
-  - Si existe en el catálogo pero no en la cola, se reutiliza el track y se crea un nuevo item con 0 votos.
-  - Clave `dedupe_key` única por local.
-- Límite de propuestas: 3 por participante por noche, 1 cada 30 s.
-- Cola llena (30): se rechaza la propuesta con mensaje claro; se puede seguir votando.
-- Contenido explícito:
-  - Filtro por keywords configurable + metadata de YouTube (edad restringida) + curaduría del dueño.
-  - Si el filtro está activo y el título/artista coincide, la propuesta se bloquea.
-  - El dueño puede editar la lista de keywords y marcar temas manualmente.
-  - Limitación conocida: YouTube no expone un flag de contenido explícito confiable; el filtro es heurístico, complementado por veto del staff.
-- Si un tema ya votado por el participante se vuelve a encolar en la misma noche, la propuesta se permite, pero ese participante no puede votarlo de nuevo (restricción de voto único por track/noche).
-
-### 8.4 Créditos
-
-- Solo se obtienen canjeando un código emitido por dueño o staff.
-- No hay créditos gratuitos, promociones automáticas ni devoluciones.
-- El staff elige 1–50 créditos por código; valor por defecto 5.
-- Los códigos se dictan, se muestran en pantalla grande y se imprimen en ticket de 58/80 mm vía diálogo del navegador.
-- Un código puede canjearse una vez; si el cliente borra los datos del navegador, pierde el saldo restante (no se reembolsa).
-- Los créditos vencen al cerrar la noche.
-
-### 8.5 Votos y orden de la cola
-
-- 1 crédito = 1 voto.
-- Un participante puede votar varias canciones distintas; máximo un voto por canción por noche.
-- No se apilan votos sobre la misma canción.
-- El voto se registra sobre el `queue_item`; el `vote_count` se actualiza en la misma transacción.
-- Orden: `vote_count DESC, created_at ASC`.
-- Desempate: la primera propuesta en llegar gana.
-- La canción en reproducción no se reordena ni se interrumpe por votos.
-- Los votos se contabilizan en vivo y son visibles para todos (ranking abierto).
-- Votar un item ya reproducido, vetado o inexistente devuelve error y refresca el estado.
-- No se puede votar como dueño/staff desde cuentas privilegiadas; solo clientes anónimos.
-- La identidad del cliente es por dispositivo/sesión anónima. No hay verificación de persona; el costo en créditos y el único uso de códigos desincentivan el fraude.
-
-### 8.6 Reproductor
-
-- La PC abre `/player/[slug]` en Chrome. La primera vez requiere un clic en "Iniciar reproductor" para habilitar autoplay.
-- Fuente de reproducción por orden:
-  1. Item `queued` con más votos (desempate por antigüedad).
-  2. Playlist de fondo en orden y loop si no hay cola.
-  3. Pantalla en espera si no hay fondo.
-- Al comenzar: `status = playing`. Al terminar: `played`. Error de video: `failed` y auto-skip con aviso al panel.
-- Un tema nuevo propuesto mientras suena fondo se reproduce al terminar el tema de fondo actual (sin cortes).
-- Sincronización: polling cada 5 s + heartbeat cada 15 s. El panel muestra "Reproductor conectado" según `last_seen_at < 45 s`.
-- MP3 se sirve con URL firmada de 15 min; se refresca al iniciar cada tema.
-- YouTube puede incluir anuncios; no se pueden bloquear con la API oficial. Es una limitación aceptada de v1.
-- Si el reproductor se desconecta, la cola no se pierde; al volver, retoma el tema actual o el primero pendiente.
-
-### 8.7 Impresión de códigos
-
-- Vista de ticket para 58 mm y 80 mm con: PonelePlay, nombre del local, fecha, código en tipografía mono grande, créditos, instrucciones.
-- Botón "Imprimir" abre el diálogo del navegador; el staff elige la impresora térmica.
-- También hay modo pantalla grande (para dictar) y copiar al portapapeles.
-- `printed_count` se incrementa para auditoría.
-- Impresión silenciosa queda fuera de v1 (se puede agregar QZ Tray después).
-
----
-
-## 9. Mapa de pantallas y UI
-
-### 9.1 Cliente móvil — `/p/[slug]`
-
-| Pantalla | Contenido | Acciones |
-|---|---|---|
-| C1 · Home / Cola | Nombre del local, estado de la noche, canción actual, ranking de la cola con votos, saldo propio, acceso a canjear código. | Votar, abrir buscador, canjear código. |
-| C2 · Buscar y proponer | Buscador de YouTube, resultados con miniatura, título, canal, duración; aviso de filtro explícito y duplicados. | Proponer; si ya existe, votar. |
-| C3 · Canjear código | Hoja inferior con input de 8 caracteres en mayúsculas. | Validar y acreditar. |
-| C4 · Mi actividad | Créditos gastados, canciones votadas y propuestas. | Consulta. |
-
-- Móvil primero, 360 px mínimo, targets de 44 px.
-- Tema oscuro tipo pool bar; ranking con chips de bola de billar para los votos.
-- Estados vacíos: cola vacía ("La pista está libre"), noche cerrada, sin créditos.
-- Realtime en C1; polling de respaldo cada 10 s.
-- Sin audio en el cliente.
-
-### 9.2 Panel del bar — `/panel/[slug]`
-
-| Pantalla | Contenido | Acciones |
-|---|---|---|
-| P1 · Acceso | Login del dueño + acceso "Soy staff" con PIN. | Entrar. |
-| P2 · Noche | Estado de la noche, canción actual, cola completa, conexión del reproductor, saldo de la noche, toggles. | Abrir/cerrar noche, skip, veto, activar propuestas, generar código rápido. |
-| P3 · Catálogo | Lista del catálogo, búsqueda YouTube, subida MP3, playlist de fondo. | Agregar, archivar, ordenar fondo, marcar explícito. |
-| P4 · Códigos | Generador con selector de créditos, ticket imprimible, historial de la noche. | Generar, reimprimir, dictar, copiar. |
-| P5 · Personal | Lista de mozos y estado de PIN. | Crear, desactivar, resetear PIN. |
-| P6 · Ajustes | Nombre, slug, color, logo, filtro explícito y keywords, duración máxima, límites, Spotify (fase 2), vincular reproductor. | Guardar, vincular/revocar PC. |
-| P7 · Reproductor | Ruta separada a pantalla completa, sin navegación del panel. | — |
-
-- Layout de escritorio 1280 px+, alto contraste para luz baja.
-- Staff ve solo P2 y P4 con acciones permitidas; sin acceso a P3, P5 ni P6.
-- P7 se protege con token de dispositivo, no con sesión de dueño.
-
-### 9.3 Reproductor — `/player/[slug]`
-
-- Canción actual en tipografía grande, artista, fuente y progreso.
-- QR de acceso grande y siempre visible.
-- "A continuación" con los 3 primeros temas y "Reproduciendo fondo".
-- Indicador de conexión y hora.
-- Estado de error de video con reintento automático y aviso.
-- Diseño TV-first: legible a 3–5 m, sin interacción salvo el botón inicial.
-- Modo kiosco de Chrome; runbook de instalación en la PC.
-
-### 9.4 Dirección visual
-
-- Concepto "Fieltro y Neón": verde billar profundo (`#0C2A22`), crema (`#F5E9D6`), ámbar neón (`#FFB703`), coral (`#FF5D5D`), tinta (`#111111`).
-- Tipografía display: Bricolage Grotesque. Texto: DM Sans. Códigos y marcadores: JetBrains Mono.
-- Motivos: ticket de consumición para códigos, fichas de bola numeradas para votos, círculos de vinilo.
-- Microinteracciones: reordenamiento animado de la cola, efecto de ticket al generar créditos, respeto a `prefers-reduced-motion`.
-- El detalle de tokens y componentes se define en la fase de diseño con `frontend-design`; no se usa el look por defecto de ninguna librería.
-
-### 9.5 Accesibilidad
-
-- Contraste AA, foco visible, labels explícitos, navegación por teclado en panel.
-- Botones de voto con `aria-label` ("Votar por <tema>").
-- Mensajes de error anunciados con `role="alert"`.
-- Sin dependencia exclusiva del color para el estado.
-
----
-
-## 10. Integraciones
-
-### 10.1 YouTube Data API v3
-
-- Búsqueda: `search.list` (`part=snippet`, `type=video`, `videoCategoryId=10`, `regionCode=AR`, `maxResults=10`).
-- Validación: `videos.list` (`part=snippet,contentDetails,status`) para duración, embeddable, live y restricciones.
-- La API key vive solo en Edge Functions.
-- Caché de búsquedas 24 h en `youtube_search_cache`.
-- Cuota gratuita: 10.000 unidades/día; una búsqueda cuesta 100. Con caché y límites alcanza para un bar, pero se documenta el riesgo de agotamiento. Las propuestas por link no consumen búsqueda.
-- Al agotarse la cuota: la búsqueda se deshabilita temporalmente con mensaje; se puede seguir votando y pegando links.
-
-### 10.2 YouTube IFrame Player API
-
-- Embebido en el reproductor; sin descarga de audio.
-- Eventos `onStateChange`, `onError`, `onReady`.
-- Requiere gesto inicial del usuario por política de autoplay; se resuelve con el botón "Iniciar reproductor".
-- Anuncios posibles; limitación aceptada.
-
-### 10.3 Supabase Storage
-
-- Bucket privado `track-audio`.
-- Límite 25 MB, MIME `audio/*`.
-- URLs firmadas de 15 min para el reproductor.
-- Sin acceso público.
-
-### 10.4 Spotify (fase 2, opcional)
-
-- Requiere cuenta Premium y app en Spotify Developer Dashboard.
-- OAuth PKCE desde el panel; refresh token en Supabase Vault.
-- Web Playback SDK en el reproductor y control de playback.
-- Solo el dueño puede agregar tracks de Spotify al catálogo; los clientes proponen únicamente YouTube.
-- Si no hay conexión o Premium, la sección Spotify no se muestra y ningún track de Spotify queda reproducible.
-- No se incluye en v1; el modelo de datos ya reserva `source = 'spotify'` y `spotify_uri`.
-
-### 10.5 Impresión térmica
-
-- HTML/CSS de ticket + `window.print()`.
-- Tamaños 58 mm y 80 mm; fuente mono para el código.
-- El staff elige la impresora en el diálogo del sistema.
-- Prueba manual en la impresora del local antes de la noche inaugural.
-
----
-
-## 11. Casos borde y manejo de errores
-
-| Caso | Comportamiento |
-|---|---|
-| Noche no abierta | Cliente en modo "Noche cerrada"; panel invita a abrir. |
-| Cola vacía | Playlist de fondo; si no existe, pantalla de espera. |
-| Propuesta duplicada activa | No se inserta; se ofrece votar la existente. |
-| Propuesta duplicada en catálogo | Se reutiliza el track; nuevo item con 0 votos. |
-| Cola llena | Rechazo con mensaje; se puede votar. |
-| Sin créditos | CTA para canjear código. |
-| Código inválido/usado/vencido | Mensaje específico; rate limit de intentos. |
-| Código canjeado por segunda vez | Rechazo, estado actual del código. |
-| Voto duplicado en la misma canción | Rechazo sin descontar crédito. |
-| Voto sobre item ya reproducido o vetado | Rechazo y refresco de cola. |
-| Dos votos concurrentes con 1 crédito | Solo uno gana; transacción con lock. |
-| Dos canjes concurrentes del mismo código | Solo uno gana; resto recibe "código ya usado". |
-| Dos noches abiertas | El índice único impide la segunda. |
-| Staff con sesión vencida | Pide PIN de nuevo. |
-| PIN bloqueado | Mensaje con tiempo restante. |
-| Video de YouTube no disponible/embed bloqueado | `failed`, auto-skip y aviso al panel. |
-| Video se vuelve privado en vivo | Igual que error de reproducción. |
-| Reproductor desconectado | Cola intacta; panel muestra alerta; al reconectar retoma. |
-| Internet inestable en el cliente | Banner offline; acciones deshabilitadas; reintento. |
-| Internet inestable en el reproductor | Mantiene tema actual; reintenta; al volver se resincroniza. |
-| Cliente borra datos del navegador | Pierde saldo restante; el código no se reutiliza. |
-| Staff cierra la noche por error | Confirmación previa; reabrir crea una noche nueva sin saldos ni códigos previos. |
-| Track archivado estando en cola | La cola sigue; deja de ofrecerse en catálogo. |
-| Búsqueda sin resultados | Estado vacío con sugerencia de pegar link. |
-| Cuota de YouTube agotada | Búsqueda deshabilitada temporalmente; links siguen funcionando. |
-
----
-
-## 12. Criterios de aceptación
-
-### Acceso y roles
-
-- **AC-01** El dueño crea cuenta, local y entra al panel; un cliente no puede abrir rutas de panel.
-- **AC-02** El staff entra con PIN correcto y ve solo sus pantallas; 5 PIN erróneos bloquean 15 min.
-- **AC-03** Un cliente escanea el QR, entra anónimo y ve canción actual, cola y saldo 0 sin registro.
-
-### Noche y catálogo
-
-- **AC-04** Abrir noche crea una sesión `open`; no se puede abrir una segunda simultánea.
-- **AC-05** El dueño agrega un track por búsqueda, por link y por MP3; aparece en el catálogo.
-- **AC-06** La playlist de fondo se reproduce en orden y loop cuando la cola está vacía.
-- **AC-07** Cerrar la noche invalida códigos y saldos, cierra la cola y el cliente ve "Noche cerrada".
-
-### Propuestas
-
-- **AC-08** Un cliente busca en YouTube dentro de la app y propone un tema; aparece en la cola con 0 votos.
-- **AC-09** Una propuesta duplicada en la cola activa se rechaza y ofrece votar la existente.
-- **AC-10** Con filtro explícito activo, un título de la lista se bloquea; al desactivarlo, se permite. El dueño edita keywords.
-- **AC-11** Se aplican los límites de 3 propuestas por noche y 1 cada 30 s con mensajes claros.
-- **AC-12** Al desactivar propuestas, el buscador se oculta y la Edge Function rechaza propuestas; el catálogo sigue votable.
-
-### Códigos y créditos
-
-- **AC-13** El staff genera un código de N créditos (1–50), lo ve en grande, lo copia y lo imprime en formato 58/80 mm.
-- **AC-14** Canjear el código acredita los créditos; un segundo canje falla; el estado pasa a `redeemed`.
-- **AC-15** Códigos no canjeados y saldos quedan inutilizables después del cierre.
-- **AC-16** El dueño ve el historial con staff emisor, créditos, estado y hora.
-
-### Votos y cola
-
-- **AC-17** Votar descuenta 1 crédito, suma 1 voto y actualiza la cola en vivo para todos los clientes y el panel.
-- **AC-18** Un segundo voto del mismo participante a la misma canción se rechaza sin descontar crédito.
-- **AC-19** Votar con saldo 0 se rechaza con CTA de canje.
-- **AC-20** La cola ordena por votos DESC y, en empate, por propuesta más antigua.
-- **AC-21** Votos y canjes concurrentes son atómicos: no hay doble gasto ni doble crédito.
-- **AC-22** Skip elimina la canción actual y arranca la siguiente; veto quita un tema de la cola; ambos se reflejan en vivo y no devuelven créditos.
-
-### Reproductor
-
-- **AC-23** El dueño vincula la PC; el reproductor toca YouTube y MP3 y avanza solo al terminar.
-- **AC-24** Un video no disponible se marca `failed`, se saltea y el panel recibe aviso.
-- **AC-25** Heartbeat activo: el panel muestra conectado/desconectado según 45 s de tolerancia.
-- **AC-26** La pantalla del reproductor muestra QR, canción actual y próximos, legible desde el salón.
-
-### Seguridad y UX
-
-- **AC-27** Inserts/updates directos no autorizados fallan; no hay claves secretas en el bundle.
-- **AC-28** El cliente es usable desde 360 px con targets de 44 px y contraste AA; el panel funciona desde 1280 px.
-- **AC-29** Las actualizaciones de cola llegan en menos de 2 s en Wi-Fi; si falla Realtime, el polling de 10 s sostiene el estado.
-- **AC-30** La suite Playwright y las pruebas de RLS pasan en CI; no hay errores de consola.
-
----
-
-## 13. Plan de pruebas
-
-### Unitarias (Vitest)
-
-- Normalización y dedupe (`yt:`, `file:`, `sp:`), extracción de video ID y normalización de títulos.
-- Comparador de cola: votos DESC, `created_at` ASC.
-- Generador de códigos: longitud, alfabeto, unicidad, sin caracteres ambiguos.
-- Filtro explícito: keywords, acentos, mayúsculas.
-- Cálculo de vencimiento de códigos/créditos y estados de noche.
-- Máquina de estados del reproductor (queued → playing → played/failed).
-
-### Base de datos (pgTAP con Supabase CLI)
-
-- Matriz de RLS por rol y tabla.
-- Unicidad de voto por participante/track/noche.
-- Unicidad de item activo por noche/track.
-- Índice único de noche abierta.
-- Atomicidad de `redeem_code` y `cast_vote` ante concurrencia.
-- Trigger/ledger de saldo consistente.
-
-### E2E (Playwright, Chromium)
-
-- Flujo completo con dos contextos: staff genera código, cliente A canjea y vota, cliente B propone y vota, se verifica orden y saldo.
-- Staff: skip/veto, toggle de propuestas, permisos restringidos.
-- Cierre de noche: códigos y créditos inválidos.
-- Dedupe y filtro explícito.
-- Reproductor con motor simulado (`PONELEPLAY_TEST_MODE=1`) que dispara `ended` y `error` sin red externa.
-- Viewport móvil 390×844 y escritorio 1440×900; chequeo básico de accesibilidad con axe.
-- Impresión: stub de `window.print()` y verificación de la vista de ticket.
-
-### Manuales
-
-- Impresión real en la térmica del local (58 y 80 mm).
-- Salida de audio y autoplay en la PC del bar con Chrome.
-- Prueba con YouTube real en staging (además del mock de CI).
-- Spotify Premium (fase 2) con cuenta de prueba.
-
-### Herramientas
-
-- `supabase start` para stack local; `supabase test db` para pgTAP.
-- Datos semilla: local demo, dueño, dos mozos, catálogo de 8 temas, noche abierta y códigos.
-- CI: lint + typecheck + unit + pgTAP + Playwright.
-
----
-
-## 14. Fases de entrega
-
-| Fase | Entregable |
-|---|---|
-| F0 · Base | Repositorio, Next.js, Supabase local, esquema, enums, migraciones, RLS inicial, tipos generados. |
-| F1 · Noche y roles | Auth dueño, PIN staff, sesiones, abrir/cerrar noche, panel base, cliente que se une. |
-| F2 · Catálogo y propuestas | YouTube search/link, subida MP3, catálogo, dedupe, filtro explícito, límites. |
-| F3 · Créditos y votos | Códigos, canje, ledger, votos atómicos, cola realtime, ranking. |
-| F4 · Reproductor | Pairing, YouTube IFrame, MP3 firmado, autoplay, skip/veto, fallback, errores. |
-| F5 · Operación | Ticket imprimible, QR, historial, resumen de noche, ajustes, responsive y accesibilidad. |
-| F6 · Endurecimiento | Rate limits, auditoría, pruebas completas, deploy, runbook del bar. |
-| F7 · Spotify (opcional) | OAuth Premium, SDK, catálogo Spotify. No bloquea v1. |
-
-Cada fase se ejecuta con TDD (rojo → verde → refactor) y se valida con sus criterios de aceptación antes de avanzar.
-
----
-
-## 15. Supuestos, riesgos y definición de terminado
-
-### Supuestos
-
-- El bar tiene internet estable, una PC con Chrome actualizado y audio conectado.
-- El dueño cuenta con una API key de YouTube Data API v3.
-- Los clientes usan smartphones con datos o Wi-Fi del local.
-- El local es uno por despliegue; el esquema queda preparado para múltiples locales.
-- El dueño es responsable de los derechos de los MP3 que sube y del uso de YouTube conforme a sus términos.
-- La impresora térmica es compatible con el driver de Windows y aparece en el diálogo de impresión.
-
-### Riesgos
-
-| Riesgo | Mitigación |
-|---|---|
-| Anuncios de YouTube en el local | Limitación aceptada; si molesta, priorizar catálogo MP3 o Spotify Premium en fase 2. |
-| Cuota diaria de YouTube | Caché, límites, links sin búsqueda, key con cuota ampliada si hace falta. |
-| Video no embeddable o privado | Validación previa + auto-skip + aviso. |
-| Autoplay bloqueado | Botón de inicio + runbook de kiosco. |
-| Fraude con códigos | Único uso, vencimiento nocturno, auditoría por staff, límites de emisión. |
-| Borrado de datos del cliente | Se pierde saldo; comunicado en la UI; los códigos no se reutilizan. |
-| Filtro explícito imperfecto | Keywords + metadata + veto humano. |
-| Corte de internet | Reproductor mantiene tema actual; cola en DB; reintentos. |
-| Crecimiento de Storage por MP3 | Límite 25 MB y política de limpieza; plan pago si crece. |
-| Impresión silenciosa | Fuera de v1; se usa diálogo del navegador. |
-
-### Definición de terminado (v1)
-
-1. Los 30 criterios de aceptación pasan.
-2. Suite unitaria, pgTAP y Playwright en verde.
-3. RLS verificada; no hay secretos en el cliente.
-4. Runbook de instalación de la PC, QR e impresora.
-5. Deploy en Vercel + Supabase con variables configuradas.
-6. Dueño y staff capacitados con una noche de prueba.
-7. Sin errores de consola ni pantallas rotas en móvil y escritorio.
+## 8. Matriz de Pruebas E2E, Visuales y Nativas
+
+| ID | Plataforma / Entorno | Escenario de Prueba | Criterio de Aceptación (PASS) |
+| :--- | :--- | :--- | :--- |
+| **T01** | Web / PWA (`playwright` + `impeccable`) | Auditoría Responsive & Visual | Las 5 vistas y modales se ven impecables en **1440px**, **768px** y **375px** en Dark y Light Mode, `scrollWidth <= clientWidth`, contraste WCAG >= 4.5:1 y cero solapamientos. |
+| **T02** | Web / PWA (`playwright`) | Creación de Sala (YouTube Music Sin Premium) | El Host crea sala desde `/`, se guarda en Supabase Cloud, genera código de 6 caracteres y QR válido. |
+| **T03** | Web / Mobile (`playwright`) | Entrada Rápida Híbrida de Invitado | Invitado entra por `/join/:code` con apodo/emoji sin login externo; queda autenticado anónimamente y visible en Participantes. |
+| **T04** | Web / Mobile (`playwright`) | Búsqueda Dual + Anti-Duplicados | Búsqueda o pegado de link; proponer canción ya pendiente suma `+1` voto en vez de duplicarla. |
+| **T05** | Web / Mobile (`playwright`) | Votación Única y Orden Dinámico Realtime | Restricción `UNIQUE(queue_item_id, user_id)` y reordenamiento inmediato (`is_pinned DESC, net_score DESC, created_at ASC`). |
+| **T06** | Web / PWA (`playwright`) | Anti-Spam + Solo Portada + Wake Lock | Bloqueo al superar cupo/cooldown; tarjeta *Sonando Ahora* oculta video y muestra solo portada HD; el Wake Lock se solicita al reproducir. |
+| **T07** | Web / PWA (`playwright`) | Moderación Host, Reacciones, Modo TV Web y Resumen | Pin, bloqueo de tema, expulsión de invitado (`is_banned`), reacciones flotantes (`🔥❤️🕺👎`), Modo TV web y Resumen de Fin de Fiesta. |
+| **T08** | PWA & Capacitor Android (`vite-plugin-pwa`, `@capacitor/android`) | Manifest, Service Worker y Proyecto Mobile Android | `manifest.webmanifest` válido, iconos 192/512, SW registrado y build de proyecto Android Capacitor (`/android-mobile`) sin errores. |
+| **T09** | Android TV Nativa (`compose-preview`, `android-cli`, `android-device-hub`) | Pantallas TV 1080p, D-Pad y Modo Dual Audio | `@Preview` 1080p renderizado en `compose-preview` sin cortes; navegación por foco D-Pad operativa en `TvHomeScreen`, `TvRoomScreen` y `TvSummaryScreen`; alternancia limpia entre `audio_output = 'tv'` (reproductor en TV con avance automático) y `'host_device'` (solo pantalla sincronizada + QR gigante + reacciones). |

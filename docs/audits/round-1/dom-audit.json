@@ -1,0 +1,938 @@
+[
+  {
+    "label": "landing-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "join-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 4,
+    "smallButtonsSample": [
+      {
+        "text": "Sala Activa",
+        "width": 93,
+        "height": 38
+      },
+      {
+        "text": "Finalizada",
+        "width": 87,
+        "height": 38
+      },
+      {
+        "text": "Expulsado",
+        "width": 87,
+        "height": 38
+      },
+      {
+        "text": "No Encontrada",
+        "width": 114,
+        "height": 38
+      }
+    ]
+  },
+  {
+    "label": "room-host-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 8,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "room-guest-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 4,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      }
+    ]
+  },
+  {
+    "label": "modal-search-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 8,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "modal-qr-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 8,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "modal-settings-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 8,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "tv-web-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "android-tv-room-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 3,
+    "smallButtonsSample": [
+      {
+        "text": "1. TvHomeScreen",
+        "width": 127,
+        "height": 40
+      },
+      {
+        "text": "2. TvRoomScreen (Modo Dual)",
+        "width": 208,
+        "height": 40
+      },
+      {
+        "text": "3. TvSummaryScreen",
+        "width": 154,
+        "height": 40
+      }
+    ]
+  },
+  {
+    "label": "android-tv-home-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 3,
+    "smallButtonsSample": [
+      {
+        "text": "1. TvHomeScreen",
+        "width": 127,
+        "height": 40
+      },
+      {
+        "text": "2. TvRoomScreen (Modo Dual)",
+        "width": 208,
+        "height": 40
+      },
+      {
+        "text": "3. TvSummaryScreen",
+        "width": 154,
+        "height": 40
+      }
+    ]
+  },
+  {
+    "label": "summary-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "room-light-desktop",
+    "horizontalOverflow": false,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "brokenImages": [],
+    "smallButtonsCount": 8,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "landing-tablet",
+    "horizontalOverflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "join-tablet",
+    "horizontalOverflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768,
+    "brokenImages": [],
+    "smallButtonsCount": 4,
+    "smallButtonsSample": [
+      {
+        "text": "Sala Activa",
+        "width": 93,
+        "height": 38
+      },
+      {
+        "text": "Finalizada",
+        "width": 87,
+        "height": 38
+      },
+      {
+        "text": "Expulsado",
+        "width": 87,
+        "height": 38
+      },
+      {
+        "text": "No Encontrada",
+        "width": 114,
+        "height": 38
+      }
+    ]
+  },
+  {
+    "label": "room-host-tablet",
+    "horizontalOverflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768,
+    "brokenImages": [],
+    "smallButtonsCount": 8,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "tv-web-tablet",
+    "horizontalOverflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "summary-tablet",
+    "horizontalOverflow": false,
+    "scrollWidth": 768,
+    "clientWidth": 768,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "landing-mobile",
+    "horizontalOverflow": false,
+    "scrollWidth": 375,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "join-mobile",
+    "horizontalOverflow": false,
+    "scrollWidth": 375,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 16,
+    "smallButtonsSample": [
+      {
+        "text": "Sala Activa",
+        "width": 93,
+        "height": 38
+      },
+      {
+        "text": "Finalizada",
+        "width": 87,
+        "height": 38
+      },
+      {
+        "text": "Expulsado",
+        "width": 87,
+        "height": 38
+      },
+      {
+        "text": "No Encontrada",
+        "width": 114,
+        "height": 38
+      },
+      {
+        "text": "🎧",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "🔥",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "🕺",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "⚡",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "🎸",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "🎤",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "🪩",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "🚀",
+        "width": 42,
+        "height": 44
+      }
+    ]
+  },
+  {
+    "label": "room-host-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 430,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 9,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "Modo TV",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "room-guest-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 430,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 5,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "Modo TV",
+        "width": 42,
+        "height": 44
+      }
+    ]
+  },
+  {
+    "label": "modal-search-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 430,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 10,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "Modo TV",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      },
+      {
+        "text": "Cerrar buscador",
+        "width": 40,
+        "height": 44
+      }
+    ]
+  },
+  {
+    "label": "modal-qr-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 430,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 9,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "Modo TV",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  },
+  {
+    "label": "modal-settings-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 430,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 10,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "Modo TV",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      },
+      {
+        "text": "Cerrar ajustes",
+        "width": 41,
+        "height": 44
+      }
+    ]
+  },
+  {
+    "label": "tv-web-mobile",
+    "horizontalOverflow": false,
+    "scrollWidth": 375,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "android-tv-room-mobile",
+    "horizontalOverflow": false,
+    "scrollWidth": 375,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 3,
+    "smallButtonsSample": [
+      {
+        "text": "1. TvHomeScreen",
+        "width": 127,
+        "height": 40
+      },
+      {
+        "text": "2. TvRoomScreen (Modo Dual)",
+        "width": 208,
+        "height": 40
+      },
+      {
+        "text": "3. TvSummaryScreen",
+        "width": 154,
+        "height": 40
+      }
+    ]
+  },
+  {
+    "label": "summary-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 378,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 0,
+    "smallButtonsSample": []
+  },
+  {
+    "label": "room-light-mobile",
+    "horizontalOverflow": true,
+    "scrollWidth": 430,
+    "clientWidth": 375,
+    "brokenImages": [],
+    "smallButtonsCount": 9,
+    "smallButtonsSample": [
+      {
+        "text": "Anfitrión (Host)",
+        "width": 118,
+        "height": 36
+      },
+      {
+        "text": "Invitado (Guest)",
+        "width": 125,
+        "height": 36
+      },
+      {
+        "text": "Simular Cola Vacía (Autoplay)",
+        "width": 213,
+        "height": 36
+      },
+      {
+        "text": "PLAY42",
+        "width": 77,
+        "height": 32
+      },
+      {
+        "text": "Modo TV",
+        "width": 42,
+        "height": 44
+      },
+      {
+        "text": "YT Music",
+        "width": 69,
+        "height": 36
+      },
+      {
+        "text": "Spotify",
+        "width": 59,
+        "height": 36
+      },
+      {
+        "text": "Host",
+        "width": 63,
+        "height": 36
+      },
+      {
+        "text": "Smart TV",
+        "width": 89,
+        "height": 36
+      }
+    ]
+  }
+]

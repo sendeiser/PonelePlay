@@ -1,49 +1,17 @@
-.worktrees/
-
-# Dependencies
 node_modules/
-.pnp
-.pnp.*
-
-# Next.js
-.next/
-out/
-.vercel/
-
-# Environment
+dist/
+dist-ssr/
+*.local
 .env
 .env.*
 !.env.example
-
-# Supabase
-supabase/.temp/
-supabase/.branches/
-
-# Tests
-coverage/
+.worktrees/
 playwright-report/
 test-results/
-blob-report/
-
-# Logs and OS files
-*.log
-npm-debug.log*
+android-tv/.gradle/
+android-tv/build/
+android-tv/app/build/
+android-mobile/android/.gradle/
+android-mobile/android/app/build/
 .DS_Store
 Thumbs.db
-
-*.tsbuildinfo
-
-.stitch-screens/
-
-# Skills symlinks for other IDEs
-.claude/
-.trae/
-.windsurf/
-skills/
-
-# Android TV build artifacts
-android-tv/.gradle/
-android-tv/app/build/
-android-tv/local.properties
-.vscode/
-.wrangler/
