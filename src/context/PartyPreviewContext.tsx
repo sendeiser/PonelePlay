@@ -728,6 +728,45 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
       dbSongs = [];
     }
 
+    let liveSearchSongs: Song[] = [];
+    if (query.length >= 2) {
+      try {
+        const res = await fetch(
+          `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=8`
+        );
+        if (res.ok) {
+          const payload = (await res.json()) as {
+            results?: Array<{
+              trackId?: number;
+              trackName?: string;
+              artistName?: string;
+              collectionName?: string;
+              trackTimeMillis?: number;
+              artworkUrl100?: string;
+              previewUrl?: string;
+            }>;
+          };
+          liveSearchSongs = (payload.results ?? [])
+            .filter((item) => item.trackId && item.trackName && item.artistName)
+            .map((item) => ({
+              id: `itunes-${item.trackId}`,
+              spotifyTrackId: `sp_itunes_${item.trackId}`,
+              youtubeVideoId: item.previewUrl || `yt_itunes_${item.trackId}`,
+              title: String(item.trackName),
+              artist: String(item.artistName),
+              album: String(item.collectionName || 'Single'),
+              durationMs: Number(item.trackTimeMillis || 180_000),
+              imageUrl:
+                String(item.artworkUrl100 || '').replace('100x100bb', '600x600bb') ||
+                '/covers/cover-urban.jpg',
+              cached: false,
+            }));
+        }
+      } catch {
+        liveSearchSongs = [];
+      }
+    }
+
     const qLower = query.toLowerCase();
     const localFiltered = SEARCH_CATALOG_MOCK.filter((song) => {
       if (!qLower) return true;
@@ -736,7 +775,7 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const seenKeys = new Set<string>();
     const combined: Song[] = [];
-    for (const s of [...dbSongs, ...localFiltered]) {
+    for (const s of [...dbSongs, ...localFiltered, ...liveSearchSongs]) {
       const key = s.spotifyTrackId || s.youtubeVideoId || s.title.toLowerCase();
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);

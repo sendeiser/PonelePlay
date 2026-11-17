@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
+import { supabase } from '../lib/supabase';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { FALLBACK_GENRES, SEARCH_CATALOG_MOCK, formatDurationMs } from '../data/mockPartyData';
 import { Song } from '../types/jukebox';
@@ -387,6 +388,15 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
               <button
                 type="button"
                 onClick={() => {
+                  const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+                  if (clientId && clientId !== 'YOUR_SPOTIFY_CLIENT_ID') {
+                    const redirectUri = encodeURIComponent(window.location.origin);
+                    const scopes = encodeURIComponent(
+                      'streaming user-read-email user-read-private user-modify-playback-state playlist-modify-public'
+                    );
+                    window.location.href = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${redirectUri}&scope=${scopes}`;
+                    return;
+                  }
                   updateRoom({ spotifyConnected: !room.spotifyConnected });
                   toast.success(
                     room.spotifyConnected ? 'Spotify desconectado' : 'Cuenta Spotify vinculada'
@@ -479,9 +489,17 @@ export const AccountLinkModal: React.FC<ModalProps> = ({ open, onClose }) => {
         <div className="mt-5 space-y-2.5">
           <button
             type="button"
-            onClick={() => {
-              toast.success('Cuenta vinculada con Google');
-              onClose();
+            onClick={async () => {
+              try {
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'google',
+                  options: { redirectTo: window.location.origin },
+                });
+                if (error) throw error;
+              } catch {
+                toast.info('OAuth Google requiere habilitar el proveedor en Supabase Auth; seguís conectado con tu perfil de fiesta.');
+                onClose();
+              }
             }}
             className="bg-brand-gradient flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold shadow-aurora"
           >

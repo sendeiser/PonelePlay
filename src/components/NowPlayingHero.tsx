@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Pause,
   Play,
@@ -8,6 +8,13 @@ import {
   Volume2,
   Music2,
 } from 'lucide-react';
+import {
+  StudioSynthLoop,
+  YTPlayerInstance,
+  isRealYoutubeId,
+  loadYouTubeIframeApi,
+  resolvePlayableAudioUrl,
+} from '../lib/audioEngine';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { formatDurationMs } from '../data/mockPartyData';
 import { ReactionEmoji } from '../types/jukebox';
@@ -27,11 +34,138 @@ export const NowPlayingHero: React.FC = () => {
     skipCurrentTrack,
   } = usePartyPreview();
 
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytPlayerRef = useRef<YTPlayerInstance | null>(null);
+  const synthRef = useRef<StudioSynthLoop | null>(null);
+  const explicitGestureRef = useRef(false);
+
+  const [needsInteractionUnlock, setNeedsInteractionUnlock] = useState(false);
+  const [liveProgressMs, setLiveProgressMs] = useState(room.progressMs);
+
   const isHost = demoRole === 'host';
   const isEmptyAutoplay = queue.length === 0;
   const coverUrl = nowPlaying?.song.imageUrl ?? '/covers/cover-synthwave.png';
   const currentDurationMs = nowPlaying?.song.durationMs ?? 204_000;
-  const progressPercent = Math.min(100, Math.max(0, Math.round((room.progressMs / currentDurationMs) * 100)));
+  const shouldOutputAudio =
+    room.isPlaying && ((isHost && room.audioOutput === 'host_device') || room.audioOutput === 'tv');
+  const displayProgressMs = liveProgressMs;
+  const progressPercent = Math.min(
+    100,
+    Math.max(0, Math.round((displayProgressMs / Math.max(1, currentDurationMs)) * 100))
+  );
+
+  useEffect(() => {
+    setLiveProgressMs(room.progressMs);
+  }, [nowPlaying?.id, room.progressMs]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = Math.min(1, Math.max(0, room.volumePercent / 100));
+    }
+    try {
+      ytPlayerRef.current?.setVolume(room.volumePercent);
+    } catch {
+      // ignore unready YT player
+    }
+  }, [room.volumePercent]);
+
+  useEffect(() => {
+    const song = nowPlaying?.song;
+    const isWebdriver = typeof navigator !== 'undefined' && navigator.webdriver === true;
+
+    const stopAll = () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      try {
+        ytPlayerRef.current?.pauseVideo();
+      } catch {
+        // ignore unready YT player
+      }
+      synthRef.current?.stop();
+    };
+
+    if (!shouldOutputAudio || !song || (isWebdriver && !explicitGestureRef.current)) {
+      stopAll();
+      return;
+    }
+
+    let cancelled = false;
+
+    const startPlayback = async () => {
+      if (isRealYoutubeId(song.youtubeVideoId)) {
+        if (audioRef.current) audioRef.current.pause();
+        synthRef.current?.stop();
+        await loadYouTubeIframeApi();
+        if (cancelled || !window.YT?.Player) return;
+
+        try {
+          ytPlayerRef.current?.destroy();
+        } catch {
+          // ignore
+        }
+
+        ytPlayerRef.current = new window.YT.Player('yt-audio-only-mount', {
+          videoId: song.youtubeVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            modestbranding: 1,
+            playsinline: 1,
+          },
+          events: {
+            onReady: (e) => {
+              if (cancelled) return;
+              e.target.setVolume(room.volumePercent);
+              e.target.playVideo();
+              setNeedsInteractionUnlock(false);
+            },
+            onStateChange: (e) => {
+              if (e.data === 0 && !cancelled) {
+                skipCurrentTrack();
+              }
+            },
+          },
+        });
+        return;
+      }
+
+      const streamUrl = await resolvePlayableAudioUrl(song);
+      if (cancelled) return;
+
+      const audioEl = audioRef.current;
+      if (streamUrl && audioEl) {
+        synthRef.current?.stop();
+        if (audioEl.src !== streamUrl) {
+          audioEl.src = streamUrl;
+          audioEl.load();
+        }
+        audioEl.volume = Math.min(1, Math.max(0, room.volumePercent / 100));
+        try {
+          await audioEl.play();
+          setNeedsInteractionUnlock(false);
+        } catch (err) {
+          const errName = err instanceof DOMException ? err.name : '';
+          if (errName === 'NotAllowedError') {
+            setNeedsInteractionUnlock(true);
+          }
+        }
+        return;
+      }
+
+      if (explicitGestureRef.current) {
+        synthRef.current = synthRef.current ?? new StudioSynthLoop();
+        synthRef.current.start(room.volumePercent);
+      }
+    };
+
+    void startPlayback();
+
+    return () => {
+      cancelled = true;
+      stopAll();
+    };
+  }, [nowPlaying?.id, nowPlaying?.song, shouldOutputAudio]);
 
   useEffect(() => {
     if (!room.isPlaying || !isHost) return;
@@ -56,6 +190,43 @@ export const NowPlayingHero: React.FC = () => {
     };
   }, [room.isPlaying, isHost]);
 
+  const handleTogglePlay = () => {
+    explicitGestureRef.current = true;
+    const nextPlaying = !room.isPlaying;
+    updateRoom({ isPlaying: nextPlaying });
+    if (!nextPlaying) {
+      audioRef.current?.pause();
+      synthRef.current?.stop();
+    }
+  };
+
+  const handleUnlockAudio = async () => {
+    explicitGestureRef.current = true;
+    setNeedsInteractionUnlock(false);
+    if (audioRef.current) {
+      try {
+        await audioRef.current.play();
+        return;
+      } catch {
+        // fallback synth if needed
+      }
+    }
+    synthRef.current = synthRef.current ?? new StudioSynthLoop();
+    synthRef.current.start(room.volumePercent);
+  };
+
+  const handleSeekClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isHost) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
+    const nextMs = Math.round(ratio * currentDurationMs);
+    setLiveProgressMs(nextMs);
+    updateRoom({ progressMs: nextMs });
+    if (audioRef.current && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
+      audioRef.current.currentTime = ratio * audioRef.current.duration;
+    }
+  };
+
   return (
     <section
       aria-label="Reproductor Sonando Ahora"
@@ -70,14 +241,23 @@ export const NowPlayingHero: React.FC = () => {
       />
       <div aria-hidden="true" className="ambient-scrim pointer-events-none absolute inset-0" />
 
-      {/* Contenedor técnico oculto para YouTube IFrame Audio (Cero video visible) */}
+      {/* Contenedor técnico oculto para Audio Real (Cero video visible) */}
       <div
         className="sr-only"
         aria-hidden="true"
         data-audio-engine={room.activeProvider}
         data-youtube-video-id={nowPlaying?.song.youtubeVideoId ?? 'yt_neon_pulse'}
-        data-audio-output-active={String(room.isPlaying && ((isHost && room.audioOutput === 'host_device') || room.audioOutput === 'tv'))}
+        data-audio-output-active={String(shouldOutputAudio)}
       >
+        <audio
+          ref={audioRef}
+          className="sr-only"
+          preload="none"
+          crossOrigin="anonymous"
+          onTimeUpdate={(e) => setLiveProgressMs(Math.floor(e.currentTarget.currentTime * 1000))}
+          onEnded={() => skipCurrentTrack()}
+        />
+        <div id="yt-audio-only-mount" className="sr-only" />
         Reproductor de audio oculto YouTube IFrame Audio-Only (solo portada HD visible)
       </div>
 
@@ -158,9 +338,20 @@ export const NowPlayingHero: React.FC = () => {
                   />
                 </div>
 
+                {needsInteractionUnlock && (
+                  <button
+                    type="button"
+                    onClick={handleUnlockAudio}
+                    className="flex min-h-[44px] items-center gap-1.5 rounded-full border border-coral bg-coral-soft px-3.5 text-xs font-bold text-coral"
+                  >
+                    <Volume2 className="h-4 w-4" />
+                    <span>Activar Audio</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => updateRoom({ isPlaying: !room.isPlaying })}
+                  onClick={handleTogglePlay}
                   className="bg-brand-gradient flex h-12 w-12 items-center justify-center rounded-full shadow-aurora transition-transform hover:scale-105 active:scale-95"
                   aria-label={room.isPlaying ? 'Pausar reproducción' : 'Reanudar reproducción'}
                   title={room.isPlaying ? 'Pausar' : 'Reproducir'}
@@ -184,14 +375,24 @@ export const NowPlayingHero: React.FC = () => {
 
         {/* Barra de progreso gradiente */}
         <div className="mt-4 space-y-1.5">
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-elevated/90">
+          <div
+            role={isHost ? 'slider' : undefined}
+            aria-label={isHost ? 'Progreso de la canción' : undefined}
+            aria-valuemin={0}
+            aria-valuemax={currentDurationMs}
+            aria-valuenow={displayProgressMs}
+            onClick={handleSeekClick}
+            className={`relative h-2 w-full overflow-hidden rounded-full bg-elevated/90 ${
+              isHost ? 'cursor-pointer' : ''
+            }`}
+          >
             <div
               className="bg-brand-gradient h-full rounded-full transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
           <div className="flex items-center justify-between font-mono text-[11px] font-semibold tabular-nums-mono text-muted">
-            <span>{formatDurationMs(room.progressMs)}</span>
+            <span>{formatDurationMs(displayProgressMs)}</span>
             <span>{formatDurationMs(currentDurationMs)}</span>
           </div>
         </div>

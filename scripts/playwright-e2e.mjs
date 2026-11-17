@@ -148,6 +148,8 @@ async function run() {
     const audioEngineEl = guestPage.locator('[data-audio-engine]').first();
     const audioClass = await audioEngineEl.getAttribute('class');
     assert.ok(audioClass && audioClass.includes('sr-only'), 'YouTube audio player container must remain hidden with sr-only');
+    const mountedAudioCount = await audioEngineEl.locator('audio').count();
+    assert.equal(mountedAudioCount, 1, 'Hidden <audio> stream player must be mounted inside [data-audio-engine]');
 
     const heroCoverValid = await guestPage.evaluate(() => {
       const hero = document.querySelector('section[aria-label="Reproductor Sonando Ahora"] img[alt^="Portada"]');
