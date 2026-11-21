@@ -26,14 +26,16 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.poneleplay.tv.data.TvRoomUiState
 import com.poneleplay.tv.ui.theme.PonelePlayTvColors
 import com.poneleplay.tv.ui.theme.PonelePlayTvTheme
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvRoomScreen(
-    roomCode: String = "PLAY42",
-    audioOnTv: Boolean = true,
+    state: TvRoomUiState = TvRoomUiState(),
+    onTogglePlayPause: () -> Unit = {},
+    onSkipTrack: () -> Unit = {},
     onToggleAudioMode: () -> Unit = {},
     onFinishParty: () -> Unit = {},
     onDisconnect: () -> Unit = {}
@@ -51,13 +53,17 @@ fun TvRoomScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (audioOnTv) "AUDIO EN PARLANTES DEL TV · YOUTUBE MUSIC SIN PREMIUM" else "SOLO PANTALLA SINCRONIZADA",
+                text = if (state.audioOnTv) {
+                    "AUDIO EN PARLANTES DEL TV · YOUTUBE MUSIC SIN PREMIUM"
+                } else {
+                    "SOLO PANTALLA SINCRONIZADA · AUDIO EN HOST"
+                },
                 color = PonelePlayTvColors.CoralAccent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Sala $roomCode",
+                text = "${state.name} · Sala ${state.code}",
                 color = PonelePlayTvColors.TextMuted,
                 fontSize = 14.sp
             )
@@ -82,16 +88,20 @@ fun TvRoomScreen(
                         .background(PonelePlayTvColors.BgElevated, RoundedCornerShape(20.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("PORTADA HD", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(
+                        text = if (state.isPlaying) "SONANDO" else "EN PAUSA",
+                        color = PonelePlayTvColors.CoralAccent,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text("SONANDO AHORA", color = PonelePlayTvColors.CoralAccent, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("Neon Pulse (Night City)", color = PonelePlayTvColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                    Text("Synthwave Dreams · @martina", color = PonelePlayTvColors.TextMuted, fontSize = 18.sp)
+                    Text(state.nowPlayingTitle, color = PonelePlayTvColors.TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                    Text("${state.nowPlayingArtist} · ${state.proposedBy}", color = PonelePlayTvColors.TextMuted, fontSize = 18.sp)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("01:48 / 03:24 · 🔥14  ❤️9  🕺6", color = PonelePlayTvColors.TextPrimary, fontSize = 15.sp)
+                    Text(state.reactionSummary, color = PonelePlayTvColors.TextPrimary, fontSize = 15.sp)
                 }
             }
 
@@ -102,16 +112,26 @@ fun TvRoomScreen(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("ESCANEÁ PARA VOTAR · $roomCode", color = PonelePlayTvColors.BrandTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Text("#1 Neon Rebelión (+14) 📌", color = PonelePlayTvColors.TextPrimary, fontSize = 16.sp)
-                Text("#2 Automático — María Becerra (+9)", color = PonelePlayTvColors.TextMuted, fontSize = 15.sp)
-                Text("#3 Rincón de la Noche — Duki (+4)", color = PonelePlayTvColors.TextMuted, fontSize = 15.sp)
+                Text("ESCANEÁ PARA VOTAR · ${state.code}", color = PonelePlayTvColors.BrandTeal, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                if (state.topQueue.isEmpty()) {
+                    Text("Cola vacía · Autoplay activo", color = PonelePlayTvColors.TextMuted, fontSize = 15.sp)
+                } else {
+                    state.topQueue.forEachIndexed { idx, entry ->
+                        val pinBadge = if (entry.isPinned) " 📌" else ""
+                        val scoreLabel = if (entry.netScore >= 0) "+${entry.netScore}" else "${entry.netScore}"
+                        Text(
+                            text = "#${idx + 1} ${entry.title} — ${entry.artist} ($scoreLabel)$pinBadge",
+                            color = if (idx == 0) PonelePlayTvColors.TextPrimary else PonelePlayTvColors.TextMuted,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
             }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Button(
-                onClick = {},
+                onClick = onTogglePlayPause,
                 colors = ButtonDefaults.colors(
                     containerColor = PonelePlayTvColors.BrandTeal,
                     contentColor = PonelePlayTvColors.OnBrandTeal,
@@ -120,15 +140,15 @@ fun TvRoomScreen(
                 ),
                 border = ButtonDefaults.border(focusedBorder = Border(BorderStroke(3.dp, PonelePlayTvColors.BrandTeal)))
             ) {
-                Text("Play / Pause", fontWeight = FontWeight.Bold)
+                Text(if (state.isPlaying) "Pausar" else "Reproducir", fontWeight = FontWeight.Bold)
             }
 
-            Button(onClick = {}) {
+            Button(onClick = onSkipTrack) {
                 Text("Siguiente Tema")
             }
 
             Button(onClick = onToggleAudioMode) {
-                Text(if (audioOnTv) "Cambiar a Solo Pantalla" else "Pasar Audio a TV")
+                Text(if (state.audioOnTv) "Cambiar a Solo Pantalla" else "Pasar Audio a TV")
             }
 
             Button(onClick = onFinishParty) {

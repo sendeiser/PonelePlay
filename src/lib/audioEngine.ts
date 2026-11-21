@@ -1,3 +1,4 @@
+import { SEARCH_CATALOG_MOCK } from '../data/mockPartyData';
 import { Song } from '../types/jukebox';
 
 declare global {
@@ -11,6 +12,7 @@ declare global {
           events?: {
             onReady?: (event: { target: YTPlayerInstance }) => void;
             onStateChange?: (event: { data: number; target: YTPlayerInstance }) => void;
+            onError?: (event: { data: number; target: YTPlayerInstance }) => void;
           };
         }
       ) => YTPlayerInstance;
@@ -28,6 +30,14 @@ export interface YTPlayerInstance {
   getDuration: () => number;
   destroy: () => void;
 }
+
+export const FALLBACK_GENRE_QUERIES: Record<string, string> = {
+  party_hits: 'Duki Maria Becerra Fiesta Hits',
+  urbano_latino: 'Bad Bunny Feid Reggaeton',
+  pop_electronica: 'The Weeknd Dua Lipa Electronic Dance',
+  rock_nacional: 'Soda Stereo Charly Garcia Rock',
+  cumbia_cachengue: 'Ke Personajes La Konga Cumbia',
+};
 
 const audioUrlCache = new Map<string, string | null>();
 let ytApiLoadingPromise: Promise<void> | null = null;
@@ -85,6 +95,52 @@ export async function resolvePlayableAudioUrl(song: Song): Promise<string | null
 
   audioUrlCache.set(cacheKey, null);
   return null;
+}
+
+export async function fetchAutoplayFallbackSong(genre: string, excludeSongId?: string): Promise<Song> {
+  const query = FALLBACK_GENRE_QUERIES[genre] || FALLBACK_GENRE_QUERIES.party_hits;
+  try {
+    const res = await fetch(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(query)}&media=music&entity=song&limit=6`
+    );
+    if (res.ok) {
+      const payload = (await res.json()) as {
+        results?: Array<{
+          trackId?: number;
+          trackName?: string;
+          artistName?: string;
+          collectionName?: string;
+          trackTimeMillis?: number;
+          artworkUrl100?: string;
+          previewUrl?: string;
+        }>;
+      };
+      const candidates = (payload.results ?? []).filter(
+        (item) => item.trackId && item.trackName && item.previewUrl && `itunes-${item.trackId}` !== excludeSongId
+      );
+      if (candidates.length > 0) {
+        const picked = candidates[Math.floor(Math.random() * candidates.length)];
+        return {
+          id: `itunes-${picked.trackId}`,
+          spotifyTrackId: `sp_itunes_${picked.trackId}`,
+          youtubeVideoId: String(picked.previewUrl),
+          title: String(picked.trackName),
+          artist: String(picked.artistName || 'PonelePlay Autoplay'),
+          album: String(picked.collectionName || 'Autoplay'),
+          durationMs: Number(picked.trackTimeMillis || 180_000),
+          imageUrl:
+            String(picked.artworkUrl100 || '').replace('100x100bb', '600x600bb') ||
+            '/covers/cover-synthwave.png',
+          cached: false,
+        };
+      }
+    }
+  } catch {
+    // offline fallback below
+  }
+
+  const localCandidates = SEARCH_CATALOG_MOCK.filter((s) => s.id !== excludeSongId && s.id !== 'song-cat-blocked');
+  return localCandidates[0] ?? SEARCH_CATALOG_MOCK[0];
 }
 
 export class StudioSynthLoop {

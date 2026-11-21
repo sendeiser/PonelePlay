@@ -50,6 +50,7 @@ export interface RoomSettings {
   id: string;
   code: string;
   name: string;
+  hostId?: string;
   hostName: string;
   isActive: boolean;
   activeProvider: AudioProvider;

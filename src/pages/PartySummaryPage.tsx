@@ -12,22 +12,45 @@ import {
 import { toast } from 'sonner';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { formatDurationMs } from '../data/mockPartyData';
+import {
+  createSpotifyPlaylistFromTracks,
+  downloadM3u8Playlist,
+  getSpotifyAccessToken,
+} from '../lib/spotifyAuth';
 
 export const PartySummaryPage: React.FC = () => {
   const { code = 'PLAY42' } = useParams();
   const navigate = useNavigate();
-  const { room, played, nowPlaying, participants, loadRoomByCode } = usePartyPreview();
+  const { room, queue, played, nowPlaying, participants, loadRoomByCode } = usePartyPreview();
 
   useEffect(() => {
     void loadRoomByCode(code);
   }, [code, loadRoomByCode]);
 
   const allSessionTracks = nowPlaying ? [nowPlaying, ...played] : played;
+  const totalVotesCast = [...allSessionTracks, ...queue].reduce(
+    (sum, item) => sum + item.upvotesCount + item.downvotesCount,
+    0
+  );
   const queenTrack = [...allSessionTracks].sort((a, b) => b.netScore - a.netScore)[0];
   const topDjs = [...participants]
     .filter((p) => !p.isBanned)
     .sort((a, b) => b.djPoints - a.djPoints)
     .slice(0, 3);
+
+  const exportSpotifyOrM3u8 = async () => {
+    const songs = allSessionTracks.map((item) => item.song);
+    if (getSpotifyAccessToken()) {
+      const res = await createSpotifyPlaylistFromTracks(room.name, songs);
+      if (res.ok) {
+        toast.success('Playlist creada en tu cuenta de Spotify');
+        if (res.url) window.open(res.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+    }
+    downloadM3u8Playlist(code.toUpperCase(), room.name, songs);
+    toast.success('Archivo .m3u8 de playlist descargado listo para importar');
+  };
 
   const exportTracklist = async () => {
     const text = allSessionTracks
@@ -62,7 +85,7 @@ export const PartySummaryPage: React.FC = () => {
               <p className="text-[11px] text-muted">Temas sonados</p>
             </div>
             <div className="rounded-2xl border border-stroke bg-elevated p-3">
-              <p className="font-display text-2xl font-bold tabular-nums-mono text-ink">148</p>
+              <p className="font-display text-2xl font-bold tabular-nums-mono text-ink">{totalVotesCast}</p>
               <p className="text-[11px] text-muted">Votos emitidos</p>
             </div>
             <div className="rounded-2xl border border-stroke bg-elevated p-3">
@@ -161,7 +184,7 @@ export const PartySummaryPage: React.FC = () => {
           <div className="space-y-2.5">
             <button
               type="button"
-              onClick={() => toast.success('Playlist creada en tu cuenta de Spotify')}
+              onClick={() => void exportSpotifyOrM3u8()}
               className="bg-brand-gradient flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full px-4 text-sm font-bold shadow-aurora"
             >
               <Disc3 className="h-4 w-4" />

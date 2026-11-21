@@ -11,6 +11,8 @@ import {
   RECENT_ROOMS_MOCK,
   SEARCH_CATALOG_MOCK,
 } from '../data/mockPartyData';
+import { fetchAutoplayFallbackSong } from '../lib/audioEngine';
+import { completeSpotifyPkceCallback, getSpotifyAccessToken } from '../lib/spotifyAuth';
 import {
   ensurePartyUser,
   getOrCreateLocalUserId,
@@ -188,13 +190,78 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   useEffect(() => {
     let active = true;
-    void ensurePartyUser().then((u) => {
-      if (active) setCurrentUserId(u.id);
+    void completeSpotifyPkceCallback().then((linked) => {
+      if (active && (linked || getSpotifyAccessToken())) {
+        setRoom((prev) => ({ ...prev, spotifyConnected: true }));
+      }
     });
     return () => {
       active = false;
     };
   }, []);
+
+  const refreshRecentRooms = useCallback(async () => {
+    try {
+      const { data: roomRows } = await supabase
+        .from('rooms')
+        .select('id, code, name, is_active, active_provider, host_id')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (!roomRows || roomRows.length === 0) return;
+
+      const roomIds = roomRows.map((r) => r.id);
+      const hostIds = Array.from(new Set(roomRows.map((r) => r.host_id)));
+
+      const [hostsRes, partRes, qRes] = await Promise.all([
+        supabase.from('users').select('id, display_name').in('id', hostIds),
+        supabase.from('room_participants').select('room_id').in('room_id', roomIds),
+        supabase.from('queue_items').select('room_id, status').in('room_id', roomIds),
+      ]);
+
+      const hostMap = new Map<string, string>();
+      for (const u of hostsRes.data ?? []) {
+        hostMap.set(u.id, u.display_name);
+      }
+
+      const partCounts = new Map<string, number>();
+      for (const p of partRes.data ?? []) {
+        partCounts.set(p.room_id, (partCounts.get(p.room_id) ?? 0) + 1);
+      }
+
+      const trackCounts = new Map<string, number>();
+      for (const q of qRes.data ?? []) {
+        if (q.status === 'played' || q.status === 'playing') {
+          trackCounts.set(q.room_id, (trackCounts.get(q.room_id) ?? 0) + 1);
+        }
+      }
+
+      setRecentRooms(
+        roomRows.map((r) => ({
+          code: r.code,
+          name: r.name,
+          hostName: hostMap.get(r.host_id) ?? 'Host',
+          isActive: r.is_active,
+          provider: (r.active_provider as AudioProvider) || 'youtube_music',
+          participantsCount: partCounts.get(r.id) ?? 1,
+          songsPlayed: trackCounts.get(r.id) ?? 0,
+        }))
+      );
+    } catch {
+      // keep existing recentRooms offline
+    }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void ensurePartyUser().then((u) => {
+      if (active) setCurrentUserId(u.id);
+    });
+    void refreshRecentRooms();
+    return () => {
+      active = false;
+    };
+  }, [refreshRecentRooms]);
 
   const hydrateRoomStateFromDb = useCallback(
     async (roomId: string, uid: string): Promise<JoinEdgeState> => {
@@ -292,11 +359,21 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const pb = (roomRow.playback_state ?? {}) as Record<string, unknown>;
       const audioOutput: AudioOutput = pb.audio_output === 'tv' ? 'tv' : 'host_device';
+      const rc = pb.reaction_counts as Record<string, unknown> | undefined;
+      if (rc && typeof rc === 'object') {
+        setReactionCounts({
+          '🔥': Number(rc['🔥'] ?? 0),
+          '❤️': Number(rc['❤️'] ?? 0),
+          '🕺': Number(rc['🕺'] ?? 0),
+          '👎': Number(rc['👎'] ?? 0),
+        });
+      }
 
       setRoom({
         id: roomRow.id,
         code: roomRow.code,
         name: roomRow.name,
+        hostId: roomRow.host_id,
         hostName: hostRes.data?.display_name ?? 'Host',
         isActive: roomRow.is_active,
         activeProvider: (roomRow.active_provider as AudioProvider) || 'youtube_music',
@@ -308,8 +385,16 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
         progressMs: typeof pb.progress_ms === 'number' ? pb.progress_ms : 0,
         volumePercent: typeof pb.volume_percent === 'number' ? pb.volume_percent : 82,
         wakeLockActive: Boolean(pb.is_playing ?? true),
-        spotifyConnected: false,
+        spotifyConnected: Boolean(getSpotifyAccessToken()),
       });
+
+      if (typeof window !== 'undefined' && !window.location.search.includes('role=')) {
+        if (roomRow.host_id === uid) {
+          setDemoRole('host');
+        } else if (mappedParticipants.some((p) => p.id === uid && p.role === 'guest')) {
+          setDemoRole('guest');
+        }
+      }
 
       setNowPlaying(playingItem);
       setQueue(pendingItems);
@@ -897,7 +982,10 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const blockItem = (itemId: string) => {
     const target = queue.find((q) => q.id === itemId);
     if (!target) return;
-    setBlockedSongIds((prev) => Array.from(new Set([...prev, target.song.id])));
+    const targetKeys = [target.song.id, target.song.spotifyTrackId, target.song.youtubeVideoId].filter(
+      Boolean
+    ) as string[];
+    setBlockedSongIds((prev) => Array.from(new Set([...prev, ...targetKeys])));
     setQueue((prev) => prev.filter((q) => q.id !== itemId));
     if (isUuid(itemId)) {
       void supabase.from('queue_items').update({ status: 'blocked' }).eq('id', itemId);
@@ -907,10 +995,54 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const skipCurrentTrack = () => {
     if (queue.length === 0 || queueEmptyPreview) {
-      toast.info('Cola vacía: reproduciendo pista de Autoplay de respaldo');
-      if (isUuid(room.id)) {
-        void supabase.rpc('advance_room_playback', { p_room_id: room.id });
-      }
+      const previousPlaying = nowPlaying;
+      void fetchAutoplayFallbackSong(room.fallbackGenre, previousPlaying?.song.id).then(
+        async (fallbackSong) => {
+          if (previousPlaying) {
+            setPlayed((prev) => [
+              { ...previousPlaying, status: 'played', playedAt: new Date().toISOString() },
+              ...prev,
+            ]);
+          }
+          const autoplayItem: QueueItem = {
+            id: `qi-autoplay-${Date.now()}`,
+            roomId: room.id,
+            song: fallbackSong,
+            proposedById: room.hostId || currentUserId,
+            proposedByName: 'Autoplay',
+            proposedByAvatar: '🎧',
+            upvotesCount: 1,
+            downvotesCount: 0,
+            netScore: 1,
+            userVote: 0,
+            isPinned: false,
+            status: 'playing',
+            createdAt: new Date().toISOString(),
+          };
+          setNowPlaying(autoplayItem);
+          setRoom((prev) => ({ ...prev, progressMs: 0, isPlaying: true }));
+          if (isUuid(room.id)) {
+            const proposerId = room.hostId || currentUserId;
+            const { data: res } = await supabase.rpc('propose_or_upvote_song', {
+              p_room_id: room.id,
+              p_user_id: proposerId,
+              p_spotify_track_id: (fallbackSong.spotifyTrackId ?? null) as unknown as string,
+              p_youtube_video_id: (fallbackSong.youtubeVideoId ?? null) as unknown as string,
+              p_title: fallbackSong.title,
+              p_artist: fallbackSong.artist,
+              p_album: fallbackSong.album ?? 'Autoplay',
+              p_duration_ms: fallbackSong.durationMs,
+              p_image_url: fallbackSong.imageUrl,
+            });
+            const qId = (res as { queue_item_id?: string } | null)?.queue_item_id;
+            await supabase.rpc('advance_room_playback', {
+              p_room_id: room.id,
+              ...(qId ? { p_next_queue_item_id: qId } : {}),
+            });
+          }
+          toast.info(`Autoplay: ${fallbackSong.title} — ${fallbackSong.artist}`);
+        }
+      );
       return;
     }
     const [next, ...rest] = queue;
@@ -1027,6 +1159,13 @@ export const PartyPreviewProvider: React.FC<{ children: React.ReactNode }> = ({ 
     window.setTimeout(() => {
       setFloatingReactions((prev) => prev.filter((r) => r.id !== id));
     }, 2300);
+
+    if (isUuid(room.id)) {
+      void supabase.rpc('record_room_reaction', {
+        p_room_id: room.id,
+        p_emoji: emoji,
+      });
+    }
 
     if (activeChannelRef.current) {
       void activeChannelRef.current.send({

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,9 +13,16 @@ import {
   Tv,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { toast } from 'sonner';
 import { PonelePlayLogo } from '../components/PonelePlayLogo';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { formatDurationMs } from '../data/mockPartyData';
+import {
+  YTPlayerInstance,
+  isRealYoutubeId,
+  loadYouTubeIframeApi,
+  resolvePlayableAudioUrl,
+} from '../lib/audioEngine';
 
 type TvModeView = 'web_tv' | 'android_tv_native';
 type AndroidTvScreen = 'tv_home' | 'tv_room' | 'tv_summary';
@@ -26,7 +33,9 @@ export const TvModePage: React.FC = () => {
   const {
     room,
     recentRooms,
+    participants,
     loadRoomByCode,
+    createRoom,
     updateRoom,
     nowPlaying,
     queue,
@@ -36,17 +45,102 @@ export const TvModePage: React.FC = () => {
     skipCurrentTrack,
   } = usePartyPreview();
 
-  useEffect(() => {
-    void loadRoomByCode(code);
-  }, [code, loadRoomByCode]);
+  const tvAudioRef = useRef<HTMLAudioElement | null>(null);
+  const tvYtPlayerRef = useRef<YTPlayerInstance | null>(null);
+  const tvGestureRef = useRef(false);
 
   const [tvSurface, setTvSurface] = useState<TvModeView>('web_tv');
   const [androidScreen, setAndroidScreen] = useState<AndroidTvScreen>('tv_room');
   const [dpadFocusIndex, setDpadFocusIndex] = useState(0);
+  const [tvCodeInput, setTvCodeInput] = useState(code.toUpperCase());
+
+  useEffect(() => {
+    setTvCodeInput(code.toUpperCase());
+    void loadRoomByCode(code);
+  }, [code, loadRoomByCode]);
+
+  const shouldTvPlayAudio = room.isPlaying && room.audioOutput === 'tv';
+
+  useEffect(() => {
+    const song = nowPlaying?.song;
+    const isWebdriver = typeof navigator !== 'undefined' && navigator.webdriver === true;
+
+    const stopTv = () => {
+      tvAudioRef.current?.pause();
+      try {
+        tvYtPlayerRef.current?.pauseVideo();
+      } catch {
+        // ignore unready YT player
+      }
+    };
+
+    if (!shouldTvPlayAudio || !song || (isWebdriver && !tvGestureRef.current)) {
+      stopTv();
+      return;
+    }
+
+    let cancelled = false;
+    const startTvAudio = async () => {
+      const startStream = async () => {
+        const streamUrl = await resolvePlayableAudioUrl(song);
+        if (cancelled || !streamUrl || !tvAudioRef.current) return;
+        if (tvAudioRef.current.src !== streamUrl) {
+          tvAudioRef.current.src = streamUrl;
+          tvAudioRef.current.load();
+        }
+        tvAudioRef.current.volume = Math.min(1, Math.max(0, room.volumePercent / 100));
+        await tvAudioRef.current.play().catch(() => {});
+      };
+
+      if (isRealYoutubeId(song.youtubeVideoId)) {
+        tvAudioRef.current?.pause();
+        await loadYouTubeIframeApi();
+        if (cancelled || !window.YT?.Player) {
+          await startStream();
+          return;
+        }
+        try {
+          tvYtPlayerRef.current?.destroy();
+        } catch {
+          // ignore
+        }
+        tvYtPlayerRef.current = new window.YT.Player('tv-yt-audio-only-mount', {
+          videoId: song.youtubeVideoId,
+          playerVars: { autoplay: 1, controls: 0, modestbranding: 1, playsinline: 1 },
+          events: {
+            onReady: (e) => {
+              if (cancelled) return;
+              e.target.setVolume(room.volumePercent);
+              e.target.playVideo();
+            },
+            onStateChange: (e) => {
+              if (e.data === 0 && !cancelled) skipCurrentTrack();
+            },
+            onError: () => {
+              if (!cancelled) void startStream();
+            },
+          },
+        });
+        return;
+      }
+
+      await startStream();
+    };
+
+    void startTvAudio();
+    return () => {
+      cancelled = true;
+      stopTv();
+    };
+  }, [nowPlaying?.id, nowPlaying?.song, shouldTvPlayAudio]);
 
   const joinUrl = `${window.location.origin}/join/${code.toUpperCase()}`;
   const coverUrl = nowPlaying?.song.imageUrl ?? '/covers/cover-synthwave.png';
   const topFive = queue.slice(0, 5);
+  const topDjs = [...participants]
+    .filter((p) => !p.isBanned)
+    .sort((a, b) => b.djPoints - a.djPoints)
+    .slice(0, 3);
   const currentDurationMs = nowPlaying?.song.durationMs ?? 204_000;
   const progressPercent = Math.min(100, Math.round((room.progressMs / currentDurationMs) * 100));
 
@@ -54,7 +148,10 @@ export const TvModePage: React.FC = () => {
     {
       label: room.isPlaying ? 'Pausar' : 'Reproducir',
       icon: room.isPlaying ? Pause : Play,
-      onClick: () => updateRoom({ isPlaying: !room.isPlaying }),
+      onClick: () => {
+        tvGestureRef.current = true;
+        updateRoom({ isPlaying: !room.isPlaying });
+      },
     },
     {
       label: 'Siguiente Tema',
@@ -64,7 +161,10 @@ export const TvModePage: React.FC = () => {
     {
       label: room.audioOutput === 'tv' ? 'Audio en TV (Activo)' : 'Pasar Audio a esta TV',
       icon: Speaker,
-      onClick: () => updateRoom({ audioOutput: room.audioOutput === 'tv' ? 'host_device' : 'tv' }),
+      onClick: () => {
+        tvGestureRef.current = true;
+        updateRoom({ audioOutput: room.audioOutput === 'tv' ? 'host_device' : 'tv' });
+      },
     },
     {
       label: 'Ver Podio TV',
@@ -73,8 +173,49 @@ export const TvModePage: React.FC = () => {
     },
   ];
 
+  const handleTvConnectCode = async () => {
+    const clean = tvCodeInput.trim().toUpperCase();
+    if (clean.length < 4) {
+      toast.error('Ingresa un código de sala válido');
+      return;
+    }
+    const status = await loadRoomByCode(clean);
+    if (status === 'not_found') {
+      toast.error(`No se encontró ninguna sala con código ${clean}`);
+      return;
+    }
+    navigate(`/room/${clean}/tv`);
+    setAndroidScreen('tv_room');
+  };
+
+  const handleCreateTvRoom = async () => {
+    tvGestureRef.current = true;
+    const timeLabel = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    const newCode = await createRoom({
+      name: `Sala Smart TV · ${timeLabel}`,
+      activeProvider: 'youtube_music',
+      maxPendingPerUser: 5,
+      cooldownSeconds: 10,
+      fallbackGenre: room.fallbackGenre || 'party_hits',
+    });
+    updateRoom({ audioOutput: 'tv', isPlaying: true });
+    toast.success(`Sala ${newCode} creada en Smart TV`);
+    navigate(`/room/${newCode}/tv`);
+    setAndroidScreen('tv_room');
+  };
+
   return (
     <main className="mx-auto max-w-6xl space-y-5 px-3 py-4 sm:px-6 sm:py-6">
+      <div className="sr-only" aria-hidden="true" data-tv-audio-active={String(shouldTvPlayAudio)}>
+        <audio
+          ref={tvAudioRef}
+          className="sr-only"
+          preload="none"
+          crossOrigin="anonymous"
+          onEnded={() => skipCurrentTrack()}
+        />
+        <div id="tv-yt-audio-only-mount" className="sr-only" />
+      </div>
       {/* Cabecera limpia de Modo TV */}
       <div className="glass-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-stroke p-3">
         <button
@@ -305,7 +446,7 @@ export const TvModePage: React.FC = () => {
                       </span>
                       <h2 className="mt-1 font-display text-2xl font-bold text-ink">Unirse con Código</h2>
                       <div className="mt-5 grid grid-cols-6 gap-2">
-                        {code
+                        {tvCodeInput
                           .toUpperCase()
                           .padEnd(6, ' ')
                           .slice(0, 6)
@@ -323,10 +464,19 @@ export const TvModePage: React.FC = () => {
                             </div>
                           ))}
                       </div>
+                      <input
+                        type="text"
+                        maxLength={8}
+                        value={tvCodeInput}
+                        onChange={(e) => setTvCodeInput(e.target.value.toUpperCase())}
+                        aria-label="Código de sala para Smart TV"
+                        placeholder="PLAY42"
+                        className="mt-3 min-h-[44px] w-full rounded-xl border border-stroke bg-elevated px-3 text-center font-mono text-sm font-bold uppercase tracking-[0.2em] text-ink focus:border-brand"
+                      />
                       <button
                         type="button"
-                        onClick={() => setAndroidScreen('tv_room')}
-                        className="bg-brand-gradient mt-5 flex min-h-[48px] w-full items-center justify-center rounded-full text-sm font-bold shadow-aurora"
+                        onClick={() => void handleTvConnectCode()}
+                        className="bg-brand-gradient mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full text-sm font-bold shadow-aurora"
                       >
                         OK · Conectar TV a Sala
                       </button>
@@ -341,10 +491,7 @@ export const TvModePage: React.FC = () => {
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          updateRoom({ audioOutput: 'tv' });
-                          setAndroidScreen('tv_room');
-                        }}
+                        onClick={() => void handleCreateTvRoom()}
                         className="mt-5 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated text-sm font-bold text-ink hover:border-brand"
                       >
                         <PlusCircle className="h-5 w-5 text-brand" />
@@ -362,7 +509,12 @@ export const TvModePage: React.FC = () => {
                         <button
                           key={r.code}
                           type="button"
-                          onClick={() => setAndroidScreen('tv_room')}
+                          onClick={() => {
+                            setTvCodeInput(r.code);
+                            void loadRoomByCode(r.code);
+                            navigate(`/room/${r.code}/tv`);
+                            setAndroidScreen('tv_room');
+                          }}
                           className="flex min-h-[64px] items-center justify-between rounded-2xl border border-stroke bg-card/85 px-5 py-4 text-left backdrop-blur-md hover:border-brand"
                         >
                           <div>
@@ -485,21 +637,35 @@ export const TvModePage: React.FC = () => {
                     {played.length + 1} temas reproducidos · Podio de DJs de la noche
                   </p>
                   <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-3">
-                    <div className="rounded-2xl border border-coral/50 bg-card/85 p-4 backdrop-blur-md">
-                      <p className="font-mono text-xs font-bold text-coral">1º PUESTO ORO</p>
-                      <p className="mt-1 text-2xl text-ink">🌟 @martina</p>
-                      <p className="font-mono text-sm font-bold text-brand">33 pts</p>
-                    </div>
-                    <div className="rounded-2xl border border-stroke bg-card/85 p-4 backdrop-blur-md">
-                      <p className="font-mono text-xs text-muted">2º PUESTO PLATA</p>
-                      <p className="mt-1 text-2xl text-ink">🔥 @gonza</p>
-                      <p className="font-mono text-sm font-bold text-ink">27 pts</p>
-                    </div>
-                    <div className="rounded-2xl border border-stroke bg-card/85 p-4 backdrop-blur-md">
-                      <p className="font-mono text-xs text-muted">3º PUESTO BRONCE</p>
-                      <p className="mt-1 text-2xl text-ink">🎤 @flor</p>
-                      <p className="font-mono text-sm font-bold text-ink">20 pts</p>
-                    </div>
+                    {topDjs.map((dj, idx) => {
+                      const rankTitles = ['1º PUESTO ORO', '2º PUESTO PLATA', '3º PUESTO BRONCE'];
+                      return (
+                        <div
+                          key={dj.id}
+                          className={`rounded-2xl border bg-card/85 p-4 backdrop-blur-md ${
+                            idx === 0 ? 'border-coral/50' : 'border-stroke'
+                          }`}
+                        >
+                          <p
+                            className={`font-mono text-xs font-bold ${
+                              idx === 0 ? 'text-coral' : 'text-muted'
+                            }`}
+                          >
+                            {rankTitles[idx] ?? `${idx + 1}º PUESTO`}
+                          </p>
+                          <p className="mt-1 text-2xl text-ink">
+                            {dj.avatarEmoji} @{dj.displayName}
+                          </p>
+                          <p
+                            className={`font-mono text-sm font-bold ${
+                              idx === 0 ? 'text-brand' : 'text-ink'
+                            }`}
+                          >
+                            {dj.djPoints} pts
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                   <button
                     type="button"

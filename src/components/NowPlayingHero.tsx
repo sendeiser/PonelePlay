@@ -46,8 +46,7 @@ export const NowPlayingHero: React.FC = () => {
   const isEmptyAutoplay = queue.length === 0;
   const coverUrl = nowPlaying?.song.imageUrl ?? '/covers/cover-synthwave.png';
   const currentDurationMs = nowPlaying?.song.durationMs ?? 204_000;
-  const shouldOutputAudio =
-    room.isPlaying && ((isHost && room.audioOutput === 'host_device') || room.audioOutput === 'tv');
+  const shouldOutputAudio = room.isPlaying && room.audioOutput === 'host_device';
   const displayProgressMs = liveProgressMs;
   const progressPercent = Math.min(
     100,
@@ -91,45 +90,9 @@ export const NowPlayingHero: React.FC = () => {
     }
 
     let cancelled = false;
+    let progressInterval: number | null = null;
 
-    const startPlayback = async () => {
-      if (isRealYoutubeId(song.youtubeVideoId)) {
-        if (audioRef.current) audioRef.current.pause();
-        synthRef.current?.stop();
-        await loadYouTubeIframeApi();
-        if (cancelled || !window.YT?.Player) return;
-
-        try {
-          ytPlayerRef.current?.destroy();
-        } catch {
-          // ignore
-        }
-
-        ytPlayerRef.current = new window.YT.Player('yt-audio-only-mount', {
-          videoId: song.youtubeVideoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 0,
-            modestbranding: 1,
-            playsinline: 1,
-          },
-          events: {
-            onReady: (e) => {
-              if (cancelled) return;
-              e.target.setVolume(room.volumePercent);
-              e.target.playVideo();
-              setNeedsInteractionUnlock(false);
-            },
-            onStateChange: (e) => {
-              if (e.data === 0 && !cancelled) {
-                skipCurrentTrack();
-              }
-            },
-          },
-        });
-        return;
-      }
-
+    const startAudioStreamFallback = async () => {
       const streamUrl = await resolvePlayableAudioUrl(song);
       if (cancelled) return;
 
@@ -159,10 +122,73 @@ export const NowPlayingHero: React.FC = () => {
       }
     };
 
+    const startPlayback = async () => {
+      if (isRealYoutubeId(song.youtubeVideoId)) {
+        if (audioRef.current) audioRef.current.pause();
+        synthRef.current?.stop();
+        await loadYouTubeIframeApi();
+        if (cancelled || !window.YT?.Player) {
+          await startAudioStreamFallback();
+          return;
+        }
+
+        try {
+          ytPlayerRef.current?.destroy();
+        } catch {
+          // ignore
+        }
+
+        ytPlayerRef.current = new window.YT.Player('yt-audio-only-mount', {
+          videoId: song.youtubeVideoId,
+          playerVars: {
+            autoplay: 1,
+            controls: 0,
+            modestbranding: 1,
+            playsinline: 1,
+          },
+          events: {
+            onReady: (e) => {
+              if (cancelled) return;
+              e.target.setVolume(room.volumePercent);
+              e.target.playVideo();
+              setNeedsInteractionUnlock(false);
+              progressInterval = window.setInterval(() => {
+                if (cancelled) return;
+                try {
+                  const sec = ytPlayerRef.current?.getCurrentTime();
+                  if (typeof sec === 'number' && Number.isFinite(sec) && sec >= 0) {
+                    setLiveProgressMs(Math.floor(sec * 1000));
+                  }
+                } catch {
+                  // ignore unready YT player
+                }
+              }, 500);
+            },
+            onStateChange: (e) => {
+              if (e.data === 0 && !cancelled) {
+                skipCurrentTrack();
+              }
+            },
+            onError: () => {
+              if (!cancelled) {
+                void startAudioStreamFallback();
+              }
+            },
+          },
+        });
+        return;
+      }
+
+      await startAudioStreamFallback();
+    };
+
     void startPlayback();
 
     return () => {
       cancelled = true;
+      if (progressInterval !== null) {
+        window.clearInterval(progressInterval);
+      }
       stopAll();
     };
   }, [nowPlaying?.id, nowPlaying?.song, shouldOutputAudio]);
@@ -224,6 +250,11 @@ export const NowPlayingHero: React.FC = () => {
     updateRoom({ progressMs: nextMs });
     if (audioRef.current && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
       audioRef.current.currentTime = ratio * audioRef.current.duration;
+    }
+    try {
+      ytPlayerRef.current?.seekTo(nextMs / 1000, true);
+    } catch {
+      // ignore unready YT player
     }
   };
 

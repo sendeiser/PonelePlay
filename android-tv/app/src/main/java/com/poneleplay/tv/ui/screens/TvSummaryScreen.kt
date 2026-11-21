@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Text
+import com.poneleplay.tv.data.TvDjRankUi
 import com.poneleplay.tv.ui.theme.PonelePlayTvColors
 import com.poneleplay.tv.ui.theme.PonelePlayTvTheme
 
@@ -26,6 +27,7 @@ import com.poneleplay.tv.ui.theme.PonelePlayTvTheme
 @Composable
 fun TvSummaryScreen(
     roomCode: String = "PLAY42",
+    topDjs: List<TvDjRankUi> = emptyList(),
     onBackHome: () -> Unit = {}
 ) {
     Column(
@@ -42,21 +44,17 @@ fun TvSummaryScreen(
         Spacer(modifier = Modifier.height(28.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            listOf(
-                Triple("1º ORO", "@martina", "33 pts"),
-                Triple("2º PLATA", "@gonza", "27 pts"),
-                Triple("3º BRONCE", "@flor", "20 pts")
-            ).forEach { (rank, user, pts) ->
+            topDjs.forEach { dj ->
                 Column(
                     modifier = Modifier
                         .background(PonelePlayTvColors.BgCard, RoundedCornerShape(20.dp))
                         .padding(horizontal = 32.dp, vertical = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(rank, color = PonelePlayTvColors.AmberGold, fontWeight = FontWeight.Bold)
+                    Text(dj.rankLabel, color = PonelePlayTvColors.AmberGold, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(user, color = PonelePlayTvColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                    Text(pts, color = PonelePlayTvColors.BrandTeal, fontSize = 18.sp)
+                    Text("${dj.avatar} ${dj.displayName}", color = PonelePlayTvColors.TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                    Text("${dj.points} pts", color = PonelePlayTvColors.BrandTeal, fontSize = 18.sp)
                 }
             }
         }

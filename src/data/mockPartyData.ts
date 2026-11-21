@@ -34,7 +34,7 @@ export const INITIAL_NOW_PLAYING: QueueItem = {
   song: {
     id: 'song-1',
     spotifyTrackId: 'sp_neon_pulse',
-    youtubeVideoId: 'yt_neon_pulse',
+    youtubeVideoId: '4NRXx6U8ABQ',
     title: 'Neon Pulse (Night City)',
     artist: 'Synthwave Dreams',
     album: 'Electric Midnight LP',
@@ -61,7 +61,7 @@ export const INITIAL_QUEUE: QueueItem[] = [
     song: {
       id: 'song-2',
       spotifyTrackId: 'sp_neon_rebelion',
-      youtubeVideoId: 'yt_neon_rebelion',
+      youtubeVideoId: '60ItHLz5WEA',
       title: 'Neon Rebelión (Official Audio)',
       artist: 'Luna Nova & Khea',
       album: 'Distrito Neón',
@@ -86,7 +86,7 @@ export const INITIAL_QUEUE: QueueItem[] = [
     song: {
       id: 'song-3',
       spotifyTrackId: 'sp_automatico',
-      youtubeVideoId: 'yt_automatico',
+      youtubeVideoId: 'A_g3lMcWVy0',
       title: 'Automático',
       artist: 'María Becerra',
       album: 'La Nena de Argentina',
@@ -111,7 +111,7 @@ export const INITIAL_QUEUE: QueueItem[] = [
     song: {
       id: 'song-4',
       spotifyTrackId: 'sp_rincon_noche',
-      youtubeVideoId: 'yt_rincon_noche',
+      youtubeVideoId: 'kJQP7kiw5Fk',
       title: 'Rincón de la Noche',
       artist: 'Duki, Emilia',
       album: 'Antes de Ameri',
@@ -136,7 +136,7 @@ export const INITIAL_QUEUE: QueueItem[] = [
     song: {
       id: 'song-5',
       spotifyTrackId: 'sp_midnight_groove',
-      youtubeVideoId: 'yt_midnight_groove',
+      youtubeVideoId: 'OPf0YbXqDm0',
       title: 'Midnight Groove',
       artist: 'Babasónicos & Louta',
       album: 'Trinchera Nocturna',
@@ -164,7 +164,7 @@ export const INITIAL_PLAYED: QueueItem[] = [
     song: {
       id: 'song-6',
       spotifyTrackId: 'sp_persiana',
-      youtubeVideoId: 'yt_persiana',
+      youtubeVideoId: 'fJ9rUzIMcZQ',
       title: 'Persiana Americana (Remastered)',
       artist: 'Soda Stereo',
       album: 'Signos',
@@ -190,7 +190,7 @@ export const INITIAL_PLAYED: QueueItem[] = [
     song: {
       id: 'song-7',
       spotifyTrackId: 'sp_bzrp_52',
-      youtubeVideoId: 'yt_bzrp_52',
+      youtubeVideoId: 'JGwWNGJdvx8',
       title: 'Quevedo: Bzrp Music Sessions, Vol. 52',
       artist: 'Bizarrap & Quevedo',
       album: 'BZRP Sessions',
@@ -216,7 +216,7 @@ export const INITIAL_PLAYED: QueueItem[] = [
     song: {
       id: 'song-8',
       spotifyTrackId: 'sp_la_cumbia',
-      youtubeVideoId: 'yt_la_cumbia',
+      youtubeVideoId: '2Vv-BfVoq4g',
       title: 'Noche de Cumbia & Bajo',
       artist: 'Ke Personajes',
       album: 'En Vivo',
@@ -251,7 +251,7 @@ export const SEARCH_CATALOG_MOCK: Song[] = [
   {
     id: 'song-cat-1',
     spotifyTrackId: 'sp_un_finde',
-    youtubeVideoId: 'yt_un_finde',
+    youtubeVideoId: '9bZkp7q19f0',
     title: 'Un Finde | CROSSOVER #2',
     artist: 'Big One, FMK, Ke Personajes',
     album: 'Crossover',
@@ -273,7 +273,7 @@ export const SEARCH_CATALOG_MOCK: Song[] = [
   {
     id: 'song-1',
     spotifyTrackId: 'sp_neon_pulse',
-    youtubeVideoId: 'yt_neon_pulse',
+    youtubeVideoId: '4NRXx6U8ABQ',
     title: 'Neon Pulse (Night City)',
     artist: 'Synthwave Dreams',
     album: 'Electric Midnight LP',
@@ -284,7 +284,7 @@ export const SEARCH_CATALOG_MOCK: Song[] = [
   {
     id: 'song-cat-blocked',
     spotifyTrackId: 'sp_baby_shark',
-    youtubeVideoId: 'yt_baby_shark',
+    youtubeVideoId: 'XqZsoesa55w',
     title: 'Baby Shark (Club Remix 10h)',
     artist: 'Pinkfong',
     album: 'Meme Mix',
@@ -295,7 +295,7 @@ export const SEARCH_CATALOG_MOCK: Song[] = [
   {
     id: 'song-cat-2',
     spotifyTrackId: 'sp_tiago_pzk',
-    youtubeVideoId: 'yt_tiago_pzk',
+    youtubeVideoId: 'YR5ApYxkU-U',
     title: 'Traductor (Official Audio)',
     artist: 'Tiago PZK & Myke Towers',
     album: 'Portales',

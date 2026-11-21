@@ -30,23 +30,18 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.poneleplay.tv.data.TvRecentRoomUi
 import com.poneleplay.tv.ui.theme.PonelePlayTvColors
 import com.poneleplay.tv.ui.theme.PonelePlayTvTheme
-
-data class TvRecentRoomUi(val code: String, val name: String, val host: String)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun TvHomeScreen(
     initialCode: String = "PLAY42",
+    recentRooms: List<TvRecentRoomUi> = emptyList(),
     onConnectRoom: (String) -> Unit = {},
     onCreateTvRoom: () -> Unit = {}
 ) {
-    val recentRooms = listOf(
-        TvRecentRoomUi("PLAY42", "Previa en lo de Tincho", "Tincho"),
-        TvRecentRoomUi("ROOF99", "Terraza Electrónica", "Martu")
-    )
-
     Column(
         modifier = Modifier
             .fillMaxSize()

@@ -17,6 +17,11 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
+import {
+  clearSpotifyToken,
+  getConfiguredSpotifyClientId,
+  startSpotifyPkceLogin,
+} from '../lib/spotifyAuth';
 import { usePartyPreview } from '../context/PartyPreviewContext';
 import { FALLBACK_GENRES, SEARCH_CATALOG_MOCK, formatDurationMs } from '../data/mockPartyData';
 import { Song } from '../types/jukebox';
@@ -294,6 +299,7 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
   const { room, updateRoom } = usePartyPreview();
   const navigate = useNavigate();
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [spotifyClientId, setSpotifyClientId] = useState(() => getConfiguredSpotifyClientId() ?? '');
 
   if (!open) return null;
 
@@ -387,20 +393,17 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  const clientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
-                  if (clientId && clientId !== 'YOUR_SPOTIFY_CLIENT_ID') {
-                    const redirectUri = encodeURIComponent(window.location.origin);
-                    const scopes = encodeURIComponent(
-                      'streaming user-read-email user-read-private user-modify-playback-state playlist-modify-public'
-                    );
-                    window.location.href = `https://accounts.spotify.com/authorize?client_id=${encodeURIComponent(clientId)}&response_type=code&redirect_uri=${redirectUri}&scope=${scopes}`;
+                onClick={async () => {
+                  if (room.spotifyConnected) {
+                    clearSpotifyToken();
+                    updateRoom({ spotifyConnected: false });
+                    toast.success('Spotify desconectado');
                     return;
                   }
-                  updateRoom({ spotifyConnected: !room.spotifyConnected });
-                  toast.success(
-                    room.spotifyConnected ? 'Spotify desconectado' : 'Cuenta Spotify vinculada'
-                  );
+                  const started = await startSpotifyPkceLogin(spotifyClientId);
+                  if (!started) {
+                    toast.info('Ingresa tu Client ID de Spotify Developers abajo para iniciar OAuth PKCE.');
+                  }
                 }}
                 className={`min-h-[44px] rounded-full px-4 text-xs font-semibold ${
                   room.spotifyConnected
@@ -411,6 +414,21 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
                 {room.spotifyConnected ? 'Conectado' : 'Conectar Spotify'}
               </button>
             </div>
+            {!getConfiguredSpotifyClientId() && !room.spotifyConnected && (
+              <div className="mt-3">
+                <label htmlFor="spotify-client-id" className="mb-1 block text-[11px] font-medium text-muted">
+                  Spotify App Client ID (OAuth PKCE sin secreto)
+                </label>
+                <input
+                  id="spotify-client-id"
+                  type="text"
+                  value={spotifyClientId}
+                  onChange={(e) => setSpotifyClientId(e.target.value)}
+                  placeholder="Pega tu Client ID de developer.spotify.com"
+                  className="min-h-[44px] w-full rounded-xl border border-stroke bg-card px-3 font-mono text-xs text-ink"
+                />
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-danger/35 bg-danger/5 p-4">
@@ -457,7 +475,33 @@ export const HostSettingsModal: React.FC<ModalProps> = ({ open, onClose }) => {
 };
 
 export const AccountLinkModal: React.FC<ModalProps> = ({ open, onClose }) => {
+  const [emailInput, setEmailInput] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+
   if (!open) return null;
+
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = emailInput.trim();
+    if (!email || !email.includes('@')) {
+      toast.error('Ingresa un correo electrónico válido');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (error) throw error;
+      toast.success(`Enlace mágico enviado a ${email}`);
+      onClose();
+    } catch {
+      toast.error('No se pudo enviar el enlace (verifica Auth Email en Supabase)');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   return (
     <div
@@ -486,7 +530,7 @@ export const AccountLinkModal: React.FC<ModalProps> = ({ open, onClose }) => {
           Puedes usar PonelePlay sin registrarte o vincular tu cuenta para guardar tu historial de fiestas y premios de DJ entre dispositivos.
         </p>
 
-        <div className="mt-5 space-y-2.5">
+        <div className="mt-5 space-y-3">
           <button
             type="button"
             onClick={async () => {
@@ -507,16 +551,26 @@ export const AccountLinkModal: React.FC<ModalProps> = ({ open, onClose }) => {
             <span>Continuar con Google</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              toast.success('Enlace mágico enviado a tu correo');
-              onClose();
-            }}
-            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-4 text-sm font-semibold text-ink hover:bg-canvas"
-          >
-            <span>Vincular con Email</span>
-          </button>
+          <form onSubmit={handleMagicLink} className="space-y-2 border-t border-stroke pt-3">
+            <label htmlFor="account-link-email" className="block text-xs font-semibold text-ink">
+              Vincular con Email (Enlace mágico)
+            </label>
+            <input
+              id="account-link-email"
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="tu@correo.com"
+              className="min-h-[44px] w-full rounded-xl border border-stroke bg-elevated px-3.5 text-sm text-ink placeholder:text-muted focus:border-brand"
+            />
+            <button
+              type="submit"
+              disabled={sendingEmail}
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-full border border-stroke bg-elevated px-4 text-sm font-semibold text-ink hover:bg-canvas disabled:opacity-60"
+            >
+              <span>{sendingEmail ? 'Enviando...' : 'Vincular con Email'}</span>
+            </button>
+          </form>
         </div>
       </div>
     </div>

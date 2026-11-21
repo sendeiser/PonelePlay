@@ -1149,6 +1149,10 @@ export type Database = {
         }
         Returns: Json
       }
+      record_room_reaction: {
+        Args: { p_emoji: string; p_room_id: string }
+        Returns: Json
+      }
       upsert_party_user: {
         Args: {
           p_avatar_emoji?: string

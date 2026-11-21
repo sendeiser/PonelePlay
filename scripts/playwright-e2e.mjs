@@ -186,7 +186,52 @@ async function run() {
       'utf8'
     );
     assert.ok(tvManifest.includes('android.intent.category.LEANBACK_LAUNCHER'), 'Android TV Leanback launcher missing');
+    assert.ok(
+      fs.existsSync(path.join(rootDir, 'android-tv', 'app', 'src', 'main', 'java', 'com', 'poneleplay', 'tv', 'data', 'SupabaseTvRepository.kt')),
+      'Android TV live SupabaseTvRepository.kt missing'
+    );
     results.push({ test: 'T08_T09_pwa_capacitor_android_tv', status: 'PASS' });
+
+    // T10: Production No-Demo Audit (Dynamic Vote Total, Real Email OTP UI, Live Autoplay Fallback)
+    const votesText = await hostPage
+      .locator('div')
+      .filter({ hasText: 'Votos emitidos' })
+      .first()
+      .innerText();
+    assert.ok(!/\b148\b/.test(votesText), `Summary votes should be dynamically computed, got static 148: ${votesText}`);
+
+    // Open Account Modal and verify real Magic Link email input exists
+    await hostPage.getByRole('button', { name: 'Vincular cuenta' }).click();
+    await hostPage.locator('#account-link-email').waitFor({ state: 'visible', timeout: 5000 });
+    await hostPage.getByRole('button', { name: 'Cerrar modal de cuenta' }).click();
+
+    // Open live room in TV mode, switch to Android TV Home, create real TV room in Supabase Cloud
+    await hostPage.goto(`${BASE_URL}/room/${roomCode}/tv`, { waitUntil: 'networkidle' });
+    await hostPage.getByRole('button', { name: /App Smart TV/i }).click();
+    await hostPage.getByRole('button', { name: /^Inicio TV$/i }).click();
+    await hostPage.getByRole('button', { name: /Crear Sala con 1 Clic/i }).click();
+    await hostPage.waitForURL(
+      (url) => /\/room\/[A-Z0-9]{4,8}\/tv/.test(url.pathname) && !url.pathname.includes(roomCode),
+      { timeout: 15000 }
+    );
+    const tvRoomCode = hostPage.url().split('/room/')[1].split('/tv')[0];
+    assert.notEqual(tvRoomCode, roomCode, 'Creating TV room should persist and navigate to a fresh room code');
+
+    // Navigate to fresh room with empty queue and skipCurrentTrack -> must load real Autoplay fallback track
+    await hostPage.goto(`${BASE_URL}/room/${tvRoomCode}?role=host`, { waitUntil: 'networkidle' });
+    const beforeTitle = await hostPage
+      .locator('section[aria-label="Reproductor Sonando Ahora"] h2')
+      .innerText();
+    await hostPage.getByRole('button', { name: 'Pasar a la siguiente canción' }).click();
+    await hostPage.waitForTimeout(1800);
+    const afterTitle = await hostPage
+      .locator('section[aria-label="Reproductor Sonando Ahora"] h2')
+      .innerText();
+    assert.notEqual(afterTitle, beforeTitle, 'Skipping empty queue must promote a live Autoplay track');
+
+    // Clean up extra TV room name marker so teardown can remove it if needed
+    await supabase.from('rooms').update({ is_active: false }).eq('code', tvRoomCode);
+    results.push({ test: 'T10_production_no_demo_audit', status: 'PASS', tvRoomCode, beforeTitle, afterTitle });
 
     console.log(JSON.stringify(results, null, 2));
   } finally {
