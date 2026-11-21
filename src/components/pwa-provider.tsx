@@ -41,9 +41,6 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       window.addEventListener("load", () => {
         navigator.serviceWorker
           .register("/sw.js")
-          .then((reg) => {
-            console.log("[PWA] Service Worker registrado con éxito:", reg.scope);
-          })
           .catch((err) => {
             console.warn("[PWA] Error registrando Service Worker:", err);
           });

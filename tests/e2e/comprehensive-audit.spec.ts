@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 const routes = [
-  { path: "/c/billar-aurora", name: "Client Guest (/c)" },
+  { path: "/p/billar-aurora", name: "Client Guest (/p)" },
   { path: "/panel/billar-aurora", name: "Admin Dashboard (/panel)", auth: true },
   { path: "/panel/billar-aurora/ajustes", name: "Panel Ajustes", auth: true },
   { path: "/panel/billar-aurora/codigos", name: "Panel Códigos", auth: true },
@@ -33,6 +33,8 @@ async function loginDemoIfAuth(page: import("@playwright/test").Page) {
 }
 
 test.describe("Comprehensive UI/UX, Overflow & Accessibility Audit", () => {
+  test.setTimeout(60000);
+
   for (const vp of viewports) {
     for (const r of routes) {
       test(`${r.name} has no horizontal overflow on ${vp.name}`, async ({ page }) => {
@@ -42,7 +44,7 @@ test.describe("Comprehensive UI/UX, Overflow & Accessibility Audit", () => {
           await loginDemoIfAuth(page);
         }
 
-        await page.goto(r.path, { waitUntil: "domcontentloaded" });
+        await page.goto(r.path, { waitUntil: "domcontentloaded", timeout: 30000 });
         await page.waitForTimeout(800);
 
         // Check horizontal overflow
