@@ -60,6 +60,7 @@ export interface SendPlaybackCommandOptions {
   skipWsBroadcast?: boolean;
   useBarrier?: boolean;
   skipSyncNotify?: boolean;
+  skipLegacyBroadcast?: boolean;
 }
 
 const recentSyncCommandCache = new Map<string, number>();
@@ -97,10 +98,7 @@ export async function sendPlaybackCommand(
         if (now - lastSent > 350) {
           recentSyncCommandCache.set(sig, now);
           wsDispatched = activeSync.sendCommand(command, payload, {
-            useBarrier:
-              options?.useBarrier ??
-              ((command === "play_now" || command === "skip" || command === "play_playlist") &&
-                Boolean(payload.track)),
+            useBarrier: options?.useBarrier ?? false,
           });
         } else {
           wsDispatched = true;
@@ -156,7 +154,7 @@ export async function sendPlaybackCommand(
   }
 
   // 4. Fallback Supabase broadcast for legacy/passive channels
-  try {
+  if (!options?.skipLegacyBroadcast) try {
 
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
     const existing = channels.find(
@@ -324,7 +322,9 @@ export async function playTrackNow(
     trackId?: string;
     title: string;
     artist: string;
-    youtubeVideoId: string;
+    source?: "youtube" | "upload" | "spotify";
+    storagePath?: string | null;
+    youtubeVideoId?: string | null;
     durationSeconds?: number;
     thumbnailUrl?: string | null;
     isKaraoke?: boolean;
@@ -334,7 +334,9 @@ export async function playTrackNow(
     track: {
       ...track,
       itemId: `manual-${Date.now()}`,
-      source: "youtube",
+      source: track.source || (track.storagePath ? "upload" : "youtube"),
+      storagePath: track.storagePath ?? null,
+      youtubeVideoId: track.youtubeVideoId ?? undefined,
       voteCount: 0,
     },
   });
@@ -346,7 +348,9 @@ export async function enqueueTrackTop(
     trackId?: string;
     title: string;
     artist: string;
-    youtubeVideoId: string;
+    source?: "youtube" | "upload" | "spotify";
+    storagePath?: string | null;
+    youtubeVideoId?: string | null;
     durationSeconds?: number;
     thumbnailUrl?: string | null;
     isKaraoke?: boolean;
@@ -358,7 +362,9 @@ export async function enqueueTrackTop(
     track: {
       ...track,
       itemId: `vip-${Date.now()}`,
-      source: "youtube",
+      source: track.source || (track.storagePath ? "upload" : "youtube"),
+      storagePath: track.storagePath ?? null,
+      youtubeVideoId: track.youtubeVideoId ?? undefined,
       voteCount: options?.asPlaylistTrack ? 0 : 5,
     },
   });

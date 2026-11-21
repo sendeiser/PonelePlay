@@ -9,7 +9,6 @@ import {
   useRef,
 } from "react";
 import type { PlayerTrack } from "@/lib/api/player";
-import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 import {
   createIframeEngine,
   resolveVideoId,
@@ -44,17 +43,26 @@ export interface TvAudioEngineRef {
   unlockAudio: () => void;
 }
 
+/**
+ * Resolves the playable audio URL for uploaded MP3 tracks.
+ * Routes private Supabase Storage (`track-audio`) paths through `/api/audio?path=...`
+ * which verifies the track and redirects to a signed Storage URL so unauthenticated
+ * Web TVs and Cabina can stream with native HTTP Range support.
+ */
 export function resolveUploadAudioUrl(
   track: Pick<PlayerTrack, "storagePath" | "youtubeVideoId"> | null | undefined,
 ): string {
   if (!track) return "";
-  if (track.storagePath && track.storagePath.trim()) {
-    const supabase = createBrowserSupabase();
-    const { data } = supabase.storage.from("tracks").getPublicUrl(track.storagePath.trim());
-    return data.publicUrl || "";
+  const sp = track.storagePath?.trim() || "";
+  if (sp) {
+    if (/^https?:\/\//i.test(sp) || sp.startsWith("/api/audio")) {
+      return sp;
+    }
+    return `/api/audio?path=${encodeURIComponent(sp)}`;
   }
-  if (track.youtubeVideoId && /^https?:\/\//i.test(track.youtubeVideoId.trim())) {
-    return track.youtubeVideoId.trim();
+  const yt = track.youtubeVideoId?.trim() || "";
+  if (yt && /^https?:\/\//i.test(yt)) {
+    return yt;
   }
   return "";
 }
@@ -107,17 +115,51 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       baselineLeadSec: number;
     } | null>(null);
     const loadedUploadSrcRef = useRef("");
+    const pendingCueRef = useRef<{ track: PlayerTrack; startSec: number } | null>(null);
+    const ytAutoplayCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const ytEngine: IframePlaybackEngine = useMemo(
-      () => createIframeEngine(() => ytIframeRef.current),
+      () =>
+        createIframeEngine(
+          () => ytIframeRef.current,
+          (playing) => {
+            if (playing && audioActiveRef.current) {
+              if (ytAutoplayCheckTimerRef.current) {
+                clearTimeout(ytAutoplayCheckTimerRef.current);
+                ytAutoplayCheckTimerRef.current = null;
+              }
+              onBlockedChangeRef.current?.(false);
+            }
+          },
+        ),
       [],
     );
 
+    const scheduleYtAutoplayCheck = useCallback(() => {
+      if (ytAutoplayCheckTimerRef.current) {
+        clearTimeout(ytAutoplayCheckTimerRef.current);
+      }
+      ytAutoplayCheckTimerRef.current = setTimeout(() => {
+        ytAutoplayCheckTimerRef.current = null;
+        if (!audioActiveRef.current || isPausedRef.current) return;
+        const activeTrack = trackRef.current;
+        if (!activeTrack || activeTrack.source === "upload") return;
+        const state = ytEngine.getPlayerState?.();
+        // YT_PLAYING = 1, YT_BUFFERING = 3. If still not playing/buffering after 1.8s, browser blocked autoplay.
+        if (state !== 1 && state !== 3) {
+          onBlockedChangeRef.current?.(true);
+        }
+      }, 1800);
+    }, [ytEngine]);
+
+    const trackKey = track
+      ? `${track.source}:${track.storagePath?.trim() || track.youtubeVideoId?.trim() || track.trackId}`
+      : "";
     const isUploadTrack = Boolean(track && track.source === "upload");
     const shouldMountYoutube = Boolean(audioActive && track && !isUploadTrack);
     const initialYtSrc = useMemo(() => {
-      if (!shouldMountYoutube || !track) return "";
-      const vid = resolveVideoId(track);
+      if (!shouldMountYoutube || !trackRef.current) return "";
+      const vid = resolveVideoId(trackRef.current);
       const startSec = anchorRef.current
         ? Math.floor(computeTargetPositionSec(anchorRef.current, estimatedServerMsRef.current()))
         : 0;
@@ -125,9 +167,16 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [shouldMountYoutube]);
 
-    // Attach YouTube postMessage bridge & subscriptions while mounted
+    // Attach YouTube postMessage bridge & reset cleanly on unmount
     useEffect(() => {
-      if (!shouldMountYoutube) return;
+      if (!shouldMountYoutube) {
+        ytEngine.reset();
+        if (ytAutoplayCheckTimerRef.current) {
+          clearTimeout(ytAutoplayCheckTimerRef.current);
+          ytAutoplayCheckTimerRef.current = null;
+        }
+        return;
+      }
       const detach = ytEngine.attach();
       const unsubCued = ytEngine.onCued((vid) => {
         onCuedRef.current?.(vid);
@@ -140,9 +189,14 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       const handshakeTimer = setInterval(() => ytEngine.handshake(), 2000);
       return () => {
         clearInterval(handshakeTimer);
+        if (ytAutoplayCheckTimerRef.current) {
+          clearTimeout(ytAutoplayCheckTimerRef.current);
+          ytAutoplayCheckTimerRef.current = null;
+        }
         unsubEnded();
         unsubCued();
         detach();
+        ytEngine.reset();
       };
     }, [shouldMountYoutube, ytEngine]);
 
@@ -164,12 +218,26 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       }
     }, []);
 
+    // Dedicated lightweight volume effect — never re-loads, re-seeks, or re-triggers play()
+    useEffect(() => {
+      if (!audioActive) return;
+      const audio = html5AudioRef.current;
+      if (audio) {
+        audio.volume = Math.max(0, Math.min(1, volume / 100));
+      }
+      if (shouldMountYoutube) {
+        ytEngine.setVolume?.(volume);
+      }
+    }, [audioActive, shouldMountYoutube, volume, ytEngine]);
+
     // Handle HTML5 <audio> track lifecycle and CABINA_ONLY shutdown
     useEffect(() => {
       const audio = html5AudioRef.current;
+      const activeTrack = trackRef.current;
       if (!audio) return;
 
-      if (!audioActive || !track || track.source !== "upload") {
+      if (!audioActive || !activeTrack || activeTrack.source !== "upload") {
+        loadedUploadSrcRef.current = "";
         audio.muted = true;
         audio.playbackRate = 1;
         try {
@@ -178,6 +246,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           // ignore
         }
         if (!audioActive) {
+          pendingCueRef.current = null;
           ytEngine.setPlaybackRate?.(1);
           ytEngine.pause?.();
           ytEngine.mute?.();
@@ -191,7 +260,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       ytEngine.pause?.();
       ytEngine.mute?.();
 
-      const fileUrl = resolveUploadAudioUrl(track);
+      const fileUrl = resolveUploadAudioUrl(activeTrack);
       if (!fileUrl) return;
 
       if (loadedUploadSrcRef.current !== fileUrl) {
@@ -211,7 +280,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       }
 
       audio.muted = false;
-      audio.volume = Math.max(0, Math.min(1, volume / 100));
+      audio.volume = Math.max(0, Math.min(1, volumeRef.current / 100));
       if (isPaused) {
         try {
           audio.pause();
@@ -231,15 +300,23 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       return () => {
         audio.removeEventListener("ended", handleEnded);
       };
-    }, [audioActive, track, isPaused, volume, tryPlayHtml5, ytEngine]);
+    }, [audioActive, trackKey, isPaused, tryPlayHtml5, ytEngine]);
 
-    // Handle hidden YouTube track changes, play/pause, and volume when audioActive
+    // Handle hidden YouTube track changes (keyed on stable trackKey, never on volume/object clone)
     useEffect(() => {
-      if (!shouldMountYoutube || !track) return;
+      const activeTrack = trackRef.current;
+      if (!shouldMountYoutube || !activeTrack) return;
+
+      if (pendingCueRef.current) {
+        const queued = pendingCueRef.current;
+        pendingCueRef.current = null;
+        void ytEngine.cue(queued.track, queued.startSec);
+        return;
+      }
 
       ytEngine.unMute?.();
-      ytEngine.setVolume?.(volume);
-      void ytEngine.load(track).then(() => {
+      ytEngine.setVolume?.(volumeRef.current);
+      void ytEngine.load(activeTrack).then(() => {
         if (!audioActiveRef.current) {
           ytEngine.pause?.();
           ytEngine.mute?.();
@@ -258,21 +335,28 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           ytEngine.unMute?.();
           ytEngine.setVolume?.(volumeRef.current);
           void ytEngine.play?.();
+          scheduleYtAutoplayCheck();
         }
       });
-    }, [shouldMountYoutube, track, volume, ytEngine]);
+    }, [shouldMountYoutube, trackKey, ytEngine, scheduleYtAutoplayCheck]);
 
+    // Handle hidden YouTube play/pause changes cleanly without re-loading
     useEffect(() => {
       if (!shouldMountYoutube) return;
       if (isPaused) {
+        if (ytAutoplayCheckTimerRef.current) {
+          clearTimeout(ytAutoplayCheckTimerRef.current);
+          ytAutoplayCheckTimerRef.current = null;
+        }
         ytEngine.setPlaybackRate?.(1);
         ytEngine.pause?.();
       } else {
         ytEngine.unMute?.();
-        ytEngine.setVolume?.(volume);
+        ytEngine.setVolume?.(volumeRef.current);
         void ytEngine.play?.();
+        scheduleYtAutoplayCheck();
       }
-    }, [shouldMountYoutube, isPaused, volume, ytEngine]);
+    }, [shouldMountYoutube, isPaused, ytEngine, scheduleYtAutoplayCheck]);
 
     // Continuous clock-driven drift guard (elastic continuous for HTML5 <audio>, buffering-aware for YT)
     useEffect(() => {
@@ -395,7 +479,9 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       () => ({
         cue: async (nextTrack: PlayerTrack, startSec = 0) => {
           if (!audioActiveRef.current) {
-            onCuedRef.current?.(resolveVideoId(nextTrack));
+            onCuedRef.current?.(
+              nextTrack.source === "upload" ? nextTrack.trackId : resolveVideoId(nextTrack),
+            );
             return;
           }
           if (nextTrack.source === "upload") {
@@ -417,6 +503,10 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
             return;
           }
           ytEngine.setPlaybackRate?.(1);
+          if (!ytIframeRef.current) {
+            pendingCueRef.current = { track: nextTrack, startSec };
+            return;
+          }
           await ytEngine.cue(nextTrack, startSec);
         },
         playAt: (startSec = 0) => {
@@ -444,6 +534,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           ytEngine.unMute?.();
           ytEngine.setVolume?.(volumeRef.current);
           void ytEngine.play?.();
+          scheduleYtAutoplayCheck();
         },
         seekTo: (seconds: number) => {
           if (!audioActiveRef.current) return;
@@ -479,7 +570,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           onBlockedChangeRef.current?.(false);
         },
       }),
-      [tryPlayHtml5, ytEngine],
+      [tryPlayHtml5, ytEngine, scheduleYtAutoplayCheck],
     );
 
     return (
@@ -502,10 +593,16 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
               if (!audioActiveRef.current) {
                 ytEngine.pause?.();
                 ytEngine.mute?.();
-              } else {
-                ytEngine.unMute?.();
-                ytEngine.setVolume?.(volumeRef.current);
+                return;
               }
+              if (pendingCueRef.current) {
+                const queued = pendingCueRef.current;
+                pendingCueRef.current = null;
+                void ytEngine.cue(queued.track, queued.startSec);
+                return;
+              }
+              ytEngine.unMute?.();
+              ytEngine.setVolume?.(volumeRef.current);
             }}
           />
         )}

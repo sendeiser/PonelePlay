@@ -27,7 +27,7 @@ export interface TvPairingStatusResponse {
 }
 
 export interface TvDisplayConfig {
-  mode: "VIDEO" | "PLAYLIST" | "CLEAN";
+  mode: "SALON" | "PORTADA" | "VIDEO" | "PLAYLIST" | "CLEAN";
   showQueue: boolean;
   showProposals: boolean;
   theme: "neon" | "minimal" | "gold" | "emerald";
@@ -36,12 +36,12 @@ export interface TvDisplayConfig {
 }
 
 export const DEFAULT_TV_DISPLAY_CONFIG: TvDisplayConfig = {
-  mode: "VIDEO",
+  mode: "SALON",
   showQueue: true,
   showProposals: true,
   theme: "neon",
   scale: "normal",
-  tvMuted: false,
+  tvMuted: true,
 };
 
 export interface PlayerDeviceItem {

@@ -12,7 +12,6 @@ import type { PlayerTrack } from "@/lib/api/player";
 import type { YTPlayerInstance } from "@/types/youtube";
 import { loadYoutubeIframeApi } from "@/components/player/youtube-engine";
 import { resolveVideoId } from "@/components/player/iframe-engine";
-import { createBrowserSupabase } from "@/lib/api/supabase/browser";
 
 export interface PanelAudioEngineProps {
   slug: string;
@@ -83,6 +82,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const onTrackBufferedRef = useRef(onTrackBuffered);
     onTrackBufferedRef.current = onTrackBuffered;
     const lastReportedTimeRef = useRef<number>(0);
+    const errorSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const trackLoadedAtRef = useRef<number>(0);
     const seekLockUntilRef = useRef<number>(0);
     const seekStartedAtRef = useRef<number>(0);
@@ -236,21 +236,24 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         return;
       }
 
-      // Stop YouTube if running
+      // Stop YouTube if running and clear currentVideoIdRef so returning to the same YT video reloads cleanly
       if (playerRef.current) {
         try {
           playerRef.current.pauseVideo();
         } catch {}
       }
+      currentVideoIdRef.current = "";
 
       const audio = html5AudioRef.current;
       if (!audio) return;
 
       let fileUrl = "";
       if (currentTrack.storagePath) {
-        const supabase = createBrowserSupabase();
-        const { data } = supabase.storage.from("tracks").getPublicUrl(currentTrack.storagePath);
-        fileUrl = data.publicUrl;
+        const sp = currentTrack.storagePath.trim();
+        fileUrl =
+          /^https?:\/\//i.test(sp) || sp.startsWith("/api/audio")
+            ? sp
+            : `/api/audio?path=${encodeURIComponent(sp)}`;
       } else if (currentTrack.youtubeVideoId?.startsWith("http")) {
         fileUrl = currentTrack.youtubeVideoId;
       }
@@ -324,26 +327,33 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           } catch {}
           playerRef.current.loadVideoById({ videoId, startSeconds: 0 });
 
-          startHoldTimerRef.current = setTimeout(() => {
-            startHoldTimerRef.current = null;
-            startHoldUntilRef.current = 0;
+          if (holdMs > 0) {
+            startHoldTimerRef.current = setTimeout(() => {
+              startHoldTimerRef.current = null;
+              startHoldUntilRef.current = 0;
+              barrierBufferedFiredRef.current = true;
+              if (!playerRef.current) return;
+              try {
+                playerRef.current.seekTo(barrierStartSecRef.current, true);
+                if (isMutedRef.current) {
+                  playerRef.current.mute();
+                } else {
+                  playerRef.current.unMute();
+                  playerRef.current.setVolume(volumeRef.current);
+                }
+                if (isPausedRef.current) {
+                  playerRef.current.pauseVideo();
+                } else {
+                  playerRef.current.playVideo();
+                }
+              } catch {}
+            }, holdMs);
+          } else {
             barrierBufferedFiredRef.current = true;
-            if (!playerRef.current) return;
-            try {
-              playerRef.current.seekTo(barrierStartSecRef.current, true);
-              if (isMutedRef.current) {
-                playerRef.current.mute();
-              } else {
-                playerRef.current.unMute();
-                playerRef.current.setVolume(volumeRef.current);
-              }
-              if (isPausedRef.current) {
-                playerRef.current.pauseVideo();
-              } else {
-                playerRef.current.playVideo();
-              }
-            } catch {}
-          }, holdMs);
+            if (isPausedRef.current) {
+              playerRef.current.pauseVideo();
+            }
+          }
         } catch (e) {
           console.warn("Error loading video in existing YT player:", e);
         }
@@ -447,7 +457,9 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
               onError: (event) => {
                 console.warn("YouTube audio playback error code:", event.data);
                 if (event.data === 150 || event.data === 101 || event.data === 2) {
-                  setTimeout(() => {
+                  if (errorSkipTimerRef.current) clearTimeout(errorSkipTimerRef.current);
+                  errorSkipTimerRef.current = setTimeout(() => {
+                    errorSkipTimerRef.current = null;
                     if (Date.now() - trackLoadedAtRef.current > 3000) {
                       onTrackEndedRef.current();
                     }
@@ -463,6 +475,10 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
 
       return () => {
         isMounted = false;
+        if (errorSkipTimerRef.current) {
+          clearTimeout(errorSkipTimerRef.current);
+          errorSkipTimerRef.current = null;
+        }
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentTrack?.itemId, currentTrack?.youtubeVideoId, currentTrack?.source, onAudioBlockedChange]);

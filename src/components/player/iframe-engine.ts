@@ -9,6 +9,8 @@ export interface IframePlaybackEngine extends PlaybackEngine {
   attach(): () => void;
   /** Called when the <iframe> fires onLoad. */
   handshake(): void;
+  /** Reset bound player/bridge state (called when the <iframe> unmounts or is replaced). */
+  reset(): void;
   /** Cue track silently at startSeconds without starting playback (used by Ready-Barrier). */
   cue(track: PlayerTrack, startSeconds?: number): Promise<void>;
   /** Subscribe to track cued/buffered readiness for Ready-Barrier coordination. */
@@ -363,8 +365,34 @@ export function createIframeEngine(
     }
   }
 
+  function resetBindingState() {
+    ytPlayer = null;
+    ytReady = false;
+    hasLiveBridge = false;
+    boundIframe = null;
+    currentVideoId = "";
+    cuedNotifiedVideoId = "";
+    lastPlayerState = null;
+    hasPlayedCurrentVideo = false;
+    pendingSeekSeconds = null;
+    isPrebuffering = false;
+    currentPlaybackRate = 1;
+    availablePlaybackRates = [];
+  }
+
+  function ensureActiveIframeBinding() {
+    const iframe = getIframe();
+    if (boundIframe && iframe !== boundIframe) {
+      resetBindingState();
+    }
+  }
+
   return {
     buildEmbedUrl,
+
+    reset() {
+      resetBindingState();
+    },
 
     attach() {
       window.addEventListener("message", onMessage);
@@ -374,6 +402,7 @@ export function createIframeEngine(
     },
 
     handshake() {
+      ensureActiveIframeBinding();
       sendListeningHandshake();
       if (!hasLiveBridge) {
         post("addEventListener", ["onStateChange"]);
@@ -385,6 +414,7 @@ export function createIframeEngine(
     },
 
     async load(track: PlayerTrack): Promise<void> {
+      ensureActiveIframeBinding();
       const nextVideoId = resolveVideoId(track);
       isPrebuffering = false;
       if (nextVideoId === currentVideoId && currentVideoId !== "") {
@@ -431,6 +461,7 @@ export function createIframeEngine(
     },
 
     async cue(track: PlayerTrack, startSeconds = 0): Promise<void> {
+      ensureActiveIframeBinding();
       const nextVideoId = resolveVideoId(track);
       const startSec = Math.max(0, startSeconds);
       currentVideoId = nextVideoId;

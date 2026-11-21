@@ -351,7 +351,7 @@ export function createDefaultAnchor(nowMs = Date.now()): PlaybackAnchor {
     anchorServerMs: nowMs,
     volume: 85,
     cabinaMuted: false,
-    tvMuted: false,
+    tvMuted: true,
     karaokeMode: false,
     lastCommand: null,
     displayConfig: null,

@@ -400,5 +400,49 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
     expect(track?.source).toBe("upload");
     expect(track?.storagePath).toBe("venues/bar-1/song.mp3");
   });
+
+  it("defaults room anchor tvMuted to true (CABINA_ONLY) and detects upload track transitions in applyProgressReport", () => {
+    const engine = new SyncRoomEngine("bar-upload");
+    expect(engine.getSnapshot(1000).anchor.tvMuted).toBe(true);
+    engine.mergeExternalTvFeed({ nowPlaying: null, playback: {} }, 1000);
+
+    const upload1: SyncTrack = {
+      itemId: "up-1",
+      trackId: "track-up-1",
+      title: "MP3 Uno",
+      artist: "DJ A",
+      source: "upload",
+      storagePath: "venue-1/one.mp3",
+      youtubeVideoId: null,
+      durationSeconds: 180,
+    };
+    const upload2: SyncTrack = {
+      itemId: "up-2",
+      trackId: "track-up-2",
+      title: "MP3 Dos",
+      artist: "DJ B",
+      source: "upload",
+      storagePath: "venue-1/two.mp3",
+      youtubeVideoId: null,
+      durationSeconds: 200,
+    };
+
+    engine.applyProgressReport({ currentTime: 1, isPaused: false, track: upload1 }, 2000);
+    const rev1 = engine.getSnapshot(2000).revision;
+    const msg2 = engine.applyProgressReport(
+      { currentTime: 1.02, isPaused: false, track: upload2 },
+      2020,
+    );
+    expect(msg2.type).toBe("sync:anchor");
+    if (msg2.type === "sync:anchor") {
+      expect(msg2.anchor.track?.storagePath).toBe("venue-1/two.mp3");
+      expect(msg2.anchor.track?.source).toBe("upload");
+    }
+    const snap2 = engine.getSnapshot(2020);
+    expect(snap2.revision).toBeGreaterThan(rev1);
+    const feedNowPlaying = snap2.tvFeed?.nowPlaying as Record<string, unknown> | undefined;
+    expect(feedNowPlaying?.source).toBe("upload");
+    expect(feedNowPlaying?.storagePath).toBe("venue-1/two.mp3");
+  });
 });
 

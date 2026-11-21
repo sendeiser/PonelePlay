@@ -6,7 +6,6 @@ import {
   Copy,
   ExternalLink,
   Eye,
-  EyeOff,
   LayoutList,
   Loader2,
   Monitor,
@@ -171,7 +170,7 @@ export function TvDevicesManagerModal({
 
     try {
       if (typeof partialConfig.tvMuted === "boolean") {
-        await sendPlaybackCommand(slug, "set_tv_mute", { muted: partialConfig.tvMuted });
+        await sendPlaybackCommand(slug, "set_tv_mute", { tvMuted: partialConfig.tvMuted });
       }
       await updateTvDeviceDisplay(slug, deviceId, partialConfig);
     } catch {
@@ -349,57 +348,25 @@ export function TvDevicesManagerModal({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button
                       type="button"
-                      onClick={() => void handleUpdateDisplay(null, { mode: "VIDEO" }, "todas las TVs")}
+                      onClick={() => void handleUpdateDisplay(null, { mode: "SALON" }, "todas las TVs")}
                       className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-text font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                      title="Cambiar todas las TVs a Modo Video"
+                      title="Cambiar todas las TVs a Modo Salón (Vinilo + Cola + QR)"
                     >
-                      <Tv className="size-3 text-th-teal" />
-                      <span>Todas: Video</span>
+                      <LayoutList className="size-3 text-th-teal" />
+                      <span>Todas: Salón</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => void handleUpdateDisplay(null, { mode: "PLAYLIST" }, "todas las TVs")}
+                      onClick={() => void handleUpdateDisplay(null, { mode: "PORTADA" }, "todas las TVs")}
                       className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-text font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                      title="Cambiar todas las TVs a Modo Playlist & QR"
+                      title="Cambiar todas las TVs a Modo Portada (Minimalista)"
                     >
-                      <LayoutList className="size-3 text-th-accent" />
-                      <span>Todas: Playlist</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleUpdateDisplay(
-                          null,
-                          { showQueue: false, showProposals: false },
-                          "todas las TVs",
-                        )
-                      }
-                      className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-amber font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                      title="Ocultar las listas en todas las TVs (Solo video limpio)"
-                    >
-                      <EyeOff className="size-3" />
-                      <span>Ocultar Listas</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void handleUpdateDisplay(
-                          null,
-                          { showQueue: true, showProposals: true },
-                          "todas las TVs",
-                        )
-                      }
-                      className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-emerald font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                      title="Mostrar las listas flotantes en todas las TVs"
-                    >
-                      <Eye className="size-3" />
-                      <span>Mostrar Listas</span>
+                      <Tv className="size-3 text-th-accent" />
+                      <span>Todas: Portada</span>
                     </button>
 
                     <button
@@ -495,11 +462,9 @@ export function TvDevicesManagerModal({
                               </span>
                               <span className="text-th-muted">·</span>
                               <span className="font-mono text-[10px] text-th-teal font-semibold">
-                                {cfg.mode === "PLAYLIST"
-                                  ? "Modo Playlist"
-                                  : cfg.mode === "CLEAN"
-                                  ? "Solo Video"
-                                  : "Modo Video"}
+                                {cfg.mode === "PORTADA" || cfg.mode === "CLEAN"
+                                  ? "Modo Portada"
+                                  : "Modo Salón"}
                               </span>
                               <span className="text-th-muted">·</span>
                               <span className="font-mono text-[10px] text-th-accent font-semibold capitalize">
@@ -568,54 +533,35 @@ export function TvDevicesManagerModal({
                               <Tv className="size-3.5 text-th-teal" />
                               Modo de Pantalla TV:
                             </span>
-                            <div className="grid grid-cols-3 gap-2">
+                            <div className="grid grid-cols-2 gap-2">
                               <button
                                 type="button"
                                 onClick={() =>
-                                  void handleUpdateDisplay(device.id, { mode: "VIDEO" }, device.name)
+                                  void handleUpdateDisplay(device.id, { mode: "SALON" }, device.name)
                                 }
                                 className={`py-2 px-2.5 rounded-xl font-mono text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-0.5 ${
-                                  cfg.mode === "VIDEO"
+                                  cfg.mode !== "PORTADA" && cfg.mode !== "CLEAN"
                                     ? "bg-th-accent text-th-on-accent border-th-accent shadow-sm"
                                     : "bg-th-card text-th-secondary hover:text-th-text border-th-border"
                                 }`}
                               >
-                                <span>Video Completo</span>
-                                <span className="text-[9px] opacity-80">HD con listas flotantes</span>
+                                <span>Modo Salón</span>
+                                <span className="text-[9px] opacity-80">Vinilo, cola y QR</span>
                               </button>
 
                               <button
                                 type="button"
                                 onClick={() =>
-                                  void handleUpdateDisplay(device.id, { mode: "PLAYLIST" }, device.name)
+                                  void handleUpdateDisplay(device.id, { mode: "PORTADA" }, device.name)
                                 }
                                 className={`py-2 px-2.5 rounded-xl font-mono text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-0.5 ${
-                                  cfg.mode === "PLAYLIST"
+                                  cfg.mode === "PORTADA" || cfg.mode === "CLEAN"
                                     ? "bg-th-accent text-th-on-accent border-th-accent shadow-sm"
                                     : "bg-th-card text-th-secondary hover:text-th-text border-th-border"
                                 }`}
                               >
-                                <span>Playlist & QR</span>
-                                <span className="text-[9px] opacity-80">Énfasis lista y pedidos</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  void handleUpdateDisplay(
-                                    device.id,
-                                    { mode: "CLEAN", showQueue: false, showProposals: false },
-                                    device.name,
-                                  )
-                                }
-                                className={`py-2 px-2.5 rounded-xl font-mono text-xs font-semibold border transition-all flex flex-col items-center justify-center gap-0.5 ${
-                                  cfg.mode === "CLEAN"
-                                    ? "bg-th-accent text-th-on-accent border-th-accent shadow-sm"
-                                    : "bg-th-card text-th-secondary hover:text-th-text border-th-border"
-                                }`}
-                              >
-                                <span>Solo Video</span>
-                                <span className="text-[9px] opacity-80">Limpio sin listas</span>
+                                <span>Modo Portada</span>
+                                <span className="text-[9px] opacity-80">Minimalista con QR</span>
                               </button>
                             </div>
                           </div>

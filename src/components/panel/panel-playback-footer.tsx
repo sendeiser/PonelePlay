@@ -162,7 +162,7 @@ export function PanelPlaybackFooter({
           if (active && fbs.length > 0) {
             setFallbackTracks(
               fbs
-                .filter((tr) => Boolean(tr.youtubeVideoId))
+                .filter((tr) => Boolean(tr.youtubeVideoId || tr.storagePath))
                 .map((tr) => ({
                   itemId: `fb-${tr.id}`,
                   trackId: tr.id,
@@ -171,6 +171,7 @@ export function PanelPlaybackFooter({
                   source: tr.source,
                   durationSeconds: tr.durationSeconds ?? 210,
                   youtubeVideoId: tr.youtubeVideoId ?? undefined,
+                  storagePath: tr.storagePath ?? null,
                   thumbnailUrl: tr.thumbnailUrl ?? null,
                   voteCount: 0,
                 }))
@@ -262,6 +263,7 @@ export function PanelPlaybackFooter({
         source: live.source,
         durationSeconds: live.durationSeconds ?? 210,
         youtubeVideoId: live.youtubeVideoId || undefined,
+        storagePath: live.storagePath ?? null,
         thumbnailUrl: live.thumbnailUrl ?? null,
         voteCount: live.voteCount,
         guestName: live.guestName ?? null,
@@ -293,6 +295,7 @@ export function PanelPlaybackFooter({
           source: activeQueue[0].source || "youtube",
           durationSeconds: activeQueue[0].durationSeconds ?? 210,
           youtubeVideoId: activeQueue[0].youtubeVideoId || undefined,
+          storagePath: activeQueue[0].storagePath ?? null,
           thumbnailUrl: activeQueue[0].thumbnailUrl ?? null,
           voteCount: activeQueue[0].voteCount,
           guestName: activeQueue[0].guestName ?? null,
@@ -317,6 +320,7 @@ export function PanelPlaybackFooter({
         title: item.title,
         artist: item.artist,
         youtubeVideoId: item.youtubeVideoId,
+        storagePath: item.storagePath ?? null,
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: item.durationSeconds,
         source: item.source || "youtube",
@@ -452,7 +456,9 @@ export function PanelPlaybackFooter({
               runtimeCloudWsUrlRef.current = tvData.syncConfig.cloudWsUrl;
               syncClientRef.current?.setRuntimeCloudWsUrl(tvData.syncConfig.cloudWsUrl);
             }
+            let resolvedServerTvMuted: boolean | null = null;
             if (typeof tvData.playback?.tvMuted === "boolean") {
+              resolvedServerTvMuted = tvData.playback.tvMuted;
               setTvMuted(tvData.playback.tvMuted);
             }
             if (tvData.nowPlaying && tvData.nowPlaying.title) {
@@ -462,9 +468,11 @@ export function PanelPlaybackFooter({
                 trackId: String(np.trackId || np.id || "now"),
                 title: String(np.title),
                 artist: String(np.artist || "Artista"),
-                source: "youtube",
+                source:
+                  np.source === "upload" || np.source === "spotify" ? np.source : "youtube",
                 durationSeconds: Number(np.durationSeconds ?? 210),
                 youtubeVideoId: np.youtubeVideoId || undefined,
+                storagePath: typeof np.storagePath === "string" ? np.storagePath : null,
                 thumbnailUrl: np.thumbnailUrl ?? null,
                 voteCount: Number(np.voteCount ?? 0),
                 guestName: np.guestName ?? null,
@@ -478,6 +486,16 @@ export function PanelPlaybackFooter({
                 setElapsed(Math.floor(pos));
                 setTimeout(() => audioEngineRef.current?.seekTo(Math.floor(pos)), 350);
               }
+            }
+            if (resolvedServerTvMuted !== null) {
+              const cabinaMutedInit = Boolean(tvData.playback?.cabinaMuted ?? false);
+              setAudioRouting(
+                cabinaMutedInit && !resolvedServerTvMuted
+                  ? "TV_ONLY"
+                  : !cabinaMutedInit && !resolvedServerTvMuted
+                    ? "BOTH"
+                    : "CABINA_ONLY",
+              );
             }
           }
         }
@@ -564,6 +582,7 @@ export function PanelPlaybackFooter({
       source: t.source || "youtube",
       durationSeconds: t.durationSeconds ?? 210,
       youtubeVideoId: t.youtubeVideoId || undefined,
+      storagePath: t.storagePath ?? null,
       thumbnailUrl: t.thumbnailUrl ?? null,
       voteCount: t.voteCount ?? 0,
       guestName: t.guestName ?? null,
@@ -588,6 +607,13 @@ export function PanelPlaybackFooter({
       setVolume(anchor.volume);
       setIsMuted(anchor.cabinaMuted);
       setTvMuted(anchor.tvMuted);
+      setAudioRouting(
+        anchor.cabinaMuted && !anchor.tvMuted
+          ? "TV_ONLY"
+          : !anchor.cabinaMuted && !anchor.tvMuted
+            ? "BOTH"
+            : "CABINA_ONLY",
+      );
       setKaraokeMode(anchor.karaokeMode);
       if (anchor.track) {
         applyExternalTrack(toPlayerTrack(anchor.track));
@@ -939,6 +965,7 @@ export function PanelPlaybackFooter({
       source: item.source || "youtube",
       durationSeconds: item.durationSeconds ?? 210,
       youtubeVideoId: item.youtubeVideoId || undefined,
+      storagePath: item.storagePath ?? null,
       thumbnailUrl: item.thumbnailUrl ?? null,
       voteCount: item.voteCount,
       guestName: item.guestName ?? null,
@@ -1089,12 +1116,17 @@ export function PanelPlaybackFooter({
     const nextCabinaMuted = routing === "TV_ONLY";
     const nextTvMuted = routing === "CABINA_ONLY";
 
-    // Update cabina mute locally and in DB (never broadcast "mute" to TV when muting only Cabina!)
+    // Update cabina mute locally and in DB (never broadcast "mute" over WS or legacy channel to TV!)
     if (nextCabinaMuted !== isMuted) {
       setIsMuted(nextCabinaMuted);
       try {
-        if (nextCabinaMuted) await mutePlayback(slug);
-        else await unmutePlayback(slug);
+        const localMuteOpts = {
+          skipWsBroadcast: true,
+          skipSyncNotify: true,
+          skipLegacyBroadcast: true,
+        };
+        if (nextCabinaMuted) await mutePlayback(slug, localMuteOpts);
+        else await unmutePlayback(slug, localMuteOpts);
       } catch { /* non-blocking */ }
     }
 
@@ -1176,6 +1208,7 @@ export function PanelPlaybackFooter({
               : "youtube",
           durationSeconds: duration,
           youtubeVideoId: currentTrack.youtubeVideoId ?? null,
+          storagePath: currentTrack.storagePath ?? null,
           thumbnailUrl: currentTrack.thumbnailUrl ?? null,
           voteCount: currentTrack.voteCount,
           guestName: currentTrack.guestName ?? null,
@@ -1675,6 +1708,7 @@ export function PanelPlaybackFooter({
                   source: item.source || "catalog",
                   durationSeconds: item.durationSeconds ?? 210,
                   youtubeVideoId: item.youtubeVideoId || undefined,
+                  storagePath: item.storagePath ?? null,
                   thumbnailUrl: item.thumbnailUrl ?? null,
                   voteCount: item.voteCount,
                 };
@@ -1688,6 +1722,7 @@ export function PanelPlaybackFooter({
                   source: item.source || "catalog",
                   durationSeconds: item.durationSeconds ?? 210,
                   youtubeVideoId: item.youtubeVideoId || undefined,
+                  storagePath: item.storagePath ?? null,
                   thumbnailUrl: item.thumbnailUrl ?? null,
                   voteCount: item.voteCount,
                 };

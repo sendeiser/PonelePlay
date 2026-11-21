@@ -112,12 +112,12 @@ export async function GET(
 
     const deviceId = req.nextUrl.searchParams.get("device_id") || req.headers.get("x-device-id");
     let displayConfig = {
-      mode: "VIDEO",
+      mode: "SALON",
       showQueue: true,
       showProposals: true,
       theme: "neon",
       scale: "normal",
-      tvMuted: false,
+      tvMuted: true,
     };
 
     try {
@@ -185,20 +185,27 @@ export async function GET(
     if (!effectiveNowPlaying) {
       const { data: fbRows } = await admin
         .from("fallback_tracks")
-        .select("id, position, tracks(id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id)")
+        .select("id, position, tracks(id, title, artist, source, storage_path, duration_seconds, thumbnail_url, youtube_video_id)")
         .eq("venue_id", venue.id)
         .order("position", { ascending: true })
         .limit(1);
 
       if (fbRows && fbRows.length > 0) {
         const fbTrack = Array.isArray(fbRows[0].tracks) ? fbRows[0].tracks[0] : fbRows[0].tracks;
-        if (fbTrack && typeof fbTrack === "object" && "youtube_video_id" in fbTrack && fbTrack.youtube_video_id) {
+        if (
+          fbTrack &&
+          typeof fbTrack === "object" &&
+          (("youtube_video_id" in fbTrack && fbTrack.youtube_video_id) ||
+            ("storage_path" in fbTrack && fbTrack.storage_path))
+        ) {
           effectiveNowPlaying = {
             itemId: `fb-${fbTrack.id}`,
             trackId: fbTrack.id,
             title: fbTrack.title,
             artist: fbTrack.artist,
-            youtubeVideoId: fbTrack.youtube_video_id,
+            source: fbTrack.source || (fbTrack.storage_path ? "upload" : "youtube"),
+            youtubeVideoId: fbTrack.youtube_video_id ?? null,
+            storagePath: "storage_path" in fbTrack ? fbTrack.storage_path ?? null : null,
             thumbnailUrl: fbTrack.thumbnail_url ?? null,
             durationSeconds: Number(fbTrack.duration_seconds ?? 210),
             voteCount: 0,
@@ -234,8 +241,51 @@ export async function GET(
             Math.max(0, Math.round((anchorPos + Math.max(0, nowMs - anchorMs) / 1000) * 100) / 100),
           )
         : Math.max(0, anchorPos);
+    // Hydrate storagePath for uploaded tracks when get_night_state RPC omits storage_path
+    const missingStorageIds = new Set<string>();
+    if (
+      effectiveNowPlaying &&
+      effectiveNowPlaying.source === "upload" &&
+      !effectiveNowPlaying.storagePath &&
+      typeof effectiveNowPlaying.trackId === "string"
+    ) {
+      missingStorageIds.add(effectiveNowPlaying.trackId);
+    }
+    for (const q of activeQueue) {
+      if (q.source === "upload" && !q.storagePath && typeof q.trackId === "string") {
+        missingStorageIds.add(q.trackId);
+      }
+    }
+    if (missingStorageIds.size > 0) {
+      try {
+        const { data: uploadRows } = await admin
+          .from("tracks")
+          .select("id, storage_path")
+          .in("id", Array.from(missingStorageIds));
+        if (uploadRows && uploadRows.length > 0) {
+          const storageById = new Map(uploadRows.map((r) => [r.id, r.storage_path ?? null]));
+          if (
+            effectiveNowPlaying &&
+            typeof effectiveNowPlaying.trackId === "string" &&
+            !effectiveNowPlaying.storagePath
+          ) {
+            const sp = storageById.get(effectiveNowPlaying.trackId);
+            if (sp) effectiveNowPlaying.storagePath = sp;
+          }
+          for (const q of activeQueue) {
+            if (typeof q.trackId === "string" && !q.storagePath) {
+              const sp = storageById.get(q.trackId);
+              if (sp) q.storagePath = sp;
+            }
+          }
+        }
+      } catch {
+        // Non-blocking storagePath hydration
+      }
+    }
+
     const resolvedTvMuted = Boolean(
-      displayConfig.tvMuted ?? curTrackMeta.tvMuted ?? false,
+      displayConfig.tvMuted ?? curTrackMeta.tvMuted ?? true,
     );
 
     const nowMeta = effectiveNowPlaying ? resolveMeta(effectiveNowPlaying) : null;

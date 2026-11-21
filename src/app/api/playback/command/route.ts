@@ -414,7 +414,7 @@ export async function POST(req: NextRequest) {
           trackIds.length > 0
             ? await admin
                 .from("tracks")
-                .select("id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id")
+                .select("id, title, artist, source, storage_path, duration_seconds, thumbnail_url, youtube_video_id")
                 .in("id", trackIds)
             : { data: [] };
 
@@ -534,9 +534,10 @@ export async function POST(req: NextRequest) {
                 source: first.source || "youtube",
                 durationSeconds: Number(first.duration_seconds ?? 210),
                 youtubeVideoId: first.youtube_video_id,
+                storagePath: first.storage_path ?? null,
                 thumbnailUrl: first.thumbnail_url ?? null,
                 voteCount: 0,
-                tvMuted: curTrack.tvMuted ?? false,
+                tvMuted: curTrack.tvMuted ?? true,
                 positionSeconds: 0,
                 anchorTimestampMs: nowMs + 1200,
                 startedAtMs: nowMs,

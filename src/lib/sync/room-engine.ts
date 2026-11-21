@@ -511,6 +511,8 @@ export class SyncRoomEngine {
       Boolean(this.anchor.track && extNowPlaying) &&
       ((this.anchor.track?.youtubeVideoId &&
         this.anchor.track.youtubeVideoId === extNowPlaying?.youtubeVideoId) ||
+        (this.anchor.track?.storagePath &&
+          this.anchor.track.storagePath === extNowPlaying?.storagePath) ||
         this.anchor.track?.itemId === extNowPlaying?.itemId);
 
     const localTimingIsNewer =
@@ -597,11 +599,18 @@ export class SyncRoomEngine {
     nowMs = Date.now(),
   ): SyncOutboundMessage {
     const reportedTrack = report.track ? sanitizeSyncTrack(report.track) : null;
-    const isTrackDifferent =
+    const isTrackDifferent = Boolean(
       reportedTrack &&
-      (!this.anchor.track ||
-        (reportedTrack.youtubeVideoId &&
-          reportedTrack.youtubeVideoId !== this.anchor.track.youtubeVideoId));
+        (!this.anchor.track ||
+          reportedTrack.source !== this.anchor.track.source ||
+          (reportedTrack.youtubeVideoId &&
+            reportedTrack.youtubeVideoId !== this.anchor.track.youtubeVideoId) ||
+          (reportedTrack.storagePath &&
+            reportedTrack.storagePath !== this.anchor.track.storagePath) ||
+          (!reportedTrack.youtubeVideoId &&
+            !reportedTrack.storagePath &&
+            reportedTrack.trackId !== this.anchor.track.trackId)),
+    );
 
     const transitSec =
       !report.isPaused &&
@@ -733,7 +742,9 @@ export class SyncRoomEngine {
             trackId: this.anchor.track.trackId,
             title: this.anchor.track.title,
             artist: this.anchor.track.artist,
+            source: this.anchor.track.source || "youtube",
             youtubeVideoId: this.anchor.track.youtubeVideoId ?? null,
+            storagePath: this.anchor.track.storagePath ?? null,
             thumbnailUrl: this.anchor.track.thumbnailUrl ?? null,
             durationSeconds: this.anchor.track.durationSeconds ?? 210,
             voteCount: this.anchor.track.voteCount ?? 0,

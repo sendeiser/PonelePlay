@@ -95,9 +95,9 @@ describe("TvAudioEngine (Audio-Only 3-Way Routing)", () => {
     vi.restoreAllMocks();
   });
 
-  it("resolves uploaded audio URL via Supabase storagePath or direct HTTP URL", () => {
+  it("resolves uploaded audio URL via /api/audio signed proxy or direct HTTP URL", () => {
     expect(resolveUploadAudioUrl(UPLOAD_TRACK)).toBe(
-      "https://cdn.example.com/tracks/venues/bar-1/cumbia.mp3",
+      "/api/audio?path=venues%2Fbar-1%2Fcumbia.mp3",
     );
     expect(
       resolveUploadAudioUrl({ storagePath: null, youtubeVideoId: "https://audio.test/song.mp3" }),
@@ -122,7 +122,7 @@ describe("TvAudioEngine (Audio-Only 3-Way Routing)", () => {
     expect(playSpy).not.toHaveBeenCalled();
   });
 
-  it("plays uploaded MP3 track via HTML5 <audio> using storagePath in TV_ONLY without mounting YouTube iframe", () => {
+  it("plays uploaded MP3 track via HTML5 <audio> using /api/audio proxy in TV_ONLY without mounting YouTube iframe", () => {
     const { container } = render(
       <TvAudioEngine
         track={UPLOAD_TRACK}
@@ -139,9 +139,87 @@ describe("TvAudioEngine (Audio-Only 3-Way Routing)", () => {
     const audio = container.querySelector("audio") as HTMLAudioElement | null;
     expect(audio).not.toBeNull();
     expect(audio?.getAttribute("src")).toBe(
-      "https://cdn.example.com/tracks/venues/bar-1/cumbia.mp3",
+      "/api/audio?path=venues%2Fbar-1%2Fcumbia.mp3",
     );
     expect(playSpy).toHaveBeenCalled();
+  });
+
+  it("does not re-seek or re-trigger play on volume drag or cloned track identity", () => {
+    const anchor = makeAnchor(UPLOAD_TRACK, 40, 10_000);
+    const { container, rerender } = render(
+      <TvAudioEngine
+        track={UPLOAD_TRACK}
+        audioActive={true}
+        syncBothMode={false}
+        isPaused={false}
+        volume={75}
+        anchor={anchor}
+        estimatedServerMs={() => 10_000}
+      />,
+    );
+
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    audio.currentTime = 43;
+
+    rerender(
+      <TvAudioEngine
+        track={{ ...UPLOAD_TRACK }}
+        audioActive={true}
+        syncBothMode={false}
+        isPaused={false}
+        volume={50}
+        anchor={anchor}
+        estimatedServerMs={() => 13_000}
+      />,
+    );
+
+    expect(audio.volume).toBeCloseTo(0.5, 2);
+    expect(audio.currentTime).toBe(43);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears loadedUploadSrc on CABINA_ONLY so returning to TV_ONLY re-seeks to current anchor", () => {
+    const { container, rerender } = render(
+      <TvAudioEngine
+        track={UPLOAD_TRACK}
+        audioActive={true}
+        syncBothMode={false}
+        isPaused={false}
+        volume={80}
+        anchor={makeAnchor(UPLOAD_TRACK, 10, 10_000)}
+        estimatedServerMs={() => 10_000}
+      />,
+    );
+
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    audio.currentTime = 12;
+
+    rerender(
+      <TvAudioEngine
+        track={UPLOAD_TRACK}
+        audioActive={false}
+        syncBothMode={false}
+        isPaused={false}
+        volume={80}
+        anchor={makeAnchor(UPLOAD_TRACK, 30, 30_000)}
+        estimatedServerMs={() => 30_000}
+      />,
+    );
+
+    rerender(
+      <TvAudioEngine
+        track={UPLOAD_TRACK}
+        audioActive={true}
+        syncBothMode={false}
+        isPaused={false}
+        volume={80}
+        anchor={makeAnchor(UPLOAD_TRACK, 65, 65_000)}
+        estimatedServerMs={() => 65_000}
+      />,
+    );
+
+    expect(audio.currentTime).toBeCloseTo(65, 1);
   });
 
   it("pauses and mutes immediately when switching to CABINA_ONLY mid-song", () => {

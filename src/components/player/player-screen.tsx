@@ -419,7 +419,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 artist: tr.artist,
                 source: tr.source,
                 durationSeconds: tr.durationSeconds ?? 210,
-                youtubeVideoId: tr.youtubeVideoId ?? "T_FkEw27XJ0",
+                youtubeVideoId: tr.youtubeVideoId ?? (tr.source === "upload" ? undefined : "T_FkEw27XJ0"),
+                storagePath: tr.storagePath ?? null,
                 thumbnailUrl: tr.thumbnailUrl ?? null,
                 voteCount: 0,
               })),
@@ -490,6 +491,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, []);
 
   // Elapsed runner (250ms clock-driven): computes exact progress from PlaybackAnchor + NTP-lite clock
+  const fallbackElapsedRef = useRef(0);
   useEffect(() => {
     const timer = setInterval(() => {
       const anchor = syncAnchorRef.current;
@@ -502,6 +504,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           anchor,
           client ? client.estimatedServerMs() : Date.now(),
         );
+        fallbackElapsedRef.current = computed;
         const rounded = Math.floor(computed);
         if (rounded !== elapsedRef.current) {
           elapsedRef.current = rounded;
@@ -515,6 +518,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         const liveSec = mt.isPaused
           ? mt.seconds
           : mt.seconds + Math.max(0, (Date.now() - mt.updatedAtMs) / 1000);
+        fallbackElapsedRef.current = liveSec;
         const rounded = Math.floor(liveSec);
         if (rounded !== elapsedRef.current) {
           elapsedRef.current = rounded;
@@ -524,11 +528,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
 
       if (isPlaying) {
-        setElapsed((prev) => {
-          const next = prev + 0.25;
-          elapsedRef.current = Math.floor(next);
-          return Math.floor(next);
-        });
+        fallbackElapsedRef.current = Math.max(fallbackElapsedRef.current, elapsedRef.current) + 0.25;
+        const rounded = Math.floor(fallbackElapsedRef.current);
+        if (rounded !== elapsedRef.current) {
+          elapsedRef.current = rounded;
+          setElapsed(rounded);
+        }
       }
     }, 250);
     return () => clearInterval(timer);
@@ -782,8 +787,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     nightState?.venue.name ||
     playerState?.venue.name ||
     "Billar Aurora";
-  const isParty = partyConfig?.venueType === "party";
-  const candidateProposals = nightState?.candidates || [];
   const duration = videoDuration ?? nowPlaying?.durationSeconds ?? 210;
   const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (elapsed / duration) * 100)) : 0;
 
@@ -816,12 +819,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     handleSeekRef.current = handleSeek;
   }, [handleSeek]);
 
-  // Reset counters when new track is loaded
+  // Reset counters when new track is loaded (avoid 0:00 flash if syncAnchor already positioned this track)
   useEffect(() => {
-    setElapsed(0);
-    elapsedRef.current = 0;
+    const anchorTrack = syncAnchorRef.current?.track;
+    const matchesActiveAnchor = Boolean(
+      anchorTrack &&
+        ((nowPlaying?.youtubeVideoId && anchorTrack.youtubeVideoId === nowPlaying.youtubeVideoId) ||
+          (nowPlaying?.storagePath && anchorTrack.storagePath === nowPlaying.storagePath) ||
+          (nowPlaying?.trackId && anchorTrack.trackId === nowPlaying.trackId)),
+    );
+    if (!matchesActiveAnchor) {
+      fallbackElapsedRef.current = 0;
+      setElapsed(0);
+      elapsedRef.current = 0;
+    }
     setVideoDuration(null);
-  }, [nowPlaying?.itemId, nowPlaying?.youtubeVideoId, nowPlaying?.storagePath]);
+  }, [nowPlaying?.itemId, nowPlaying?.trackId, nowPlaying?.youtubeVideoId, nowPlaying?.storagePath]);
 
   const handleSkipNext = useCallback(
     async (fromRemote = false) => {
@@ -829,6 +842,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (candidates.length > 0) {
         const nextTrack = candidates[0];
         setManualNowPlaying(nextTrack);
+        fallbackElapsedRef.current = 0;
         setElapsed(0);
         elapsedRef.current = 0;
         setVideoDuration(nextTrack.durationSeconds ?? null);
@@ -840,9 +854,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           try {
             const { playTrackNow } = await import("@/lib/api/master-control");
             await playTrackNow(slug, {
+              trackId: nextTrack.trackId,
               title: nextTrack.title,
               artist: nextTrack.artist,
-              youtubeVideoId: nextTrack.youtubeVideoId ?? "T_FkEw27XJ0",
+              source: nextTrack.source,
+              storagePath: nextTrack.storagePath ?? null,
+              youtubeVideoId:
+                nextTrack.youtubeVideoId ?? (nextTrack.source === "upload" ? null : "T_FkEw27XJ0"),
               thumbnailUrl: nextTrack.thumbnailUrl,
               durationSeconds: nextTrack.durationSeconds ?? undefined,
               isKaraoke: nextTrack.isKaraoke,
@@ -859,13 +877,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     [slug, queue, allTracks],
   );
 
-  // Auto-advance only as autonomous fallback when Cabina has been silent > 12s
+  // Auto-advance ONLY as autonomous fallback when NO Cabina master is connected AND Cabina has been silent > 12s
   const handleSkipNextRef = useRef(handleSkipNext);
   useEffect(() => {
     handleSkipNextRef.current = handleSkipNext;
   }, [handleSkipNext]);
 
   const handleTvAudioEnded = useCallback(() => {
+    const client = syncClientRef.current;
+    const hasConnectedMaster = Boolean(
+      client?.isConnected() && (client.getStatus().presence?.masterCount ?? 0) > 0,
+    );
+    if (hasConnectedMaster) return;
     if (Date.now() - lastAdminProgressAtRef.current > 12000) {
       void handleSkipNextRef.current(false);
     }
@@ -1172,18 +1195,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
       syncAnchorRef.current = anchor;
       setSyncAnchorState(anchor);
+      lastAdminProgressAtRef.current = Date.now();
       lastSeekSeqRef.current = anchor.seekSeq;
       lastCommandSeqRef.current = Math.max(lastCommandSeqRef.current ?? 0, anchor.seq);
       setManualNowPlaying(incoming);
+      fallbackElapsedRef.current = startPositionSec;
       setElapsed(Math.floor(startPositionSec));
       elapsedRef.current = Math.floor(startPositionSec);
 
       const nextRouting =
         anchor.cabinaMuted && !anchor.tvMuted
           ? "TV_ONLY"
-          : !anchor.cabinaMuted && anchor.tvMuted
-            ? "CABINA_ONLY"
-            : "BOTH";
+          : !anchor.cabinaMuted && !anchor.tvMuted
+            ? "BOTH"
+            : "CABINA_ONLY";
       audioRoutingRef.current = nextRouting;
       setAudioRouting(nextRouting);
       isMutedRef.current = anchor.tvMuted;
