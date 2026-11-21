@@ -13,7 +13,9 @@ interface QueueItemFeed {
   trackId?: string;
   title: string;
   artist: string;
+  source?: string;
   youtubeVideoId?: string | null;
+  storagePath?: string | null;
   thumbnailUrl?: string | null;
   durationSeconds?: number | null;
   voteCount: number;
@@ -317,7 +319,17 @@ export async function GET(
             id: String(effectiveNowPlaying.itemId || effectiveNowPlaying.id || ""),
             title: String(effectiveNowPlaying.title || "Sin título"),
             artist: String(effectiveNowPlaying.artist || "Desconocido"),
+            source:
+              effectiveNowPlaying.source === "upload" || effectiveNowPlaying.source === "spotify"
+                ? effectiveNowPlaying.source
+                : "youtube",
             youtubeVideoId: effectiveNowPlaying.youtubeVideoId ? String(effectiveNowPlaying.youtubeVideoId) : null,
+            storagePath:
+              typeof effectiveNowPlaying.storagePath === "string" && effectiveNowPlaying.storagePath
+                ? effectiveNowPlaying.storagePath
+                : typeof effectiveNowPlaying.storage_path === "string" && effectiveNowPlaying.storage_path
+                  ? effectiveNowPlaying.storage_path
+                  : null,
             thumbnailUrl: effectiveNowPlaying.thumbnailUrl ? String(effectiveNowPlaying.thumbnailUrl) : null,
             durationSeconds: Number(effectiveNowPlaying.durationSeconds ?? 210),
             voteCount: sanitizeVoteCount(effectiveNowPlaying.voteCount),
@@ -332,7 +344,9 @@ export async function GET(
           id: item.id,
           title: item.title,
           artist: item.artist,
+          source: item.source === "upload" || item.source === "spotify" ? item.source : "youtube",
           youtubeVideoId: item.youtubeVideoId,
+          storagePath: item.storagePath ?? null,
           thumbnailUrl: item.thumbnailUrl,
           durationSeconds: item.durationSeconds,
           voteCount: sanitizeVoteCount(item.voteCount),

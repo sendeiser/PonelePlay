@@ -383,5 +383,22 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
       playbackRate: 1,
     });
   });
+
+  it("preserves storagePath on uploaded tracks in sanitizeSyncTrack", async () => {
+    const { sanitizeSyncTrack } = await import("@/lib/sync/protocol");
+    const track = sanitizeSyncTrack({
+      itemId: "u1",
+      trackId: "u1",
+      title: "Mi MP3 Local",
+      artist: "DJ Local",
+      source: "upload",
+      storagePath: "venues/bar-1/song.mp3",
+      youtubeVideoId: null,
+      durationSeconds: 195,
+    });
+    expect(track).not.toBeNull();
+    expect(track?.source).toBe("upload");
+    expect(track?.storagePath).toBe("venues/bar-1/song.mp3");
+  });
 });
 

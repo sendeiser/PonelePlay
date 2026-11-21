@@ -19,6 +19,7 @@ export interface SyncTrack {
   source?: "youtube" | "upload" | "spotify";
   durationSeconds?: number | null;
   youtubeVideoId?: string | null;
+  storagePath?: string | null;
   thumbnailUrl?: string | null;
   voteCount?: number;
   guestName?: string | null;
@@ -308,10 +309,16 @@ export function sanitizeSyncTrack(raw: unknown): SyncTrack | null {
     typeof obj.youtubeVideoId === "string" && obj.youtubeVideoId.trim()
       ? obj.youtubeVideoId.trim()
       : null;
+  const storagePath =
+    typeof obj.storagePath === "string" && obj.storagePath.trim()
+      ? obj.storagePath.trim()
+      : typeof obj.storage_path === "string" && obj.storage_path.trim()
+        ? obj.storage_path.trim()
+        : null;
 
-  if (!title && !youtubeVideoId) return null;
+  if (!title && !youtubeVideoId && !storagePath) return null;
 
-  const itemId = String(obj.itemId || obj.id || youtubeVideoId || "track");
+  const itemId = String(obj.itemId || obj.id || youtubeVideoId || storagePath || "track");
   const trackId = String(obj.trackId || itemId);
 
   return {
@@ -325,6 +332,7 @@ export function sanitizeSyncTrack(raw: unknown): SyncTrack | null {
         ? obj.durationSeconds
         : null,
     youtubeVideoId,
+    storagePath,
     thumbnailUrl: typeof obj.thumbnailUrl === "string" ? obj.thumbnailUrl : null,
     voteCount: typeof obj.voteCount === "number" && Number.isFinite(obj.voteCount) ? obj.voteCount : 0,
     guestName: typeof obj.guestName === "string" ? obj.guestName : null,

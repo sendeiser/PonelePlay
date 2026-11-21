@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
           source: String(incoming.source || "youtube"),
           durationSeconds: Number(incoming.durationSeconds ?? 210),
           youtubeVideoId: ytId,
+          storagePath: incoming.storagePath ? String(incoming.storagePath) : null,
           thumbnailUrl: incoming.thumbnailUrl ?? null,
           voteCount: Number(incoming.voteCount ?? 0),
           guestName: incoming.guestName ?? null,
@@ -665,7 +666,7 @@ export async function POST(req: NextRequest) {
 
           const { data: trk } = await admin
             .from("tracks")
-            .select("id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id")
+            .select("id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id, storage_path")
             .eq("id", chosen.track_id)
             .maybeSingle();
 
@@ -683,6 +684,7 @@ export async function POST(req: NextRequest) {
               source: trk.source || "youtube",
               durationSeconds: Number(trk.duration_seconds ?? 210),
               youtubeVideoId: trk.youtube_video_id,
+              storagePath: trk.storage_path ?? null,
               thumbnailUrl: trk.thumbnail_url ?? null,
               voteCount: Number(chosen.vote_count ?? 0),
               tvMuted: curTrack.tvMuted ?? false,
@@ -699,7 +701,7 @@ export async function POST(req: NextRequest) {
       if (!nextPicked) {
         const { data: fallbacks } = await admin
           .from("fallback_tracks")
-          .select("id, position, tracks(id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id)")
+          .select("id, position, tracks(id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id, storage_path)")
           .eq("venue_id", venue.id)
           .order("position", { ascending: true });
 
@@ -714,14 +716,15 @@ export async function POST(req: NextRequest) {
               duration_seconds: number | null;
               thumbnail_url: string | null;
               youtube_video_id: string | null;
+              storage_path: string | null;
             } | null;
           })
-          .filter((t): t is NonNullable<typeof t> => Boolean(t && t.youtube_video_id));
+          .filter((t): t is NonNullable<typeof t> => Boolean(t && (t.youtube_video_id || t.storage_path)));
 
         if (fbList.length > 0) {
           const curIdx = fbList.findIndex(
             (t) =>
-              t.youtube_video_id === curVideoId ||
+              (curVideoId && t.youtube_video_id === curVideoId) ||
               String(t.id) === String(curTrack.trackId || ""),
           );
           const nextFb = fbList[(curIdx + 1) % fbList.length];
@@ -733,6 +736,7 @@ export async function POST(req: NextRequest) {
             source: nextFb.source || "youtube",
             durationSeconds: Number(nextFb.duration_seconds ?? 210),
             youtubeVideoId: nextFb.youtube_video_id,
+            storagePath: nextFb.storage_path ?? null,
             thumbnailUrl: nextFb.thumbnail_url ?? null,
             voteCount: 0,
             tvMuted: curTrack.tvMuted ?? false,
