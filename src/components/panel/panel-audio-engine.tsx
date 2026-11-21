@@ -21,12 +21,12 @@ export interface PanelAudioEngineProps {
   volume: number; // 0 - 100
   isMuted: boolean;
   syncConnected?: boolean;
+  /** Enable silent pre-buffer hold on track changes only when BOTH Cabina and TV play audio in parallel. */
+  useSyncBarrier?: boolean;
   onTrackEnded: () => void;
   onProgress?: (currentTime: number, duration: number | null) => void;
   onAudioBlockedChange?: (isBlocked: boolean) => void;
   onTrackBuffered?: (videoId: string) => void;
-  liveMonitorVisible?: boolean;
-  onCloseMonitor?: () => void;
 }
 
 export interface PanelAudioEngineRef {
@@ -36,7 +36,6 @@ export interface PanelAudioEngineRef {
   holdUntilSynced: (maxWaitMs?: number) => void;
   prepareBarrier: (videoId: string, startSec?: number, maxWaitMs?: number) => void;
   scheduleStartAt: (delayMs: number, startSec?: number) => void;
-  getVideoSurfaceElement: () => HTMLDivElement | null;
   isUnlocked: boolean;
 }
 
@@ -48,12 +47,11 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       volume,
       isMuted,
       syncConnected = false,
+      useSyncBarrier = false,
       onTrackEnded,
       onProgress,
       onAudioBlockedChange,
       onTrackBuffered,
-      liveMonitorVisible = false,
-      onCloseMonitor,
     },
     ref,
   ) {
@@ -76,6 +74,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     isMutedRef.current = isMuted;
     const syncConnectedRef = useRef(syncConnected);
     syncConnectedRef.current = syncConnected;
+    const useSyncBarrierRef = useRef(useSyncBarrier);
+    useSyncBarrierRef.current = useSyncBarrier;
     const onTrackEndedRef = useRef(onTrackEnded);
     onTrackEndedRef.current = onTrackEnded;
     const onProgressRef = useRef(onProgress);
@@ -305,12 +305,20 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           clearTimeout(startHoldTimerRef.current);
           startHoldTimerRef.current = null;
         }
-        // Hold silently while YouTube pre-buffers frame 1 (2400ms max when WS barrier is active)
-        const holdMs = syncConnectedRef.current ? 2400 : 220;
-        startHoldUntilRef.current = Date.now() + holdMs;
+        // Hold silently ONLY when dual-audio Ready-Barrier is active (BOTH mode); instant start in CABINA_ONLY/TV_ONLY
+        const holdMs = useSyncBarrierRef.current && syncConnectedRef.current ? 2400 : 0;
+        startHoldUntilRef.current = holdMs > 0 ? Date.now() + holdMs : 0;
         try {
-          playerRef.current.mute();
-          playerRef.current.setVolume(0);
+          if (holdMs > 0) {
+            playerRef.current.mute();
+            playerRef.current.setVolume(0);
+          } else if (isMutedRef.current || volumeRef.current === 0) {
+            playerRef.current.mute();
+            playerRef.current.setVolume(0);
+          } else {
+            playerRef.current.unMute();
+            playerRef.current.setVolume(volumeRef.current);
+          }
           try {
             playerRef.current.stopVideo();
           } catch {}
@@ -779,47 +787,18 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       holdUntilSynced,
       prepareBarrier,
       scheduleStartAt,
-      getVideoSurfaceElement: () => containerRef.current,
       isUnlocked: isUnlockedRef.current,
     }));
 
     return (
       <div
         id="admin-cabina-audio-engine"
-        aria-hidden={!liveMonitorVisible}
-        className={
-          liveMonitorVisible
-            ? "fixed bottom-20 right-4 w-[360px] sm:w-[440px] rounded-2xl overflow-hidden border border-cyan-500/45 bg-black shadow-2xl z-30"
-            : "fixed bottom-2 right-2 w-[160px] h-[90px] opacity-0 pointer-events-none overflow-hidden z-0"
-        }
-        tabIndex={liveMonitorVisible ? undefined : -1}
+        aria-hidden="true"
+        className="fixed bottom-2 right-2 w-[160px] h-[90px] opacity-0 pointer-events-none overflow-hidden z-0"
+        tabIndex={-1}
       >
-        {liveMonitorVisible && (
-          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950/90 border-b border-cyan-500/25 text-[11px] font-mono text-cyan-300">
-            <span className="inline-flex items-center gap-1.5 font-bold">
-              <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-              Monitor Cabina HD (Live WebRTC)
-            </span>
-            {onCloseMonitor && (
-              <button
-                type="button"
-                onClick={onCloseMonitor}
-                className="text-slate-300 hover:text-white px-2 py-0.5 rounded bg-slate-800/80 cursor-pointer"
-              >
-                Ocultar
-              </button>
-            )}
-          </div>
-        )}
-        {/* Container where YouTube iframe mounts inside viewport */}
-        <div
-          ref={containerRef}
-          className={
-            liveMonitorVisible
-              ? "w-full aspect-video bg-black [&_iframe]:!w-full [&_iframe]:!h-full [&_#admin-audio-yt-host]:!w-full [&_#admin-audio-yt-host]:!h-full"
-              : "w-full h-full"
-          }
-        />
+        {/* Hidden audio-only YouTube mount */}
+        <div ref={containerRef} className="w-full h-full" />
         {/* HTML5 audio element for uploaded tracks */}
         <audio ref={html5AudioRef} preload="auto" className="hidden" />
       </div>

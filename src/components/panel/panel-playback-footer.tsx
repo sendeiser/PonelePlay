@@ -91,9 +91,11 @@ export function PanelPlaybackFooter({
   const [isPaused, setIsPaused] = useState(false);
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
-  const [tvMuted, setTvMuted] = useState(false);
-  // 3-way audio routing: BOTH = audio in cabina + TV, CABINA_ONLY = only cabina, TV_ONLY = only TV
-  const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("BOTH");
+  const [tvMuted, setTvMuted] = useState(true);
+  // 3-way audio routing (audio-only, zero video on TV): CABINA_ONLY (default) | BOTH | TV_ONLY
+  const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
+  const audioRoutingRef = useRef<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
+  audioRoutingRef.current = audioRouting;
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
@@ -128,15 +130,7 @@ export function PanelPlaybackFooter({
     lanEndpoints: [],
     peers: [],
     directStats: null,
-    mediaStats: null,
   });
-  const [liveMonitorVisible, setLiveMonitorVisible] = useState(false);
-
-  useEffect(() => {
-    if (!syncStatus.mediaStats?.streaming) {
-      setLiveMonitorVisible(false);
-    }
-  }, [syncStatus.mediaStats?.streaming]);
   const currentTrackRef = useRef<PlayerTrack | null>(currentTrack);
   currentTrackRef.current = currentTrack;
   const lastProgressBroadcastRef = useRef<number>(0);
@@ -870,9 +864,11 @@ export function PanelPlaybackFooter({
 
   const broadcastControl = useCallback((command: string, payload: Record<string, unknown> = {}) => {
     if (syncClientRef.current?.isConnected()) {
+      const needsDualAudioBarrier = audioRoutingRef.current === "BOTH";
       syncClientRef.current.sendCommand(command, payload, {
         useBarrier:
-          command === "play_now" || command === "skip" || command === "play_playlist",
+          needsDualAudioBarrier &&
+          (command === "play_now" || command === "skip" || command === "play_playlist"),
       });
       return;
     }
@@ -1079,25 +1075,6 @@ export function PanelPlaybackFooter({
       }
     } catch {
       setIsMuted(!next);
-    }
-  };
-
-  const handleToggleTvMute = async () => {
-    const next = !tvMuted;
-    setTvMuted(next);
-    showToast(next ? "🔇 Audio de la TV Silenciado" : "🔊 Audio de la TV Activado");
-    const hasWs = Boolean(syncClientRef.current?.isConnected());
-    broadcastControl("set_tv_mute", { tvMuted: next, cabinaMuted: isMuted });
-    try {
-      await sendPlaybackCommand(
-        slug,
-        "set_tv_mute",
-        { tvMuted: next },
-        ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
-      );
-      await updateTvDeviceDisplay(slug, "all", { tvMuted: next });
-    } catch {
-      // Non-blocking
     }
   };
 
@@ -1582,58 +1559,50 @@ export function PanelPlaybackFooter({
                 type="button"
                 onClick={() => setLanSyncModalOpen(true)}
                 className={`flex h-8 shrink-0 items-center gap-1.5 px-2.5 rounded-xl text-[11px] font-semibold whitespace-nowrap border transition-all active:scale-95 cursor-pointer ${
-                  syncStatus.mediaStats?.streaming
-                    ? "bg-cyan-500/20 border-cyan-400/50 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950"
-                    : syncStatus.transport === "direct"
-                      ? "bg-th-teal-soft border-th-teal/35 text-th-teal hover:bg-th-teal hover:text-white"
-                      : syncStatus.transport === "lan"
-                        ? "bg-th-emerald-soft border-th-emerald/35 text-th-emerald hover:bg-th-emerald hover:text-white"
-                        : syncStatus.transport === "cloud"
-                          ? "bg-th-accent-soft border-th-accent/35 text-th-accent hover:bg-th-accent hover:text-white"
-                          : "bg-th-amber-soft border-th-amber/35 text-th-amber hover:bg-th-amber hover:text-white"
+                  syncStatus.transport === "direct"
+                    ? "bg-th-teal-soft border-th-teal/35 text-th-teal hover:bg-th-teal hover:text-white"
+                    : syncStatus.transport === "lan"
+                      ? "bg-th-emerald-soft border-th-emerald/35 text-th-emerald hover:bg-th-emerald hover:text-white"
+                      : syncStatus.transport === "cloud"
+                        ? "bg-th-accent-soft border-th-accent/35 text-th-accent hover:bg-th-accent hover:text-white"
+                        : "bg-th-amber-soft border-th-amber/35 text-th-amber hover:bg-th-amber hover:text-white"
                 }`}
                 title={
-                  syncStatus.mediaStats?.streaming
-                    ? `Transmisión Live WebRTC 0ms activa (${syncStatus.mediaStats.viewerCount} TVs) — Clic para gestionar`
-                    : syncStatus.transport === "direct"
-                      ? `Modo Directo P2P activo (${syncStatus.rttMs ?? "~2"}ms) con respaldo Cloud — Clic para configurar`
-                      : syncStatus.transport === "lan"
-                        ? `Sincronización Hub LAN (${syncStatus.rttMs ?? "<2"}ms) — Clic para ver detalles`
-                        : syncStatus.transport === "cloud"
-                          ? syncStatus.preferenceMode === "direct"
-                            ? `Directo P2P listo (usando respaldo Cloud ${syncStatus.rttMs ?? "--"}ms hasta conectar Pantalla Web)`
-                            : `Modo Cloud Estable (${syncStatus.rttMs ?? "--"}ms) — Clic para elegir modo Directo o LAN`
-                          : "Clic para configurar modo de sincronización o diagnosticar conexión"
+                  syncStatus.transport === "direct"
+                    ? `Modo Directo P2P activo (${syncStatus.rttMs ?? "~2"}ms) con respaldo Cloud — Clic para configurar`
+                    : syncStatus.transport === "lan"
+                      ? `Sincronización Hub LAN (${syncStatus.rttMs ?? "<2"}ms) — Clic para ver detalles`
+                      : syncStatus.transport === "cloud"
+                        ? syncStatus.preferenceMode === "direct"
+                          ? `Directo P2P listo (usando respaldo Cloud ${syncStatus.rttMs ?? "--"}ms hasta conectar Pantalla Web)`
+                          : `Modo Cloud Estable (${syncStatus.rttMs ?? "--"}ms) — Clic para elegir modo Directo o LAN`
+                        : "Clic para configurar modo de sincronización o diagnosticar conexión"
                 }
               >
                 <span
                   className={`size-2 rounded-full shrink-0 ${
-                    syncStatus.mediaStats?.streaming
-                      ? "bg-rose-500 animate-pulse"
-                      : syncStatus.transport === "direct"
-                        ? "bg-th-teal animate-pulse"
-                        : syncStatus.transport === "lan"
-                          ? "bg-th-emerald animate-pulse"
-                          : syncStatus.transport === "cloud"
-                            ? "bg-th-accent animate-pulse"
-                            : "bg-th-amber"
+                    syncStatus.transport === "direct"
+                      ? "bg-th-teal animate-pulse"
+                      : syncStatus.transport === "lan"
+                        ? "bg-th-emerald animate-pulse"
+                        : syncStatus.transport === "cloud"
+                          ? "bg-th-accent animate-pulse"
+                          : "bg-th-amber"
                   }`}
                 />
                 <Wifi className="size-3.5 shrink-0 hidden xl:inline" />
                 <span>
-                  {syncStatus.mediaStats?.streaming
-                    ? `LIVE 0ms${syncStatus.mediaStats.viewerCount > 0 ? ` · ${syncStatus.mediaStats.viewerCount} TV` : ""}`
-                    : syncStatus.transport === "direct"
-                      ? `Directo${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
-                      : syncStatus.transport === "lan"
-                        ? `LAN${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
-                        : syncStatus.transport === "cloud"
-                          ? syncStatus.preferenceMode === "direct"
-                            ? `Directo·Cloud`
-                            : `Cloud${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
-                          : syncStatus.transport === "connecting"
-                            ? "Sync..."
-                            : "Modo Sync"}
+                  {syncStatus.transport === "direct"
+                    ? `Directo${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                    : syncStatus.transport === "lan"
+                      ? `LAN${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                      : syncStatus.transport === "cloud"
+                        ? syncStatus.preferenceMode === "direct"
+                          ? `Directo·Cloud`
+                          : `Cloud${syncStatus.rttMs !== null ? ` ${syncStatus.rttMs}ms` : ""}`
+                        : syncStatus.transport === "connecting"
+                          ? "Sync..."
+                          : "Modo Sync"}
                 </span>
               </button>
             )}
@@ -1677,6 +1646,7 @@ export function PanelPlaybackFooter({
         volume={volume}
         isMuted={isMuted}
         syncConnected={syncStatus.connected}
+        useSyncBarrier={syncStatus.connected && audioRouting === "BOTH"}
         onTrackEnded={() => void handleSkipNextRef.current()}
         onProgress={(curr, dur) => {
           setElapsed(Math.floor(curr));
@@ -1769,6 +1739,7 @@ export function PanelPlaybackFooter({
                 source: currentTrack.source === "upload" || currentTrack.source === "spotify" ? currentTrack.source : "youtube",
                 durationSeconds: dur ?? currentTrack.durationSeconds ?? 210,
                 youtubeVideoId: currentTrack.youtubeVideoId ?? null,
+                storagePath: currentTrack.storagePath ?? null,
                 thumbnailUrl: currentTrack.thumbnailUrl ?? null,
                 voteCount: currentTrack.voteCount,
                 guestName: currentTrack.guestName ?? null,
@@ -1816,8 +1787,6 @@ export function PanelPlaybackFooter({
           }
         }}
         onAudioBlockedChange={(blocked) => setIsAudioBlocked(blocked)}
-        liveMonitorVisible={liveMonitorVisible}
-        onCloseMonitor={() => setLiveMonitorVisible(false)}
       />
 
       {/* Manual Track Selection Modal */}
@@ -1858,31 +1827,6 @@ export function PanelPlaybackFooter({
         }}
         onReconnect={() => {
           syncClientRef.current?.reconnectNow(true);
-        }}
-        onStartLiveMedia={async (source) => {
-          const client = syncClientRef.current;
-          if (!client) {
-            return { ok: false, error: "Conectando servidor Sync..." };
-          }
-          if (source === "cabina") {
-            setLiveMonitorVisible(true);
-            await new Promise((resolve) => setTimeout(resolve, 90));
-            const cropElement = audioEngineRef.current?.getVideoSurfaceElement() ?? null;
-            const res = await client.startLiveMediaBroadcast({
-              preferCurrentTab: true,
-              cropElement,
-            });
-            if (!res.ok) {
-              setLiveMonitorVisible(false);
-            }
-            return res;
-          }
-          setLiveMonitorVisible(false);
-          return client.startLiveMediaBroadcast({ preferCurrentTab: false });
-        }}
-        onStopLiveMedia={() => {
-          syncClientRef.current?.stopLiveMediaBroadcast();
-          setLiveMonitorVisible(false);
         }}
       />
 

@@ -269,4 +269,29 @@ describe("PanelPlaybackFooter with Expandable Queue Drawer", () => {
       expect(screen.getByText("3/5 votos")).toBeInTheDocument();
     });
   });
+
+  it("defaults to CABINA_ONLY audio routing, supports 3-way routing, and removes WebRTC video broadcast UI", async () => {
+    mockFetchNight.mockResolvedValue(activeNightState);
+    mockFetchPlayback.mockResolvedValue(defaultPlayback);
+
+    render(<PanelPlaybackFooter slug="billar-aurora" />);
+
+    await waitFor(() => {
+      expect(screen.getByTitle("Abrir cola y gestión de temas")).toBeInTheDocument();
+    });
+
+    const cabinaBtns = screen.getAllByTitle(/solo en cabina/i);
+    expect(cabinaBtns.length).toBeGreaterThan(0);
+    // Default active class is bg-th-accent text-white on CABINA_ONLY
+    expect(cabinaBtns.some((btn) => btn.className.includes("bg-th-accent"))).toBe(true);
+
+    // Open sync modal and verify no WebRTC video streaming section remains
+    const syncBtn = screen.getByRole("button", { name: /modo sync|cloud|directo|lan/i });
+    fireEvent.click(syncBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Modos de Sincronización/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Stream Cabina en Vivo/i)).not.toBeInTheDocument();
+  });
 });
