@@ -1,4 +1,5 @@
 import { createBrowserSupabase } from "./supabase/browser";
+import { findActiveSyncClient } from "@/lib/sync/client";
 
 export interface TvPairingCodeResponse {
   ok: boolean;
@@ -292,8 +293,30 @@ export async function updateTvDeviceDisplay(
   config: Partial<TvDisplayConfig>,
 ): Promise<boolean> {
   const supabase = createBrowserSupabase();
+  const targetDeviceId = deviceId || "all";
 
-  // 1. Broadcast immediately to WebSocket for sub-30ms instant reaction on the TV
+  // 1. Dispatch IMMEDIATELY over active LAN/Direct/Cloud WebSocket Sync (<30ms to Web TV & Android TV)
+  try {
+    const activeSync = findActiveSyncClient(slug);
+    if (activeSync) {
+      activeSync.sendPartyEvent({
+        type: "tv_display_config",
+        targetDeviceId,
+        config,
+        timestamp: Date.now(),
+      });
+      if (targetDeviceId === "all") {
+        activeSync.sendCommand("set_tv_display", {
+          targetDeviceId,
+          config,
+        });
+      }
+    }
+  } catch {
+    // Non-blocking WS dispatch
+  }
+
+  // 2. Broadcast immediately to legacy Supabase Realtime channel for passive fallback TVs
   try {
     const channels = typeof supabase.getChannels === "function" ? supabase.getChannels() : [];
     const active = channels.find(
@@ -307,7 +330,7 @@ export async function updateTvDeviceDisplay(
         type: "broadcast",
         event: "tv_display_config",
         payload: {
-          targetDeviceId: deviceId || "all",
+          targetDeviceId,
           config,
           timestamp: Date.now(),
         },
@@ -318,7 +341,7 @@ export async function updateTvDeviceDisplay(
         payload: {
           command: "set_tv_display",
           payload: {
-            targetDeviceId: deviceId || "all",
+            targetDeviceId,
             config,
           },
           timestamp: Date.now(),
@@ -329,7 +352,7 @@ export async function updateTvDeviceDisplay(
     // Non-blocking fallback
   }
 
-  // 2. Persist in database and broadcast via server route
+  // 3. Persist in database and broadcast via server route
   try {
     const res = await fetch("/api/tv/display-config", {
       method: "POST",

@@ -292,6 +292,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, []);
 
   const [volume, setVolume] = useState(85);
+  const [showQueue, setShowQueue] = useState(true);
+  const [showProposals, setShowProposals] = useState(true);
   // Default safe mode: CABINA_ONLY (TV visual-only until Cabina activates TV_ONLY or BOTH)
   const [isMuted, setIsMuted] = useState(true);
   const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
@@ -930,7 +932,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       dedication: t.dedication ?? null,
     });
 
-    const applyDisplayConfigPayload = (cfg: Record<string, unknown>) => {
+    const applyDisplayConfigPayload = (cfg: Record<string, unknown>, silent = false) => {
       if (typeof cfg.mode === "string") {
         const nextMode = normalizeTvDisplayMode(cfg.mode);
         setScreenMode(nextMode);
@@ -938,12 +940,20 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           localStorage.setItem("poneleplay.player.screenMode", nextMode);
         }
       }
+      if (typeof cfg.showQueue === "boolean") {
+        setShowQueue(cfg.showQueue);
+      }
+      if (typeof cfg.showProposals === "boolean") {
+        setShowProposals(cfg.showProposals);
+      }
       if (typeof cfg.tvMuted === "boolean") {
         isMutedRef.current = cfg.tvMuted;
         setIsMuted(cfg.tvMuted);
       }
-      setHudMessage("📺 Pantalla Actualizada desde Cabina");
-      setTimeout(() => setHudMessage(null), 3000);
+      if (!silent) {
+        setHudMessage("📺 Pantalla Actualizada desde Cabina");
+        setTimeout(() => setHudMessage(null), 3000);
+      }
     };
 
     const applyPartyEventPayload = (p: Record<string, unknown>) => {
@@ -990,7 +1000,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setHudMessage(`💌 "${p.dedication}"${guestName ? ` — ${guestName}` : ""}`);
         setTimeout(() => setHudMessage(null), 8000);
       } else if (p.type === "tv_display_config" && p.config && typeof p.config === "object") {
-        applyDisplayConfigPayload(p.config as Record<string, unknown>);
+        const target = typeof p.targetDeviceId === "string" ? p.targetDeviceId : "all";
+        if (!target || target === "all" || !token || target === token) {
+          applyDisplayConfigPayload(p.config as Record<string, unknown>);
+        }
       }
     };
 
@@ -1020,6 +1033,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         }
         if (!tvData?.ok) return;
         const pb = tvData.playback || {};
+        if (pb.displayConfig && typeof pb.displayConfig === "object") {
+          applyDisplayConfigPayload(pb.displayConfig as Record<string, unknown>, true);
+        }
         if (typeof pb.tvMuted === "boolean") {
           isMutedRef.current = pb.tvMuted;
           setIsMuted(pb.tvMuted);
@@ -1922,69 +1938,150 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             </div>
           </div>
 
-          {/* Center Artwork + Vinyl + Track Info */}
-          <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-8 text-center max-w-4xl mx-auto w-full">
-            <div className="relative size-56 sm:size-64 mb-6 flex items-center justify-center">
-              <div
-                className={`absolute -right-6 size-56 sm:size-64 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
-                  isPlaying ? "animate-spin-vinyl" : ""
-                }`}
-              >
-                <div className="size-36 sm:size-44 rounded-full border border-neutral-700/40 flex items-center justify-center">
-                  <div className="size-20 sm:size-24 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
-                    <div className="size-3 rounded-full bg-[#0a0e17]" />
+          {/* Center Area: Floating Left Queue + Center Artwork/Vinyl/Progress + Floating Right Proposals */}
+          <div className="relative z-20 flex-1 flex items-center justify-between gap-6 px-6 min-h-0">
+            {/* Floating Left Queue (Transparent, legible over blurred cover) */}
+            {showQueue && queue.length > 0 ? (
+              <aside className="hidden lg:flex flex-col w-72 xl:w-80 max-h-full rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 p-3.5 shadow-2xl shrink-0">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2">
+                  <span className="font-mono text-[11px] font-extrabold tracking-wider text-cyan-300 uppercase">
+                    📋 Cola en Vivo
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-300">
+                    {queue.length} {queue.length === 1 ? "tema" : "temas"}
+                  </span>
+                </div>
+                <div className="space-y-1.5 overflow-hidden">
+                  {queue.slice(0, Math.min(7, maxQueueFit)).map((item, idx) => (
+                    <div
+                      key={item.itemId}
+                      className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="font-mono text-[11px] font-black text-cyan-400 shrink-0 w-5">
+                          #{idx + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-white truncate">
+                            {decodeHtml(item.title)}
+                          </p>
+                          <p className="text-[10px] text-slate-300/90 truncate">
+                            {item.artist}
+                            {item.guestName ? ` · 🎉 ${item.guestName}` : ""}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-mono text-[10px] font-bold text-indigo-200 shrink-0">
+                        {item.voteCount >= 9999 || item.voteCount === 0
+                          ? "⭐ DJ"
+                          : `${item.voteCount}v`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            ) : (
+              <div className="hidden lg:block w-16 shrink-0" />
+            )}
+
+            {/* Center Artwork + Vinyl + Track Info */}
+            <div className="flex-1 flex flex-col items-center justify-center text-center max-w-2xl mx-auto min-w-0">
+              <div className="relative size-48 sm:size-60 mb-5 flex items-center justify-center">
+                <div
+                  className={`absolute -right-6 size-48 sm:size-60 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
+                    isPlaying ? "animate-spin-vinyl" : ""
+                  }`}
+                >
+                  <div className="size-32 sm:size-40 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                    <div className="size-18 sm:size-22 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
+                      <div className="size-3 rounded-full bg-[#0a0e17]" />
+                    </div>
                   </div>
                 </div>
+                <div className="relative size-48 sm:size-60 rounded-3xl overflow-hidden border-2 border-white/15 shadow-2xl z-10 bg-[#0d1220] flex items-center justify-center">
+                  {nowPlaying?.thumbnailUrl ? (
+                    <Image
+                      src={nowPlaying.thumbnailUrl}
+                      alt={nowPlaying.title}
+                      width={240}
+                      height={240}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <Music2 className="size-20 text-cyan-400" />
+                  )}
+                </div>
               </div>
-              <div className="relative size-56 sm:size-64 rounded-3xl overflow-hidden border-2 border-white/15 shadow-2xl z-10 bg-[#0d1220] flex items-center justify-center">
-                {nowPlaying?.thumbnailUrl ? (
-                  <Image
-                    src={nowPlaying.thumbnailUrl}
-                    alt={nowPlaying.title}
-                    width={256}
-                    height={256}
-                    className="w-full h-full object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <Music2 className="size-20 text-cyan-400" />
-                )}
-              </div>
-            </div>
 
-            {nowPlaying?.guestName && (
-              <span className="mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 font-mono text-xs font-bold text-pink-200">
-                🎉 Pedido por {nowPlaying.guestName}
-              </span>
-            )}
-            <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
-              {decodeHtml(nowPlaying?.title || "Esperando temas...")}
-            </h1>
-            <p className="mt-2 text-lg sm:text-2xl font-medium text-cyan-200/90 truncate max-w-2xl">
-              {nowPlaying?.artist || venueName}
-            </p>
-            {nowPlaying?.dedication && (
-              <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/85 border border-pink-400/60 shadow-lg max-w-2xl">
-                <span className="text-sm font-bold text-pink-100 truncate">
-                  💬 &ldquo;{nowPlaying.dedication}&rdquo;
+              {nowPlaying?.guestName && (
+                <span className="mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 font-mono text-xs font-bold text-pink-200">
+                  🎉 Pedido por {nowPlaying.guestName}
                 </span>
-              </div>
-            )}
+              )}
+              <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
+                {decodeHtml(nowPlaying?.title || "Esperando temas...")}
+              </h1>
+              <p className="mt-1.5 text-base sm:text-xl font-medium text-cyan-200/90 truncate max-w-full">
+                {nowPlaying?.artist || venueName}
+              </p>
+              {nowPlaying?.dedication && (
+                <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/85 border border-pink-400/60 shadow-lg max-w-xl">
+                  <span className="text-sm font-bold text-pink-100 truncate">
+                    💬 &ldquo;{nowPlaying.dedication}&rdquo;
+                  </span>
+                </div>
+              )}
 
-            {/* Clock-driven progress bar */}
-            <div className="mt-6 w-full max-w-xl">
-              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500 rounded-full transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-between font-mono text-xs text-slate-300 tabular-nums">
-                <span>{formatDuration(elapsed)}</span>
-                <span>{isPlaying ? "SONANDO" : "EN PAUSA"}</span>
-                <span>{formatDuration(duration)}</span>
+              {/* Clock-driven progress bar */}
+              <div className="mt-5 w-full max-w-lg">
+                <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500 rounded-full transition-all duration-300"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between font-mono text-xs text-slate-300 tabular-nums">
+                  <span>{formatDuration(elapsed)}</span>
+                  <span>{isPlaying ? "SONANDO" : "EN PAUSA"}</span>
+                  <span>{formatDuration(duration)}</span>
+                </div>
               </div>
             </div>
+
+            {/* Floating Right Proposals (Transparent, legible over blurred cover) */}
+            {showProposals && nightState?.candidates && nightState.candidates.length > 0 ? (
+              <aside className="hidden lg:flex flex-col w-72 xl:w-80 max-h-full rounded-2xl bg-black/40 backdrop-blur-md border border-white/10 p-3.5 shadow-2xl shrink-0">
+                <div className="flex items-center justify-between pb-2 border-b border-white/10 mb-2">
+                  <span className="font-mono text-[11px] font-extrabold tracking-wider text-amber-300 uppercase">
+                    🔥 En Votación
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-300">Pedí con QR</span>
+                </div>
+                <div className="space-y-1.5 overflow-hidden">
+                  {nightState.candidates.slice(0, 6).map((cand) => (
+                    <div
+                      key={cand.id}
+                      className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-white truncate">
+                          {decodeHtml(cand.title)}
+                        </p>
+                        <p className="text-[10px] text-slate-300/90 truncate">
+                          {cand.guestName ? `🎉 ${cand.guestName}` : cand.artist}
+                        </p>
+                      </div>
+                      <span className="font-mono text-[10px] font-bold text-amber-300 shrink-0">
+                        {cand.voteCount}/{effectiveThreshold}v
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            ) : (
+              <div className="hidden lg:block w-16 shrink-0" />
+            )}
           </div>
 
           {/* Bottom Bar: Next Up + QR + Clock */}

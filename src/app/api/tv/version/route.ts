@@ -6,13 +6,13 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      versionCode: 8,
-      versionName: "3.0.0",
+      versionCode: 9,
+      versionName: "3.0.1",
       apkUrl: "https://poneleplay.netlify.app/tv.apk",
       releaseNotes:
-        "Nuevo modo 100% Música sin video: vistas Salón y Portada con progreso sincronizado por reloj, ruteo 3 vías (Solo Cabina por defecto, Solo TV, Cabina + TV) y reproducción nativa de MP3 subidos con ajuste elástico continuo.",
+        "Modo Portada con listas de Cola en Vivo y Votación flotantes, cambio instantáneo de modo de pantalla desde Cabina y corrección al saltear canciones para nunca repetir temas ya reproducidos.",
       mandatory: false,
-      publishedAt: "2026-11-21T23:30:00.000Z",
+      publishedAt: "2026-11-21T23:55:00.000Z",
     },
     {
       headers: {

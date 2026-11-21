@@ -142,7 +142,8 @@ export async function POST(req: NextRequest) {
       // Non-blocking
     }
 
-    void notifySyncRoom(slug, {
+    // Await so Netlify serverless functions never abort the Durable Object push before delivery
+    await notifySyncRoom(slug, {
       partyEvent: {
         type: "tv_display_config",
         targetDeviceId: deviceId || "all",

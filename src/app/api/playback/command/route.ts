@@ -780,10 +780,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (body.skipSyncNotify === true) {
+    if (
+      body.skipSyncNotify === true &&
+      command !== "play_now" &&
+      command !== "skip" &&
+      command !== "play_playlist"
+    ) {
       invalidateVenueSyncCache(slug);
     } else {
-      void notifySyncRoom(slug, {
+      await notifySyncRoom(slug, {
         refreshFromOrigin: true,
       });
     }

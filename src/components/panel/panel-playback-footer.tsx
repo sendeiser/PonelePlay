@@ -136,6 +136,9 @@ export function PanelPlaybackFooter({
   const lastProgressBroadcastRef = useRef<number>(0);
   const isSkippingRef = useRef(false);
   const hasPreloadedRef = useRef(false);
+  // Tracks already played/skipped in this session so stale activeQueue snapshots never replay them
+  const playedItemIdsRef = useRef<Set<string>>(new Set());
+  const playedTrackKeysRef = useRef<Set<string>>(new Set());
   const [isAudioBlocked, setIsAudioBlocked] = useState(false);
 
   const nightSource = useMemo(() => createNightStateSource(slug, "master"), [slug]);
@@ -332,6 +335,10 @@ export function PanelPlaybackFooter({
       setIsPaused(false);
       setElapsed(0);
       setVideoDuration(null);
+      playedItemIdsRef.current.add(item.id);
+      const selectedKey = trackAudioKey(selectedTrack as PlayerTrack);
+      if (selectedKey) playedTrackKeysRef.current.add(selectedKey);
+      lastProgressBroadcastRef.current = Date.now() + 350;
       setLocalTrack(selectedTrack as PlayerTrack);
       audioEngineRef.current?.unlockAudio();
       const hasWs = Boolean(syncClientRef.current?.isConnected());
@@ -340,8 +347,9 @@ export function PanelPlaybackFooter({
         slug,
         "play_now",
         { track: selectedTrack },
-        ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
+        ...(hasWs ? [{ skipWsBroadcast: true }] : []),
       );
+      void refreshNightState();
       showToast(`Poniendo en TV: "${item.title}"`);
       await refreshNightState();
       await loadState();
@@ -955,6 +963,8 @@ export function PanelPlaybackFooter({
     // Always read the LIVE current track (never a stale render closure)
     const cur = currentTrackRef.current;
     const curKey = trackAudioKey(cur);
+    if (cur?.itemId) playedItemIdsRef.current.add(cur.itemId);
+    if (curKey) playedTrackKeysRef.current.add(curKey);
     let nextTrack: PlayerTrack | null = null;
 
     const toTrack = (item: (typeof activeQueue)[number]): PlayerTrack => ({
@@ -979,13 +989,27 @@ export function PanelPlaybackFooter({
           t.id === cur?.itemId ||
           (!!curKey && trackAudioKey(toTrack(t)) === curKey),
       );
-      // Next song AFTER the current one; never the one that is ending
+      // Next song AFTER the current one, skipping any queue item already played/skipped in this session
       const startIdx = curIdx >= 0 ? curIdx + 1 : 0;
       for (let i = startIdx; i < activeQueue.length; i++) {
-        const candidate = toTrack(activeQueue[i]);
-        if (trackAudioKey(candidate) !== curKey) {
+        const raw = activeQueue[i];
+        const candidate = toTrack(raw);
+        const candKey = trackAudioKey(candidate);
+        if (candKey !== curKey && !playedItemIdsRef.current.has(raw.id)) {
           nextTrack = candidate;
           break;
+        }
+      }
+      // Second pass if startIdx > 0: check earlier queued items that have NOT been played yet
+      if (!nextTrack && startIdx > 0) {
+        for (let i = 0; i < startIdx; i++) {
+          const raw = activeQueue[i];
+          const candidate = toTrack(raw);
+          const candKey = trackAudioKey(candidate);
+          if (candKey !== curKey && !playedItemIdsRef.current.has(raw.id)) {
+            nextTrack = candidate;
+            break;
+          }
         }
       }
     }
@@ -995,18 +1019,36 @@ export function PanelPlaybackFooter({
         (t) => !!curKey && trackAudioKey(t) === curKey,
       );
       const total = effectiveFallbackTracks.length;
+      // First pass: pick next unplayed fallback track in order
       for (let step = 1; step <= total; step++) {
         const candidate = effectiveFallbackTracks[((curIdx >= 0 ? curIdx : -1) + step + total) % total];
-        if (trackAudioKey(candidate) !== curKey) {
+        const candKey = trackAudioKey(candidate);
+        if (candKey !== curKey && (!candKey || !playedTrackKeysRef.current.has(candKey))) {
           nextTrack = candidate;
           break;
+        }
+      }
+      // If the entire fallback playlist already finished a full cycle, reset history and start fresh cycle
+      if (!nextTrack) {
+        playedTrackKeysRef.current.clear();
+        if (curKey) playedTrackKeysRef.current.add(curKey);
+        for (let step = 1; step <= total; step++) {
+          const candidate = effectiveFallbackTracks[((curIdx >= 0 ? curIdx : -1) + step + total) % total];
+          if (trackAudioKey(candidate) !== curKey) {
+            nextTrack = candidate;
+            break;
+          }
         }
       }
     }
 
     if (nextTrack) {
-      // Lock locally FIRST so no stale server echo can bring back the old song
-      lastLiveKeyRef.current = trackAudioKey(nextTrack);
+      // Lock locally FIRST & mark as played immediately so rapid skips or stale polls can NEVER replay it
+      const nextKey = trackAudioKey(nextTrack);
+      if (nextTrack.itemId) playedItemIdsRef.current.add(nextTrack.itemId);
+      if (nextKey) playedTrackKeysRef.current.add(nextKey);
+      lastLiveKeyRef.current = nextKey;
+      lastProgressBroadcastRef.current = Date.now() + 350;
       setLocalTrack(nextTrack);
       setElapsed(0);
       setVideoDuration(null);
@@ -1019,8 +1061,9 @@ export function PanelPlaybackFooter({
           slug,
           "play_now",
           { track: nextTrack },
-          ...(hasWs ? [{ skipWsBroadcast: true, skipSyncNotify: true }] : []),
+          ...(hasWs ? [{ skipWsBroadcast: true }] : []),
         );
+        void refreshNightState();
       } catch {
         // Non-blocking
       }
@@ -1029,6 +1072,7 @@ export function PanelPlaybackFooter({
         await skipPlayback(slug);
         setElapsed(0);
         void loadState();
+        void refreshNightState();
       } catch {
         // Non-blocking
       }
@@ -1751,40 +1795,41 @@ export function PanelPlaybackFooter({
           }
 
           const now = Date.now();
+          const liveTrack = currentTrackRef.current;
           const progressIntervalMs = now < fastProgressUntilRef.current ? 280 : 1200;
           if (
             syncClientRef.current?.isConnected() &&
-            currentTrack &&
+            liveTrack &&
             activeBarrierIdRef.current === null &&
             now - lastProgressBroadcastRef.current >= progressIntervalMs
           ) {
             lastProgressBroadcastRef.current = now;
             syncClientRef.current.sendProgress({
               currentTime: curr,
-              duration: dur ?? currentTrack.durationSeconds ?? 210,
+              duration: dur ?? liveTrack.durationSeconds ?? 210,
               isPaused,
               tvMuted,
               volume,
               isFromAdminAudio: true,
               track: {
-                itemId: currentTrack.itemId,
-                trackId: currentTrack.trackId,
-                title: currentTrack.title,
-                artist: currentTrack.artist,
-                source: currentTrack.source === "upload" || currentTrack.source === "spotify" ? currentTrack.source : "youtube",
-                durationSeconds: dur ?? currentTrack.durationSeconds ?? 210,
-                youtubeVideoId: currentTrack.youtubeVideoId ?? null,
-                storagePath: currentTrack.storagePath ?? null,
-                thumbnailUrl: currentTrack.thumbnailUrl ?? null,
-                voteCount: currentTrack.voteCount,
-                guestName: currentTrack.guestName ?? null,
-                dedication: currentTrack.dedication ?? null,
-                isKaraoke: currentTrack.isKaraoke ?? false,
+                itemId: liveTrack.itemId,
+                trackId: liveTrack.trackId,
+                title: liveTrack.title,
+                artist: liveTrack.artist,
+                source: liveTrack.source === "upload" || liveTrack.source === "spotify" ? liveTrack.source : "youtube",
+                durationSeconds: dur ?? liveTrack.durationSeconds ?? 210,
+                youtubeVideoId: liveTrack.youtubeVideoId ?? null,
+                storagePath: liveTrack.storagePath ?? null,
+                thumbnailUrl: liveTrack.thumbnailUrl ?? null,
+                voteCount: liveTrack.voteCount,
+                guestName: liveTrack.guestName ?? null,
+                dedication: liveTrack.dedication ?? null,
+                isKaraoke: liveTrack.isKaraoke ?? false,
               },
             });
           } else if (
             channelRef.current &&
-            currentTrack &&
+            liveTrack &&
             activeBarrierIdRef.current === null &&
             now - lastProgressBroadcastRef.current >= 1500
           ) {
@@ -1794,10 +1839,10 @@ export function PanelPlaybackFooter({
               event: "tv_playback_progress",
               payload: {
                 currentTime: curr,
-                duration: dur ?? currentTrack.durationSeconds ?? 210,
+                duration: dur ?? liveTrack.durationSeconds ?? 210,
                 isPaused,
-                trackId: currentTrack.trackId,
-                track: currentTrack,
+                trackId: liveTrack.trackId,
+                track: liveTrack,
                 volume,
                 isMuted,
                 tvMuted,

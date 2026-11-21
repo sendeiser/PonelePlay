@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  EyeOff,
   LayoutList,
   Loader2,
   Monitor,
@@ -348,7 +349,7 @@ export function TvDevicesManagerModal({
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => void handleUpdateDisplay(null, { mode: "SALON" }, "todas las TVs")}
@@ -363,10 +364,42 @@ export function TvDevicesManagerModal({
                       type="button"
                       onClick={() => void handleUpdateDisplay(null, { mode: "PORTADA" }, "todas las TVs")}
                       className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-text font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
-                      title="Cambiar todas las TVs a Modo Portada (Minimalista)"
+                      title="Cambiar todas las TVs a Modo Portada (Carátula + Listas + QR)"
                     >
                       <Tv className="size-3 text-th-accent" />
                       <span>Todas: Portada</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleUpdateDisplay(
+                          null,
+                          { showQueue: true, showProposals: true },
+                          "todas las TVs",
+                        )
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-emerald font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      title="Mostrar listas de cola y propuestas en todas las TVs"
+                    >
+                      <Eye className="size-3" />
+                      <span>Mostrar Listas</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void handleUpdateDisplay(
+                          null,
+                          { showQueue: false, showProposals: false },
+                          "todas las TVs",
+                        )
+                      }
+                      className="px-2.5 py-1.5 rounded-xl bg-th-card hover:bg-th-card-hover border border-th-border text-th-amber font-mono text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                      title="Ocultar listas flotantes en todas las TVs (Portada limpia)"
+                    >
+                      <EyeOff className="size-3" />
+                      <span>Ocultar Listas</span>
                     </button>
 
                     <button

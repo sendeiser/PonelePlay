@@ -490,7 +490,7 @@ fun TvScreen(
             onDisplayConfig = onDisplayConfig
         )
 
-        // 2. Pure Music UI Views (Zero Video): SALON (default) or PORTADA (minimalist)
+        // 2. Pure Music UI Views (Zero Video): SALON (default) or PORTADA (cover + queue/proposals overlays)
         when (mode) {
             TvScreenMode.PORTADA -> {
                 TvModePortadaOverlays(
@@ -500,6 +500,8 @@ fun TvScreen(
                     elapsedSec = elapsedSec,
                     durationSec = trackDurationSec,
                     audioRoutingLabel = audioRoutingLabel,
+                    showQueue = showQueue,
+                    showProposals = showProposals,
                     theme = theme,
                     scaleFactor = scaleFactor,
                     syncStatus = syncStatus
@@ -574,7 +576,7 @@ fun TvScreen(
 }
 
 /**
- * MODE PORTADA: Minimalist full-screen musical showcase (Album Art + Track + Progress + QR, zero video).
+ * MODE PORTADA: Musical showcase with Album Art + Progress + floating Queue & Proposals + QR (zero video).
  */
 @Composable
 private fun TvModePortadaOverlays(
@@ -584,6 +586,8 @@ private fun TvModePortadaOverlays(
     elapsedSec: Int,
     durationSec: Int,
     audioRoutingLabel: String,
+    showQueue: Boolean = true,
+    showProposals: Boolean = true,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
     scaleFactor: Float = 1.0f,
     syncStatus: SyncStatusState? = null
@@ -665,49 +669,122 @@ private fun TvModePortadaOverlays(
             }
         }
 
-        // Center Showcase: Album Art + Track Info + Live Clock Progress
+        // Center Area: Floating Left Queue + Center Cover/Progress + Floating Right Proposals
         Row(
             modifier = Modifier
                 .align(Alignment.Center)
-                .fillMaxWidth(0.86f),
+                .fillMaxWidth()
+                .padding(top = 42.dp, bottom = 76.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(32.dp)
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size((240 * scaleFactor).dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(theme.cardBackground)
-                    .border(2.dp, theme.primaryColor.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (!thumbUrl.isNullOrBlank()) {
-                    AsyncThumbnail(
-                        url = thumbUrl,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "🎵", fontSize = 54.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
+            // Left Floating Queue List
+            if (showQueue && feed.queue.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .width((240 * scaleFactor).dp)
+                        .background(Color(0x990D1222), RoundedCornerShape(16.dp))
+                        .border(1.dp, theme.cardBorder, RoundedCornerShape(16.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = if (feed.playback.isPaused) "EN PAUSA" else "EN VIVO",
+                            text = "📋 COLA EN VIVO",
                             color = theme.primaryColor,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Black,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace
                         )
+                        Text(
+                            text = "${feed.queue.size}",
+                            color = theme.secondaryColor,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    feed.queue.take(6).forEachIndexed { idx, item ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0x66141A30), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "#${idx + 1}",
+                                color = theme.primaryColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.width(24.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.title,
+                                    color = Color.White,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (!item.guestName.isNullOrBlank()) "${item.artist} • 🎉 ${item.guestName}" else item.artist,
+                                    color = if (!item.guestName.isNullOrBlank()) Color(0xFFF472B6) else Color(0xFF94A3B8),
+                                    fontSize = 9.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Center Showcase: Album Art + Track Info + Live Clock Progress
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size((195 * scaleFactor).dp)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(theme.cardBackground)
+                        .border(2.dp, theme.primaryColor.copy(alpha = 0.55f), RoundedCornerShape(22.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!thumbUrl.isNullOrBlank()) {
+                        AsyncThumbnail(
+                            url = thumbUrl,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(text = "🎵", fontSize = 48.sp)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (feed.playback.isPaused) "EN PAUSA" else "EN VIVO",
+                                color = theme.primaryColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = if (feed.playback.isPaused) "⏸ PAUSADO" else if (feed.venue.venueType == "party") "🎉 SONANDO EN VIVO • FIESTA" else "▶ SONANDO EN VIVO",
                         color = theme.primaryColor,
-                        fontSize = (12f * scaleFactor).sp,
+                        fontSize = (11.5f * scaleFactor).sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace
                     )
@@ -715,7 +792,7 @@ private fun TvModePortadaOverlays(
                         Text(
                             text = "🎤 KARAOKE",
                             color = Color(0xFFF43F5E),
-                            fontSize = (11f * scaleFactor).sp,
+                            fontSize = (10.5f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
@@ -725,17 +802,18 @@ private fun TvModePortadaOverlays(
                 Text(
                     text = feed.nowPlaying?.title ?: "Esperando canciones...",
                     color = Color.White,
-                    fontSize = (30f * scaleFactor).sp,
+                    fontSize = (24f * scaleFactor).sp,
                     fontWeight = FontWeight.Black,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    lineHeight = (36f * scaleFactor).sp
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    lineHeight = (29f * scaleFactor).sp
                 )
 
                 Text(
                     text = feed.nowPlaying?.artist ?: feed.venue.name,
                     color = Color(0xFFCBD5E1),
-                    fontSize = (19f * scaleFactor).sp,
+                    fontSize = (16f * scaleFactor).sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -748,7 +826,7 @@ private fun TvModePortadaOverlays(
                         modifier = Modifier
                             .background(Color(0x66831843), RoundedCornerShape(12.dp))
                             .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = buildString {
@@ -757,7 +835,7 @@ private fun TvModePortadaOverlays(
                                 if (!dedMsg.isNullOrBlank()) append("“$dedMsg”")
                             },
                             color = Color(0xFFFDF2F8),
-                            fontSize = (13f * scaleFactor).sp,
+                            fontSize = (12f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -765,47 +843,101 @@ private fun TvModePortadaOverlays(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
-
                 LinearProgressIndicator(
                     progress = { progressFrac },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
+                        .fillMaxWidth(0.92f)
+                        .height(7.dp)
                         .clip(RoundedCornerShape(4.dp)),
                     color = theme.primaryColor,
                     trackColor = Color(0xFF1E293B)
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(0.92f),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
                         text = formatDurationMmSs(elapsedSec),
                         color = theme.primaryColor,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
-                    val nextUp = feed.queue.firstOrNull()
-                    if (nextUp != null) {
-                        Text(
-                            text = "Siguiente: ${nextUp.title} — ${nextUp.artist}",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
-                        )
-                    }
                     Text(
                         text = formatDurationMmSs(durationSec),
                         color = Color(0xFF94A3B8),
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
+                }
+            }
+
+            // Right Floating Proposals List
+            if (showProposals && feed.proposals.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .width((240 * scaleFactor).dp)
+                        .background(Color(0x990D1222), RoundedCornerShape(16.dp))
+                        .border(1.dp, theme.cardBorder, RoundedCornerShape(16.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🔥 EN VOTACIÓN",
+                            color = theme.accentColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Pedí con QR",
+                            color = theme.secondaryColor,
+                            fontSize = 9.5.sp
+                        )
+                    }
+                    feed.proposals.take(6).forEach { prop ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0x66141A30), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 8.dp, vertical = 5.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = prop.title,
+                                    color = Color.White,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (!prop.guestName.isNullOrBlank()) "🎉 ${prop.guestName}" else prop.artist,
+                                    color = if (!prop.guestName.isNullOrBlank()) Color(0xFFF472B6) else Color(0xFF94A3B8),
+                                    fontSize = 9.5.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${prop.voteCount}/${prop.neededVotes}v",
+                                color = theme.accentColor,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                 }
             }
         }

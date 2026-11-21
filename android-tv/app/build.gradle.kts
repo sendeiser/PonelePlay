@@ -11,8 +11,8 @@ android {
     applicationId = "app.poneleplay.tv"
     minSdk = 24
     targetSdk = 36
-    versionCode = 8
-    versionName = "3.0.0"
+    versionCode = 9
+    versionName = "3.0.1"
   }
 
   buildTypes {
