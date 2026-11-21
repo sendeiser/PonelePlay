@@ -13,7 +13,7 @@ data class TvPlayback(
     val isPaused: Boolean,
     val volume: Int,
     val isMuted: Boolean,
-    val tvMuted: Boolean = false,
+    val tvMuted: Boolean = true,
     val cabinaMuted: Boolean = false,
     val karaokeMode: Boolean,
     val lastCommand: String?,
@@ -28,7 +28,9 @@ data class TvTrack(
     val id: String,
     val title: String,
     val artist: String,
+    val source: String = "youtube",
     val youtubeVideoId: String?,
+    val storagePath: String? = null,
     val thumbnailUrl: String?,
     val durationSeconds: Int,
     val voteCount: Int,
@@ -156,9 +158,9 @@ object TvFeedParser {
         val playObj = root.optJSONObject("playback") ?: JSONObject()
         val cfgObj = playObj.optJSONObject("displayConfig")
         val tvMutedFlag = if (playObj.has("tvMuted")) {
-            playObj.optBoolean("tvMuted", false)
+            playObj.optBoolean("tvMuted", true)
         } else {
-            cfgObj?.optBoolean("tvMuted", false) ?: false
+            cfgObj?.optBoolean("tvMuted", true) ?: true
         }
         val playback = TvPlayback(
             isPaused = playObj.optBoolean("isPaused", false),
@@ -177,11 +179,15 @@ object TvFeedParser {
 
         val nowObj = root.optJSONObject("nowPlaying")
         val nowPlaying = if (nowObj != null && !nowObj.isNull("title")) {
+            val sp = optNullableString(nowObj, "storagePath")
+            val src = optNullableString(nowObj, "source") ?: if (sp != null) "upload" else "youtube"
             TvTrack(
                 id = nowObj.optString("id", ""),
                 title = nowObj.optString("title", "Sin título"),
                 artist = nowObj.optString("artist", "Desconocido"),
+                source = src,
                 youtubeVideoId = optNullableString(nowObj, "youtubeVideoId"),
+                storagePath = sp,
                 thumbnailUrl = optNullableString(nowObj, "thumbnailUrl"),
                 durationSeconds = nowObj.optInt("durationSeconds", 210),
                 voteCount = nowObj.optInt("voteCount", 0),
@@ -198,12 +204,16 @@ object TvFeedParser {
         if (queueArr != null) {
             for (i in 0 until queueArr.length()) {
                 val item = queueArr.getJSONObject(i)
+                val sp = optNullableString(item, "storagePath")
+                val src = optNullableString(item, "source") ?: if (sp != null) "upload" else "youtube"
                 queueList.add(
                     TvTrack(
                         id = item.optString("id", ""),
                         title = item.optString("title", ""),
                         artist = item.optString("artist", ""),
+                        source = src,
                         youtubeVideoId = optNullableString(item, "youtubeVideoId"),
+                        storagePath = sp,
                         thumbnailUrl = optNullableString(item, "thumbnailUrl"),
                         durationSeconds = item.optInt("durationSeconds", 210),
                         voteCount = item.optInt("voteCount", 0),

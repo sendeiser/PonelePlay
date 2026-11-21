@@ -1,8 +1,12 @@
 package app.poneleplay.tv.ui
 
 import android.annotation.SuppressLint
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import android.media.PlaybackParams
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
@@ -11,9 +15,13 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.poneleplay.tv.sync.SyncClockEstimator
 
 class YouTubeBridge(
     private val onEnded: () -> Unit,
@@ -84,10 +92,181 @@ class VideoPlayerController {
     var onVideoCuedCallback: ((String) -> Unit)? = null
     var onFirstFramePlayingCallback: ((String, Float) -> Unit)? = null
 
+    // Native MediaPlayer for uploaded MP3 tracks (supports smooth 0.95x..1.05x elastic sync on API 24+)
+    private var mediaPlayer: MediaPlayer? = null
+    @Volatile internal var isUploadMode: Boolean = false
+    @Volatile private var currentUploadUrl: String? = null
+    @Volatile private var uploadPrepared: Boolean = false
+    @Volatile private var uploadDesiredPaused: Boolean = false
+    @Volatile private var uploadPendingSeekMs: Int = 0
+    @Volatile private var uploadVolume: Int = 85
+    @Volatile private var uploadMuted: Boolean = true
+    @Volatile private var uploadPlaybackRate: Float = 1.0f
+
     private fun sanitizeId(raw: String): String =
         raw.replace("'", "").replace("\\", "").replace("\n", "").trim()
 
+    fun stopUploadAudio() {
+        isUploadMode = false
+        currentUploadUrl = null
+        uploadPrepared = false
+        uploadPlaybackRate = 1.0f
+        val mp = mediaPlayer
+        mediaPlayer = null
+        if (mp != null) {
+            try {
+                if (mp.isPlaying) mp.stop()
+            } catch (_: Exception) {}
+            try {
+                mp.reset()
+                mp.release()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun loadUploadAudio(
+        audioUrl: String,
+        trackKey: String,
+        startSeconds: Float = 0f,
+        volume: Int = 85,
+        isMuted: Boolean = false,
+        startPaused: Boolean = false,
+        onEnded: () -> Unit = {}
+    ) {
+        val cleanUrl = audioUrl.trim()
+        if (cleanUrl.isEmpty()) return
+
+        uploadVolume = volume.coerceIn(0, 100)
+        uploadMuted = isMuted
+        uploadDesiredPaused = startPaused
+
+        if (isUploadMode && currentUploadUrl == cleanUrl && mediaPlayer != null) {
+            applyUploadAudioGain()
+            if (startPaused) {
+                try {
+                    if (uploadPrepared && mediaPlayer?.isPlaying == true) mediaPlayer?.pause()
+                } catch (_: Exception) {}
+                currentPlayerState = 2
+            } else if (uploadPrepared) {
+                try {
+                    if (mediaPlayer?.isPlaying != true) mediaPlayer?.start()
+                    currentPlayerState = 1
+                } catch (_: Exception) {}
+            }
+            return
+        }
+
+        stopUploadAudio()
+        isUploadMode = true
+        currentUploadUrl = cleanUrl
+        currentVideoId = trackKey
+        uploadPrepared = false
+        uploadPendingSeekMs = (startSeconds.coerceAtLeast(0f) * 1000f).toInt()
+        currentPositionSec = startSeconds.coerceAtLeast(0f)
+        positionCapturedElapsedMs = SystemClock.elapsedRealtime()
+        currentPlayerState = 3 // BUFFERING
+
+        try {
+            val mp = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                setDataSource(cleanUrl)
+                setOnPreparedListener { preparedMp ->
+                    if (mediaPlayer !== preparedMp || !isUploadMode) return@setOnPreparedListener
+                    uploadPrepared = true
+                    applyUploadAudioGain()
+                    if (uploadPendingSeekMs > 250) {
+                        try {
+                            preparedMp.seekTo(uploadPendingSeekMs)
+                        } catch (_: Exception) {}
+                    }
+                    onVideoCuedCallback?.invoke(trackKey)
+                    if (!uploadDesiredPaused && activeBarrierVideoId != trackKey) {
+                        try {
+                            preparedMp.start()
+                            currentPositionSec = preparedMp.currentPosition / 1000f
+                            positionCapturedElapsedMs = SystemClock.elapsedRealtime()
+                            currentPlayerState = 1
+                            onFirstFramePlayingCallback?.invoke(trackKey, currentPositionSec)
+                        } catch (_: Exception) {}
+                    } else {
+                        currentPlayerState = 2
+                    }
+                }
+                setOnCompletionListener { completedMp ->
+                    if (mediaPlayer !== completedMp || !isUploadMode) return@setOnCompletionListener
+                    currentPlayerState = 0
+                    onEnded()
+                }
+                setOnErrorListener { errMp, what, extra ->
+                    android.util.Log.w("PonelePlayTV", "MediaPlayer error ($what/$extra) for $cleanUrl")
+                    if (mediaPlayer === errMp) {
+                        uploadPrepared = false
+                        currentPlayerState = -1
+                    }
+                    true
+                }
+                prepareAsync()
+            }
+            mediaPlayer = mp
+        } catch (e: Exception) {
+            android.util.Log.e("PonelePlayTV", "Error preparing upload audio: ${e.message}")
+            stopUploadAudio()
+        }
+    }
+
+    private fun applyUploadAudioGain() {
+        val mp = mediaPlayer ?: return
+        val gain = if (uploadMuted) 0f else (uploadVolume.coerceIn(0, 100) / 100f)
+        try {
+            mp.setVolume(gain, gain)
+        } catch (_: Exception) {}
+    }
+
+    fun getLivePositionSec(): Double {
+        if (isUploadMode) {
+            val mp = mediaPlayer
+            if (mp != null && uploadPrepared) {
+                return try {
+                    val pos = mp.currentPosition / 1000.0
+                    currentPositionSec = pos.toFloat()
+                    positionCapturedElapsedMs = SystemClock.elapsedRealtime()
+                    pos
+                } catch (_: Exception) {
+                    currentPositionSec.toDouble()
+                }
+            }
+            return currentPositionSec.toDouble()
+        }
+        return SyncClockEstimator.interpolatePositionSec(
+            lastKnownSec = currentPositionSec.toDouble(),
+            capturedElapsedMs = positionCapturedElapsedMs,
+            nowElapsedMs = SystemClock.elapsedRealtime(),
+            isPlaying = currentPlayerState == 1
+        )
+    }
+
+    fun setPlaybackRate(rate: Float) {
+        val clamped = rate.coerceIn(0.95f, 1.05f)
+        if (isUploadMode) {
+            val mp = mediaPlayer ?: return
+            if (!uploadPrepared) return
+            if (kotlin.math.abs(uploadPlaybackRate - clamped) < 0.002f) return
+            try {
+                val params = mp.playbackParams
+                params.speed = clamped
+                mp.playbackParams = params
+                uploadPlaybackRate = clamped
+            } catch (_: Exception) {}
+        }
+    }
+
     fun loadVideo(videoId: String, startSeconds: Float = 0f) {
+        stopUploadAudio()
         val cleanId = sanitizeId(videoId)
         if (cleanId.isEmpty() || cleanId == currentVideoId || cleanId == activeBarrierVideoId) return
         currentVideoId = cleanId
@@ -101,6 +280,18 @@ class VideoPlayerController {
         activeBarrierVideoId = cleanId
         currentVideoId = cleanId
         val safeSec = startSeconds.coerceAtLeast(0f)
+        if (isUploadMode) {
+            uploadDesiredPaused = true
+            uploadPendingSeekMs = (safeSec * 1000f).toInt()
+            if (uploadPrepared) {
+                try {
+                    mediaPlayer?.pause()
+                    mediaPlayer?.seekTo(uploadPendingSeekMs)
+                } catch (_: Exception) {}
+                onVideoCuedCallback?.invoke(cleanId)
+            }
+            return
+        }
         webView?.evaluateJavascript("cueVideoForBarrier('$cleanId', $safeSec);", null)
     }
 
@@ -116,26 +307,79 @@ class VideoPlayerController {
         currentVideoId = cleanId
         val safeSec = startSeconds.coerceAtLeast(0f)
         val safeVol = volume.coerceIn(0, 100)
+        if (isUploadMode) {
+            uploadDesiredPaused = false
+            uploadVolume = safeVol
+            uploadMuted = isMuted
+            uploadPendingSeekMs = (safeSec * 1000f).toInt()
+            applyUploadAudioGain()
+            if (uploadPrepared) {
+                try {
+                    if (uploadPendingSeekMs > 50) mediaPlayer?.seekTo(uploadPendingSeekMs)
+                    setPlaybackRate(1.0f)
+                    mediaPlayer?.start()
+                    currentPlayerState = 1
+                } catch (_: Exception) {}
+            }
+            return
+        }
         webView?.evaluateJavascript("startBarrierPlay('$cleanId', $safeSec, $safeVol, $isMuted);", null)
     }
 
     fun play() {
         if (activeBarrierVideoId != null && activeBarrierVideoId == currentVideoId) return
+        if (isUploadMode) {
+            uploadDesiredPaused = false
+            if (uploadPrepared) {
+                try {
+                    applyUploadAudioGain()
+                    mediaPlayer?.start()
+                    currentPlayerState = 1
+                } catch (_: Exception) {}
+            }
+            return
+        }
         webView?.evaluateJavascript("playVideo();", null)
     }
 
     fun pause() {
+        if (isUploadMode) {
+            uploadDesiredPaused = true
+            if (uploadPrepared) {
+                try {
+                    if (mediaPlayer?.isPlaying == true) mediaPlayer?.pause()
+                    setPlaybackRate(1.0f)
+                    currentPlayerState = 2
+                } catch (_: Exception) {}
+            }
+            return
+        }
         webView?.evaluateJavascript("pauseVideo();", null)
     }
 
     fun togglePlayPause() {
+        if (isUploadMode) {
+            if (uploadDesiredPaused) play() else pause()
+            return
+        }
         webView?.evaluateJavascript("togglePlayPause();", null)
     }
 
     fun seekTo(seconds: Float) {
         val safeSec = seconds.coerceAtLeast(0f)
         currentPositionSec = safeSec
-        positionCapturedElapsedMs = android.os.SystemClock.elapsedRealtime()
+        positionCapturedElapsedMs = SystemClock.elapsedRealtime()
+        if (isUploadMode) {
+            val targetMs = (safeSec * 1000f).toInt()
+            uploadPendingSeekMs = targetMs
+            if (uploadPrepared) {
+                try {
+                    setPlaybackRate(1.0f)
+                    mediaPlayer?.seekTo(targetMs)
+                } catch (_: Exception) {}
+            }
+            return
+        }
         webView?.evaluateJavascript("seekTo($safeSec);", null)
     }
 
@@ -144,14 +388,29 @@ class VideoPlayerController {
     }
 
     fun setVolume(volume: Int) {
+        uploadVolume = volume.coerceIn(0, 100)
+        if (isUploadMode) {
+            applyUploadAudioGain()
+            return
+        }
         webView?.evaluateJavascript("setVolume(${volume.coerceIn(0, 100)});", null)
     }
 
     fun mute() {
+        uploadMuted = true
+        if (isUploadMode) {
+            applyUploadAudioGain()
+            return
+        }
         webView?.evaluateJavascript("mute();", null)
     }
 
     fun unMute() {
+        uploadMuted = false
+        if (isUploadMode) {
+            applyUploadAudioGain()
+            return
+        }
         webView?.evaluateJavascript("unMute();", null)
     }
 
@@ -159,9 +418,26 @@ class VideoPlayerController {
         webView?.evaluateJavascript("setLegacyWsEnabled($enabled);", null)
     }
 
-    fun release() {
-        webView?.destroy()
+    fun detachWebView() {
+        val wv = webView
         webView = null
+        if (!isUploadMode) {
+            currentVideoId = null
+            currentPlayerState = -1
+        }
+        if (wv != null) {
+            try {
+                wv.evaluateJavascript("pauseVideo(); mute();", null)
+            } catch (_: Exception) {}
+            try {
+                wv.destroy()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun release() {
+        stopUploadAudio()
+        detachWebView()
     }
 }
 
@@ -169,27 +445,69 @@ class VideoPlayerController {
 @Composable
 fun NativeVideoPlayer(
     videoId: String,
+    source: String = "youtube",
+    storagePath: String? = null,
+    serverUrl: String = "https://poneleplay.netlify.app",
+    audioActive: Boolean = false,
     venueSlug: String = "",
     deviceId: String = "",
     isPaused: Boolean = false,
     volume: Int = 85,
-    isMuted: Boolean = false,
+    isMuted: Boolean = true,
     initialPositionSeconds: Float = 0f,
-    useLegacySupabaseWs: Boolean = true,
+    useLegacySupabaseWs: Boolean = false,
     controller: VideoPlayerController,
     modifier: Modifier = Modifier,
     onEnded: () -> Unit = {},
     onDisplayConfig: (String) -> Unit = {}
 ) {
-    // React to video changes (deferred when an active Ready-Barrier is pre-cueing this video)
-    LaunchedEffect(videoId) {
-        if (videoId.isNotBlank() && controller.activeBarrierVideoId != videoId) {
+    val isUploadTrack = source.equals("upload", ignoreCase = true) || !storagePath.isNullOrBlank()
+    val shouldMountYoutubeAudio = audioActive && !isUploadTrack && videoId.isNotBlank()
+    val latestOnEnded by rememberUpdatedState(onEnded)
+
+    // Shut down all TV audio immediately in CABINA_ONLY mode
+    LaunchedEffect(audioActive, isUploadTrack) {
+        if (!audioActive) {
+            controller.stopUploadAudio()
+            controller.pause()
+            controller.mute()
+        } else if (!isUploadTrack) {
+            controller.stopUploadAudio()
+        }
+    }
+
+    // Native MediaPlayer lifecycle for uploaded MP3 tracks (when TV audio is active)
+    val uploadAudioUrl = remember(serverUrl, storagePath, videoId, isUploadTrack) {
+        if (isUploadTrack) {
+            SyncClockEstimator.resolveUploadAudioUrl(serverUrl, storagePath, videoId)
+        } else {
+            ""
+        }
+    }
+    LaunchedEffect(audioActive, isUploadTrack, uploadAudioUrl, isPaused) {
+        if (audioActive && isUploadTrack && uploadAudioUrl.isNotBlank()) {
+            controller.loadUploadAudio(
+                audioUrl = uploadAudioUrl,
+                trackKey = storagePath ?: videoId.ifBlank { uploadAudioUrl },
+                startSeconds = initialPositionSeconds.coerceAtLeast(0f),
+                volume = volume,
+                isMuted = isMuted,
+                startPaused = isPaused,
+                onEnded = { latestOnEnded() }
+            )
+        }
+    }
+
+    // React to YouTube track changes ONLY when hidden YouTube audio engine is mounted
+    LaunchedEffect(shouldMountYoutubeAudio, videoId) {
+        if (shouldMountYoutubeAudio && controller.activeBarrierVideoId != videoId) {
             controller.loadVideo(videoId, initialPositionSeconds.coerceAtLeast(0f))
         }
     }
 
-    // Follow the server pause state unless holding for Ready-Barrier release
-    LaunchedEffect(isPaused, videoId) {
+    // Follow server pause state when TV audio is active
+    LaunchedEffect(audioActive, isPaused, videoId, uploadAudioUrl) {
+        if (!audioActive) return@LaunchedEffect
         if (isPaused) {
             controller.pause()
         } else if (controller.activeBarrierVideoId != videoId) {
@@ -197,100 +515,109 @@ fun NativeVideoPlayer(
         }
     }
 
-    // React to mute
-    LaunchedEffect(isMuted) {
-        if (isMuted) controller.mute() else controller.unMute()
-    }
-
-    // React to volume
-    LaunchedEffect(volume) {
-        controller.setVolume(volume)
+    // React to mute / volume changes
+    LaunchedEffect(audioActive, isMuted, volume) {
+        if (!audioActive || isMuted) {
+            controller.mute()
+        } else {
+            controller.unMute()
+            controller.setVolume(volume)
+        }
     }
 
     // Toggle legacy Supabase WebSocket off immediately once LAN/Cloud sync is active
-    LaunchedEffect(useLegacySupabaseWs) {
-        controller.setLegacyWsEnabled(useLegacySupabaseWs)
+    LaunchedEffect(shouldMountYoutubeAudio, useLegacySupabaseWs) {
+        if (shouldMountYoutubeAudio) {
+            controller.setLegacyWsEnabled(useLegacySupabaseWs)
+        }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            WebView(context).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-
-                setBackgroundColor(0xFF000000.toInt())
-
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    mediaPlaybackRequiresUserGesture = false
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                    allowContentAccess = true
-                    allowFileAccess = true
-                    mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                    // Desktop Chrome User-Agent without '; wv' prevents mobile touch play-pause overlay and bypasses error 150/152-4
-                    userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-                }
-
-                webChromeClient = object : WebChromeClient() {
-                    override fun onPermissionRequest(request: PermissionRequest?) {
-                        request?.grant(request.resources)
-                    }
-
-                    override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                        android.util.Log.d("PonelePlayTV", "[WebView] ${consoleMessage?.message()}")
-                        return true
-                    }
-                }
-                webViewClient = WebViewClient()
-
-                addJavascriptInterface(
-                    YouTubeBridge(
-                        onEnded = onEnded,
-                        getDeviceId = { deviceId },
-                        onDisplayConfig = onDisplayConfig,
-                        onVideoCued = { cuedId ->
-                            controller.onVideoCuedCallback?.invoke(cuedId)
-                        },
-                        onFirstFramePlaying = { playingId, posSec ->
-                            controller.currentPositionSec = posSec
-                            controller.positionCapturedElapsedMs = android.os.SystemClock.elapsedRealtime()
-                            controller.currentPlayerState = 1
-                            controller.onFirstFramePlayingCallback?.invoke(playingId, posSec)
-                        },
-                        onTimeUpdate = { posSec, state ->
-                            controller.currentPositionSec = posSec
-                            controller.positionCapturedElapsedMs = android.os.SystemClock.elapsedRealtime()
-                            controller.currentPlayerState = state
-                        }
-                    ),
-                    "AndroidBridge"
-                )
-
-                controller.webView = this
-                controller.currentVideoId = videoId
-
-                val html = buildPlayerHtml(
-                    videoId = videoId,
-                    venueSlug = venueSlug,
-                    deviceId = deviceId,
-                    isPaused = isPaused,
-                    volume = volume,
-                    isMuted = isMuted,
-                    initialPositionSeconds = initialPositionSeconds.coerceAtLeast(0f),
-                    useLegacySupabaseWs = useLegacySupabaseWs
-                )
-                val originUrl = "https://poneleplay.netlify.app"
-                loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
+    // Cleanly destroy hidden YouTube WebView whenever TV leaves YouTube audio mode (prevents dead remounts & saves RAM)
+    DisposableEffect(shouldMountYoutubeAudio) {
+        onDispose {
+            if (!shouldMountYoutubeAudio) {
+                controller.detachWebView()
             }
-        },
-        update = {
-            controller.webView = it
         }
-    )
+    }
+
+    // Audio-only: hidden 1dp invisible WebView mounted ONLY when TV is actively playing a YouTube track
+    if (shouldMountYoutubeAudio) {
+        AndroidView(
+            modifier = modifier.size(1.dp).alpha(0f),
+            factory = { context ->
+                WebView(context).apply {
+                    layoutParams = ViewGroup.LayoutParams(200, 112)
+                    setBackgroundColor(0xFF000000.toInt())
+
+                    settings.apply {
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        mediaPlaybackRequiresUserGesture = false
+                        cacheMode = WebSettings.LOAD_DEFAULT
+                        allowContentAccess = true
+                        allowFileAccess = true
+                        mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                        userAgentString = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                    }
+
+                    webChromeClient = object : WebChromeClient() {
+                        override fun onPermissionRequest(request: PermissionRequest?) {
+                            request?.grant(request.resources)
+                        }
+
+                        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                            android.util.Log.d("PonelePlayTV", "[WebView] ${consoleMessage?.message()}")
+                            return true
+                        }
+                    }
+                    webViewClient = WebViewClient()
+
+                    addJavascriptInterface(
+                        YouTubeBridge(
+                            onEnded = { latestOnEnded() },
+                            getDeviceId = { deviceId },
+                            onDisplayConfig = onDisplayConfig,
+                            onVideoCued = { cuedId ->
+                                controller.onVideoCuedCallback?.invoke(cuedId)
+                            },
+                            onFirstFramePlaying = { playingId, posSec ->
+                                controller.currentPositionSec = posSec
+                                controller.positionCapturedElapsedMs = SystemClock.elapsedRealtime()
+                                controller.currentPlayerState = 1
+                                controller.onFirstFramePlayingCallback?.invoke(playingId, posSec)
+                            },
+                            onTimeUpdate = { posSec, state ->
+                                controller.currentPositionSec = posSec
+                                controller.positionCapturedElapsedMs = SystemClock.elapsedRealtime()
+                                controller.currentPlayerState = state
+                            }
+                        ),
+                        "AndroidBridge"
+                    )
+
+                    controller.webView = this
+                    controller.currentVideoId = videoId
+
+                    val html = buildPlayerHtml(
+                        videoId = videoId,
+                        venueSlug = venueSlug,
+                        deviceId = deviceId,
+                        isPaused = isPaused,
+                        volume = volume,
+                        isMuted = isMuted,
+                        initialPositionSeconds = initialPositionSeconds.coerceAtLeast(0f),
+                        useLegacySupabaseWs = useLegacySupabaseWs
+                    )
+                    val originUrl = "https://poneleplay.netlify.app"
+                    loadDataWithBaseURL(originUrl, html, "text/html", "UTF-8", originUrl)
+                }
+            },
+            update = {
+                controller.webView = it
+            }
+        )
+    }
 }
 
 private fun buildPlayerHtml(

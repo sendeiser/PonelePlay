@@ -47,7 +47,6 @@ import app.poneleplay.tv.sync.SyncPreloadData
 import app.poneleplay.tv.sync.SyncStatusState
 import app.poneleplay.tv.sync.TvSyncListener
 import app.poneleplay.tv.sync.TvSyncSocketClient
-import app.poneleplay.tv.ui.NativeVideoPlayer
 import app.poneleplay.tv.ui.TvPairingScreen
 import app.poneleplay.tv.ui.TvScreen
 import app.poneleplay.tv.ui.TvScreenMode
@@ -55,6 +54,7 @@ import app.poneleplay.tv.ui.TvSettingsDialog
 import app.poneleplay.tv.ui.TvUpdateDialog
 import app.poneleplay.tv.ui.UpdateDialogState
 import app.poneleplay.tv.ui.VideoPlayerController
+import app.poneleplay.tv.ui.normalizeTvScreenMode
 import app.poneleplay.tv.ui.theme.PonelePlayTVTheme
 import app.poneleplay.tv.updater.AppUpdateInfo
 import app.poneleplay.tv.updater.TvAppUpdater
@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private val videoController = VideoPlayerController()
     private var showSettingsState = mutableStateOf(false)
-    private var screenModeState = mutableStateOf(TvScreenMode.VIDEO)
+    private var screenModeState = mutableStateOf(TvScreenMode.SALON)
     private var showQueueState = mutableStateOf(true)
     private var showProposalsState = mutableStateOf(true)
     private var themeState = mutableStateOf("neon")
@@ -95,12 +95,8 @@ class MainActivity : ComponentActivity() {
 
         prefs = getSharedPreferences("poneleplay_tv_prefs", Context.MODE_PRIVATE)
 
-        val savedMode = prefs.getString("tv_screen_mode", "VIDEO")
-        screenModeState.value = when (savedMode?.uppercase()) {
-            "PLAYLIST" -> TvScreenMode.PLAYLIST
-            "CLEAN" -> TvScreenMode.CLEAN
-            else -> TvScreenMode.VIDEO
-        }
+        val savedMode = prefs.getString("tv_screen_mode", "SALON")
+        screenModeState.value = normalizeTvScreenMode(savedMode)
         showQueueState.value = prefs.getBoolean("tv_show_queue", true)
         showProposalsState.value = prefs.getBoolean("tv_show_proposals", true)
         themeState.value = prefs.getString("tv_theme", "neon") ?: "neon"
@@ -141,11 +137,7 @@ class MainActivity : ComponentActivity() {
             if (obj.has("mode")) {
                 val modeStr = obj.optString("mode", "")
                 if (modeStr.isNotBlank()) {
-                    val nextMode = when (modeStr.uppercase()) {
-                        "PLAYLIST" -> TvScreenMode.PLAYLIST
-                        "CLEAN" -> TvScreenMode.CLEAN
-                        else -> TvScreenMode.VIDEO
-                    }
+                    val nextMode = normalizeTvScreenMode(modeStr)
                     screenModeState.value = nextMode
                     prefs.edit().putString("tv_screen_mode", nextMode.name).apply()
                 }
@@ -186,10 +178,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleMode() {
-        val next = if (screenModeState.value == TvScreenMode.VIDEO) {
-            TvScreenMode.PLAYLIST
+        val next = if (screenModeState.value == TvScreenMode.SALON) {
+            TvScreenMode.PORTADA
         } else {
-            TvScreenMode.VIDEO
+            TvScreenMode.SALON
         }
         screenModeState.value = next
         prefs.edit().putString("tv_screen_mode", next.name).apply()
@@ -360,9 +352,9 @@ fun NativeTvApp(
 
     val currentVersionName = remember {
         try {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "2.9.0"
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "3.0.0"
         } catch (_: Exception) {
-            "2.9.0"
+            "3.0.0"
         }
     }
 
@@ -532,9 +524,12 @@ fun NativeTvApp(
 
                 val existingFeed = feed
                 if (existingFeed != null) {
-                    val updatedTrack = anchor.track?.takeIf { !it.youtubeVideoId.isNullOrBlank() }?.let { t ->
+                    val updatedTrack = anchor.track?.takeIf {
+                        !it.youtubeVideoId.isNullOrBlank() || !it.storagePath.isNullOrBlank()
+                    }?.let { t ->
                         if (existingFeed.nowPlaying?.id == t.itemId &&
-                            existingFeed.nowPlaying.youtubeVideoId == t.youtubeVideoId
+                            existingFeed.nowPlaying.youtubeVideoId == t.youtubeVideoId &&
+                            existingFeed.nowPlaying.storagePath == t.storagePath
                         ) {
                             existingFeed.nowPlaying
                         } else {
@@ -542,7 +537,9 @@ fun NativeTvApp(
                                 id = t.itemId,
                                 title = t.title.ifBlank { existingFeed.nowPlaying?.title ?: "Reproduciendo" },
                                 artist = t.artist.ifBlank { existingFeed.nowPlaying?.artist ?: "" },
+                                source = t.source,
                                 youtubeVideoId = t.youtubeVideoId,
+                                storagePath = t.storagePath,
                                 thumbnailUrl = existingFeed.nowPlaying?.thumbnailUrl,
                                 durationSeconds = existingFeed.nowPlaying?.durationSeconds ?: 210,
                                 voteCount = existingFeed.nowPlaying?.voteCount ?: 0
@@ -569,7 +566,13 @@ fun NativeTvApp(
             }
 
             override fun onPreload(preload: SyncPreloadData) {
-                val ytId = preload.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
+                val isUpload = preload.track.source.equals("upload", ignoreCase = true) ||
+                    !preload.track.storagePath.isNullOrBlank()
+                val preloadKey = if (isUpload) {
+                    preload.track.storagePath ?: preload.track.itemId
+                } else {
+                    preload.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
+                }
                 activeBarrierTimeoutJob?.cancel()
                 activeScheduledPlayJob?.cancel()
 
@@ -579,12 +582,22 @@ fun NativeTvApp(
                             id = preload.track.itemId,
                             title = preload.track.title.ifBlank { "Cargando..." },
                             artist = preload.track.artist,
-                            youtubeVideoId = ytId,
+                            source = preload.track.source,
+                            youtubeVideoId = preload.track.youtubeVideoId,
+                            storagePath = preload.track.storagePath,
                             thumbnailUrl = null,
                             durationSeconds = 210,
                             voteCount = 0
                         )
                     )
+                }
+
+                // Only hold Ready-Barrier when TV is actively playing audio in BOTH mode
+                val tvMutedNow = currentIsMuted || (liveAnchor?.tvMuted ?: feed?.playback?.tvMuted ?: true)
+                val cabinaMutedNow = liveAnchor?.cabinaMuted ?: feed?.playback?.cabinaMuted ?: false
+                if (tvMutedNow || cabinaMutedNow) {
+                    clientRef?.sendReady(preload.barrierId)
+                    return
                 }
 
                 var readySent = false
@@ -595,11 +608,11 @@ fun NativeTvApp(
                 }
 
                 videoController.onVideoCuedCallback = { cuedId ->
-                    if (cuedId == ytId) {
+                    if (cuedId == preloadKey) {
                         sendReadyOnce()
                     }
                 }
-                videoController.cueVideo(ytId, preload.startPositionSec.toFloat())
+                videoController.cueVideo(preloadKey, preload.startPositionSec.toFloat())
 
                 activeBarrierTimeoutJob = coroutineScope.launch {
                     val msLeft = clientRef?.msUntilServerTime(preload.deadlineServerMs) ?: 1400L
@@ -616,26 +629,36 @@ fun NativeTvApp(
                 if (go.anchor.seq > 0L) lastAnchorSeq = maxOf(lastAnchorSeq, go.anchor.seq)
                 if (go.anchor.seekSeq > 0L) lastAnchorSeekSeq = maxOf(lastAnchorSeekSeq, go.anchor.seekSeq)
 
-                val ytId = go.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
+                val isUpload = go.track.source.equals("upload", ignoreCase = true) ||
+                    !go.track.storagePath.isNullOrBlank()
+                val goKey = if (isUpload) {
+                    go.track.storagePath ?: go.track.itemId
+                } else {
+                    go.track.youtubeVideoId?.takeIf { it.isNotBlank() } ?: return
+                }
                 val waitMs = (clientRef?.msUntilServerTime(go.startAtServerMs) ?: 0L).coerceIn(0L, 1200L)
 
                 activeScheduledPlayJob = coroutineScope.launch {
                     if (waitMs > 0L) delay(waitMs)
                     val effectiveMuted = currentIsMuted || go.anchor.tvMuted
                     val effectiveVol = if (effectiveMuted) 0 else go.anchor.volume
-                    videoController.startScheduledPlay(
-                        videoId = ytId,
-                        startSeconds = go.startPositionSec.toFloat(),
-                        volume = effectiveVol,
-                        isMuted = effectiveMuted
-                    )
+                    if (!effectiveMuted) {
+                        videoController.startScheduledPlay(
+                            videoId = goKey,
+                            startSeconds = go.startPositionSec.toFloat(),
+                            volume = effectiveVol,
+                            isMuted = false
+                        )
+                    }
                     feed?.let { existingFeed ->
                         feed = existingFeed.copy(
                             nowPlaying = TvTrack(
                                 id = go.track.itemId,
                                 title = go.track.title.ifBlank { existingFeed.nowPlaying?.title ?: "" },
                                 artist = go.track.artist.ifBlank { existingFeed.nowPlaying?.artist ?: "" },
-                                youtubeVideoId = ytId,
+                                source = go.track.source,
+                                youtubeVideoId = go.track.youtubeVideoId,
+                                storagePath = go.track.storagePath,
                                 thumbnailUrl = existingFeed.nowPlaying?.thumbnailUrl,
                                 durationSeconds = existingFeed.nowPlaying?.durationSeconds ?: 210,
                                 voteCount = existingFeed.nowPlaying?.voteCount ?: 0
@@ -864,6 +887,10 @@ fun NativeTvApp(
                     estimatedServerMs = { syncClient.estimatedServerMs() },
                     videoController = videoController,
                     onVideoEnded = {
+                        // When a Cabina master is actively connected, Cabina owns onTrackEnded (prevents double skip)
+                        if (syncStatus.connected && syncStatus.masterCount > 0) {
+                            return@TvScreen
+                        }
                         val endedVideoId = currentFeed.nowPlaying?.youtubeVideoId
                         val sentViaWs = currentSyncConnected
                         if (sentViaWs) {

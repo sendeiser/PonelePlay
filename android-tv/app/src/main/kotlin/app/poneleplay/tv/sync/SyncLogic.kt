@@ -19,12 +19,15 @@ data class SyncStatusState(
     val offsetMs: Long = 0L,
     val activeHostLabel: String = "",
     val discoveredLanHost: String? = null,
-    val cloudDiscoveredLanHosts: List<String> = emptyList()
+    val cloudDiscoveredLanHosts: List<String> = emptyList(),
+    val masterCount: Int = 0
 )
 
 data class SyncTrackData(
     val itemId: String,
+    val source: String = "youtube",
     val youtubeVideoId: String?,
+    val storagePath: String? = null,
     val title: String,
     val artist: String
 )
@@ -174,6 +177,61 @@ object SyncClockEstimator {
         }
         val updated = (safePrev + postSeekDriftSec * alpha).coerceIn(0.04, 0.38)
         return kotlin.math.round(updated * 1000.0) / 1000.0
+    }
+
+    /**
+     * Resolves an uploaded MP3 track's playable URL via the signed `/api/audio` proxy
+     * (or passes through direct HTTP/HTTPS URLs).
+     */
+    fun resolveUploadAudioUrl(
+        serverUrl: String,
+        storagePath: String?,
+        youtubeVideoId: String?
+    ): String {
+        val sp = storagePath?.trim().orEmpty()
+        if (sp.isNotEmpty()) {
+            if (sp.startsWith("http://", ignoreCase = true) || sp.startsWith("https://", ignoreCase = true)) {
+                return sp
+            }
+            val base = serverUrl.trimEnd('/')
+            if (sp.startsWith("/api/audio")) {
+                return "$base$sp"
+            }
+            val encoded = URLEncoder.encode(sp, "UTF-8").replace("+", "%20")
+            return "$base/api/audio?path=$encoded"
+        }
+        val yt = youtubeVideoId?.trim().orEmpty()
+        if (yt.startsWith("http://", ignoreCase = true) || yt.startsWith("https://", ignoreCase = true)) {
+            return yt
+        }
+        return ""
+    }
+
+    /**
+     * Computes imperceptible continuous elastic playbackRate (0.95..1.05) for native MediaPlayer
+     * in BOTH mode. Returns null when drift exceeds hard-seek threshold (caller should seek).
+     */
+    fun computeUploadElasticRate(driftSec: Double, isEarlyWindow: Boolean): Double? {
+        if (!driftSec.isFinite()) return 1.0
+        val absDrift = abs(driftSec)
+        val hardThreshold = if (isEarlyWindow) 0.85 else 1.35
+        if (absDrift >= hardThreshold) return null
+        if (absDrift <= 0.05) return 1.0
+        // driftSec = actual - expected: positive means TV is ahead (slow down), negative means behind (speed up)
+        val rawRate = 1.0 - (driftSec * 0.14)
+        val clamped = rawRate.coerceIn(0.95, 1.05)
+        return kotlin.math.round(clamped * 1000.0) / 1000.0
+    }
+
+    /**
+     * Normalizes legacy TV display modes ("VIDEO", "PLAYLIST", "CLEAN") to audio-only modes
+     * ("SALON" or "PORTADA").
+     */
+    fun normalizeScreenModeName(rawMode: String?): String {
+        return when (rawMode?.trim()?.uppercase()) {
+            "PORTADA", "CLEAN" -> "PORTADA"
+            else -> "SALON"
+        }
     }
 
     fun normalizeCloudBaseUrl(rawUrl: String?): String {

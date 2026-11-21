@@ -29,7 +29,7 @@ fun TvSettingsDialog(
     currentSlug: String,
     currentMode: TvScreenMode,
     isMuted: Boolean,
-    currentVersionName: String = "2.9.1",
+    currentVersionName: String = "3.0.0",
     syncStatus: SyncStatusState = SyncStatusState(),
     manualLanHost: String = "",
     isScanningLan: Boolean = false,
@@ -98,10 +98,10 @@ fun TvSettingsDialog(
 
                 // Mode Switcher Button
                 TVButton(
-                    text = if (currentMode == TvScreenMode.VIDEO) {
-                        "📺 Modo Pantalla: 🎬 VIDEO COMPLETO (Clic para cambiar)"
+                    text = if (currentMode == TvScreenMode.SALON) {
+                        "🎵 Vista TV: SALÓN (Portada + Cola + QR — Clic para cambiar)"
                     } else {
-                        "📺 Modo Pantalla: 📋 PLAYLIST & VOTOS (Clic para cambiar)"
+                        "💿 Vista TV: PORTADA (Minimalista + QR — Clic para cambiar)"
                     },
                     onClick = onToggleMode,
                     modifier = Modifier.fillMaxWidth(),
@@ -111,7 +111,7 @@ fun TvSettingsDialog(
 
                 // Mute Toggle Button
                 TVButton(
-                    text = if (isMuted) "🔇 Sonido TV: SILENCIADO (Audio en Cabina)" else "🔊 Sonido TV: ACTIVO (Audio en TV)",
+                    text = if (isMuted) "🔇 Silencio Local TV: ACTIVADO (Solo Cabina)" else "🔊 Audio Local TV: PERMITIDO (Sigue ruteo de Cabina)",
                     onClick = onToggleMute,
                     modifier = Modifier.fillMaxWidth()
                 )

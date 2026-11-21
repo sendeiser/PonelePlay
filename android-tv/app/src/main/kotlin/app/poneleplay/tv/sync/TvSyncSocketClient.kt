@@ -378,6 +378,12 @@ class TvSyncSocketClient(
             "room:snapshot" -> {
                 val snap = msg.optJSONObject("snapshot") ?: return
                 applyCloudLanEndpoints(snap.optJSONArray("lanEndpoints"))
+                snap.optJSONObject("connectedClients")?.let { clientsObj ->
+                    val masters = clientsObj.optInt("masterCount", 0)
+                    if (masters != status.masterCount) {
+                        updateStatus(status.copy(masterCount = masters))
+                    }
+                }
                 val tvFeedObj = snap.optJSONObject("tvFeed")
                 if (tvFeedObj != null) {
                     val feedStr = tvFeedObj.toString()
@@ -395,6 +401,12 @@ class TvSyncSocketClient(
 
             "room:presence" -> {
                 applyCloudLanEndpoints(msg.optJSONArray("lanEndpoints"))
+                msg.optJSONObject("connectedClients")?.let { clientsObj ->
+                    val masters = clientsObj.optInt("masterCount", 0)
+                    if (masters != status.masterCount) {
+                        updateStatus(status.copy(masterCount = masters))
+                    }
+                }
             }
 
             "sync:anchor" -> {
@@ -456,9 +468,16 @@ class TvSyncSocketClient(
 
     private fun parseTrack(obj: JSONObject): SyncTrackData {
         val rawYt = if (obj.isNull("youtubeVideoId")) null else obj.optString("youtubeVideoId", "").trim()
+        val rawStorage = if (obj.isNull("storagePath")) null else obj.optString("storagePath", "").trim()
+        val cleanStorage = rawStorage?.takeIf { it.isNotEmpty() && it != "null" }
+        val rawSource = if (obj.isNull("source")) null else obj.optString("source", "").trim()
+        val resolvedSource = rawSource?.takeIf { it.isNotEmpty() && it != "null" }
+            ?: if (cleanStorage != null) "upload" else "youtube"
         return SyncTrackData(
             itemId = obj.optString("itemId", ""),
+            source = resolvedSource,
             youtubeVideoId = rawYt?.takeIf { it.isNotEmpty() && it != "null" },
+            storagePath = cleanStorage,
             title = obj.optString("title", ""),
             artist = obj.optString("artist", "")
         )
@@ -477,7 +496,7 @@ class TvSyncSocketClient(
             anchorServerMs = obj.optLong("anchorServerMs", 0L),
             volume = obj.optInt("volume", 85),
             cabinaMuted = obj.optBoolean("cabinaMuted", false),
-            tvMuted = obj.optBoolean("tvMuted", false),
+            tvMuted = obj.optBoolean("tvMuted", true),
             karaokeMode = obj.optBoolean("karaokeMode", false),
             lastCommand = lastCmd,
             displayConfigJson = displayObj?.toString()

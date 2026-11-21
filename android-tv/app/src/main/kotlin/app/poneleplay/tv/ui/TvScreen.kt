@@ -58,9 +58,23 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 enum class TvScreenMode {
-    VIDEO,
-    PLAYLIST,
-    CLEAN
+    SALON,
+    PORTADA
+}
+
+fun normalizeTvScreenMode(raw: String?): TvScreenMode {
+    return if (SyncClockEstimator.normalizeScreenModeName(raw) == "PORTADA") {
+        TvScreenMode.PORTADA
+    } else {
+        TvScreenMode.SALON
+    }
+}
+
+private fun formatDurationMmSs(seconds: Int): String {
+    val safe = seconds.coerceAtLeast(0)
+    val mins = safe / 60
+    val secs = safe % 60
+    return String.format(Locale.US, "%d:%02d", mins, secs)
 }
 
 data class TvDesignTheme(
@@ -181,7 +195,14 @@ fun TvScreen(
     // Effective mute and volume state: TV local mute or Cabina tvMuted takes precedence
     // (cabinaMuted only mutes the DJ booth, never the TV)
     val effectiveMuted = localIsMuted || feed.playback.tvMuted
+    val audioActive = !effectiveMuted
+    val syncBothMode = audioActive && !feed.playback.cabinaMuted
     val effectiveVolume = if (effectiveMuted) 0 else feed.playback.volume
+    val audioRoutingLabel = when {
+        effectiveMuted -> "🎧 SOLO CABINA"
+        feed.playback.cabinaMuted -> "📺 AUDIO EN TV"
+        else -> "🔊 CABINA + TV"
+    }
 
     // Reactive Control: React to master control commands & seekSeq from DJ booth (Cabina)
     var lastExecutedSeq by remember { mutableStateOf(feed.playback.commandSeq) }
@@ -190,26 +211,30 @@ fun TvScreen(
         if (feed.playback.seekSeq > 0L && feed.playback.seekSeq != lastExecutedSeekSeq) {
             lastExecutedSeekSeq = feed.playback.seekSeq
             lastExecutedSeq = feed.playback.commandSeq
-            videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
+            if (audioActive) {
+                videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
+            }
             return@LaunchedEffect
         }
         if (feed.playback.commandSeq > lastExecutedSeq) {
             lastExecutedSeq = feed.playback.commandSeq
             when (feed.playback.lastCommand) {
                 "pause" -> videoController.pause()
-                "resume" -> videoController.play()
-                "toggle_pause" -> videoController.togglePlayPause()
+                "resume" -> if (audioActive) videoController.play()
+                "toggle_pause" -> if (audioActive) videoController.togglePlayPause()
                 "seek" -> {
-                    videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
+                    if (audioActive) {
+                        videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
+                    }
                 }
                 "set_volume" -> {
-                    if (!localIsMuted && !feed.playback.tvMuted) {
+                    if (audioActive) {
                         videoController.setVolume(feed.playback.volume)
                         videoController.unMute()
                     }
                 }
                 "set_tv_mute" -> {
-                    if (localIsMuted || feed.playback.tvMuted) {
+                    if (effectiveMuted) {
                         videoController.mute()
                     } else {
                         videoController.unMute()
@@ -219,10 +244,10 @@ fun TvScreen(
                     if (feed.playback.tvMuted) videoController.mute()
                 }
                 "unmute" -> {
-                    if (!localIsMuted && !feed.playback.tvMuted) videoController.unMute()
+                    if (audioActive) videoController.unMute()
                 }
                 "skip" -> onVideoEnded()
-                "play_now" -> videoController.play()
+                "play_now" -> if (audioActive) videoController.play()
             }
         }
     }
@@ -236,34 +261,82 @@ fun TvScreen(
         }
     }
 
-    val currentVideoId = feed.nowPlaying?.youtubeVideoId ?: "oMpaVIio3UQ"
+    val currentTrack = feed.nowPlaying
+    val currentSource = currentTrack?.source ?: "youtube"
+    val currentStoragePath = currentTrack?.storagePath
+    val currentVideoId = currentTrack?.youtubeVideoId ?: ""
+    val currentTrackKey = currentTrack?.let {
+        "${it.source}:${it.storagePath ?: it.youtubeVideoId ?: it.id}"
+    } ?: ""
+    val trackDurationSec = (currentTrack?.durationSeconds ?: 210).coerceAtLeast(1)
 
     // Compute live initial position when joining a playing room mid-track using synced clock offset
-    val computedInitialSec = remember(currentVideoId, liveAnchor?.seq, feed.playback.positionSeconds) {
+    val computedInitialSec = remember(currentTrackKey, liveAnchor?.seq, feed.playback.positionSeconds) {
         val anchor = liveAnchor
-        if (anchor != null && estimatedServerMs != null && anchor.track?.youtubeVideoId == currentVideoId) {
+        val matchesAnchor = anchor?.track != null && (
+            (!currentStoragePath.isNullOrBlank() && anchor.track.storagePath == currentStoragePath) ||
+            (currentVideoId.isNotBlank() && anchor.track.youtubeVideoId == currentVideoId)
+        )
+        if (anchor != null && estimatedServerMs != null && matchesAnchor) {
             SyncClockEstimator.computeExpectedPositionSec(anchor, estimatedServerMs()).toFloat()
         } else {
             feed.playback.positionSeconds.coerceAtLeast(0f)
         }
     }
 
-    // Continuous clock-locked drift guard when connected to LAN or Cloud WS.
-    // liveAnchor/feed/estimatedServerMs are captured via rememberUpdatedState so frequent progress updates
-    // do NOT cancel the polling loop (previous bug canceled delay on every anchor tick!).
+    // Continuous clock-locked progress ticker (250ms) — drives TV progress bar in CABINA_ONLY, TV_ONLY, and BOTH!
     val latestAnchor by rememberUpdatedState(liveAnchor)
     val latestFeed by rememberUpdatedState(feed)
     val latestEstimatedServerMs by rememberUpdatedState(estimatedServerMs)
-    var lastDriftCorrectionElapsedAt by remember { mutableStateOf(0L) }
-    var lastDriftTrackStartElapsedAt by remember(currentVideoId) { mutableStateOf(SystemClock.elapsedRealtime()) }
-    var adaptiveSeekLeadSec by remember { mutableStateOf(0.20) }
-    var pendingVerifyAtElapsedMs by remember(currentVideoId) { mutableStateOf<Long?>(null) }
-    var pendingVerifyBaselineLead by remember(currentVideoId) { mutableStateOf(0.20) }
-    var firstFrameTick by remember(currentVideoId) { mutableStateOf(0) }
+    val latestAudioActive by rememberUpdatedState(audioActive)
+    val latestSyncBothMode by rememberUpdatedState(syncBothMode)
 
-    DisposableEffect(videoController, currentVideoId) {
-        val cb: (String, Float) -> Unit = { playingVideoId, _ ->
-            if (playingVideoId == currentVideoId) {
+    var elapsedSec by remember(currentTrackKey) { mutableStateOf(computedInitialSec.toInt().coerceAtLeast(0)) }
+    LaunchedEffect(currentTrackKey, feed.playback.isPaused) {
+        var fallbackFloat = computedInitialSec.toDouble().coerceAtLeast(0.0)
+        while (isActive) {
+            val anchor = latestAnchor
+            val estClock = latestEstimatedServerMs
+            val curFeed = latestFeed
+            val computedSec = when {
+                anchor?.track != null && estClock != null -> {
+                    SyncClockEstimator.computeExpectedPositionSec(anchor, estClock())
+                }
+                curFeed.playback.anchorTimestampMs > 0L -> {
+                    if (curFeed.playback.isPaused) {
+                        curFeed.playback.positionSeconds.toDouble().coerceAtLeast(0.0)
+                    } else {
+                        val delta = ((System.currentTimeMillis() - curFeed.playback.anchorTimestampMs) / 1000.0).coerceAtLeast(0.0)
+                        (curFeed.playback.positionSeconds.toDouble() + delta).coerceAtLeast(0.0)
+                    }
+                }
+                else -> {
+                    if (!curFeed.playback.isPaused) {
+                        fallbackFloat += 0.25
+                    }
+                    fallbackFloat
+                }
+            }
+            fallbackFloat = computedSec
+            val clamped = computedSec.toInt().coerceIn(0, (curFeed.nowPlaying?.durationSeconds ?: 210).coerceAtLeast(1))
+            if (clamped != elapsedSec) {
+                elapsedSec = clamped
+            }
+            delay(250L)
+        }
+    }
+
+    // Continuous clock-locked drift guard — runs ONLY when TV audio is active (TV_ONLY or BOTH)
+    var lastDriftCorrectionElapsedAt by remember { mutableStateOf(0L) }
+    var lastDriftTrackStartElapsedAt by remember(currentTrackKey) { mutableStateOf(SystemClock.elapsedRealtime()) }
+    var adaptiveSeekLeadSec by remember { mutableStateOf(0.20) }
+    var pendingVerifyAtElapsedMs by remember(currentTrackKey) { mutableStateOf<Long?>(null) }
+    var pendingVerifyBaselineLead by remember(currentTrackKey) { mutableStateOf(0.20) }
+    var firstFrameTick by remember(currentTrackKey) { mutableStateOf(0) }
+
+    DisposableEffect(videoController, currentTrackKey) {
+        val cb: (String, Float) -> Unit = { playingId, _ ->
+            if (playingId == currentVideoId || playingId == currentStoragePath || playingId == currentTrack?.id) {
                 firstFrameTick += 1
             }
         }
@@ -275,12 +348,15 @@ fun TvScreen(
         }
     }
 
-    LaunchedEffect(currentVideoId, feed.playback.isPaused, syncStatus?.connected, firstFrameTick) {
-        if (syncStatus?.connected != true) return@LaunchedEffect
+    LaunchedEffect(currentTrackKey, audioActive, feed.playback.isPaused, syncStatus?.connected, firstFrameTick) {
+        if (!audioActive || syncStatus?.connected != true) return@LaunchedEffect
 
-        // Run an immediate drift check right after first-frame decode, then tight periodic ticks
         var skipInitialDelay = firstFrameTick > 0
         while (isActive) {
+            if (!latestAudioActive) {
+                delay(400L)
+                continue
+            }
             val anchor = latestAnchor
             val estClock = latestEstimatedServerMs
             val nowElapsed = SystemClock.elapsedRealtime()
@@ -293,32 +369,70 @@ fun TvScreen(
             if (skipInitialDelay) {
                 skipInitialDelay = false
             } else {
-                delay(if (earlyTick) 200L else 500L)
+                delay(if (earlyTick) 200L else 350L)
             }
 
             val curAnchor = latestAnchor ?: continue
             val curEstClock = latestEstimatedServerMs ?: continue
             val curFeed = latestFeed
-            if (videoController.activeBarrierVideoId == currentVideoId) continue
+            val curTrack = curFeed.nowPlaying ?: continue
+            val isUpload = curTrack.source.equals("upload", ignoreCase = true) || !curTrack.storagePath.isNullOrBlank()
+            val barrierKey = if (isUpload) (curTrack.storagePath ?: curTrack.id) else (curTrack.youtubeVideoId ?: "")
+            if (videoController.activeBarrierVideoId != null && videoController.activeBarrierVideoId == barrierKey) continue
             if (curAnchor.isPaused || curFeed.playback.isPaused) {
                 pendingVerifyAtElapsedMs = null
+                videoController.setPlaybackRate(1.0f)
                 continue
             }
-            if (curAnchor.track?.youtubeVideoId != currentVideoId) continue
-            if (videoController.currentPlayerState != 1) continue
+            val anchorMatches = if (isUpload) {
+                !curTrack.storagePath.isNullOrBlank() && curAnchor.track?.storagePath == curTrack.storagePath
+            } else {
+                !curTrack.youtubeVideoId.isNullOrBlank() && curAnchor.track?.youtubeVideoId == curTrack.youtubeVideoId
+            }
+            if (!anchorMatches) continue
+            // Buffering suppression: never seek while buffering (state 3) or not playing (state != 1)
+            if (videoController.currentPlayerState != 1) {
+                pendingVerifyAtElapsedMs = null
+                videoController.setPlaybackRate(1.0f)
+                continue
+            }
 
             val checkElapsedNow = SystemClock.elapsedRealtime()
             val expectedSec = SyncClockEstimator.computeExpectedPositionSec(curAnchor, curEstClock())
-            val durationLimit = (curFeed.nowPlaying?.durationSeconds ?: 0).takeIf { it > 0 }?.toDouble()
+            val durationLimit = curTrack.durationSeconds.takeIf { it > 0 }?.toDouble()
             if (durationLimit != null && expectedSec > durationLimit - 1.5) continue
 
-            val currentPos = SyncClockEstimator.interpolatePositionSec(
-                lastKnownSec = videoController.currentPositionSec.toDouble(),
-                capturedElapsedMs = videoController.positionCapturedElapsedMs,
-                nowElapsedMs = checkElapsedNow,
-                isPlaying = true
-            )
+            val currentPos = videoController.getLivePositionSec()
+            val driftSec = currentPos - expectedSec
+            val isEarlyWindow = expectedSec < 10.0 || (checkElapsedNow - lastDriftTrackStartElapsedAt < 10_000L)
 
+            if (!latestSyncBothMode) {
+                // TV_ONLY: keep natural 1.0x playback and only snap major seeks (>2.0s)
+                videoController.setPlaybackRate(1.0f)
+                if (abs(driftSec) > 2.0 && checkElapsedNow - lastDriftCorrectionElapsedAt > 2000L) {
+                    lastDriftCorrectionElapsedAt = checkElapsedNow
+                    videoController.seekTo(expectedSec.toFloat())
+                }
+                continue
+            }
+
+            if (isUpload) {
+                // BOTH mode + uploaded MP3: smooth continuous elastic playbackRate (0.95..1.05) on MediaPlayer
+                val elasticRate = SyncClockEstimator.computeUploadElasticRate(driftSec, isEarlyWindow)
+                if (elasticRate != null) {
+                    videoController.setPlaybackRate(elasticRate.toFloat())
+                } else {
+                    videoController.setPlaybackRate(1.0f)
+                    val cooldownMs = if (isEarlyWindow) 900L else 1800L
+                    if (checkElapsedNow - lastDriftCorrectionElapsedAt >= cooldownMs && abs(driftSec) < 25.0) {
+                        lastDriftCorrectionElapsedAt = checkElapsedNow
+                        videoController.seekTo(expectedSec.toFloat())
+                    }
+                }
+                continue
+            }
+
+            // BOTH mode + hidden YouTube audio: adaptive seek lead + verification
             val verifyAt = pendingVerifyAtElapsedMs
             if (verifyAt != null && checkElapsedNow >= verifyAt) {
                 val postSeekDriftSec = expectedSec - currentPos
@@ -329,7 +443,6 @@ fun TvScreen(
                 pendingVerifyAtElapsedMs = null
             }
 
-            val isEarlyWindow = expectedSec < 10.0 || (checkElapsedNow - lastDriftTrackStartElapsedAt < 10_000L)
             val cooldownMs = if (isEarlyWindow) 950L else 1800L
             if (checkElapsedNow - lastDriftCorrectionElapsedAt < cooldownMs) continue
 
@@ -339,7 +452,7 @@ fun TvScreen(
                     expectedSec = expectedSec,
                     isPaused = false,
                     isEarlyWindow = isEarlyWindow
-                ) && abs(currentPos - expectedSec) < 25.0
+                ) && abs(driftSec) < 25.0
             ) {
                 lastDriftCorrectionElapsedAt = checkElapsedNow
                 val leadSec = if (expectedSec > 0.25) adaptiveSeekLeadSec else 0.0
@@ -359,9 +472,12 @@ fun TvScreen(
             .fillMaxSize()
             .background(Color(0xFF070A13))
     ) {
-        // 1. Persistent Fullscreen Video Player (Hidden visually in PLAYLIST mode so video never bleeds behind)
+        // 1. Audio-Only Engine (always invisible; completely unmounted in CABINA_ONLY mode)
         NativeVideoPlayer(
             videoId = currentVideoId,
+            source = currentSource,
+            storagePath = currentStoragePath,
+            audioActive = audioActive,
             venueSlug = feed.venue.slug,
             deviceId = deviceId,
             isPaused = feed.playback.isPaused,
@@ -371,47 +487,35 @@ fun TvScreen(
             useLegacySupabaseWs = useLegacySupabaseWs,
             controller = videoController,
             onEnded = onVideoEnded,
-            onDisplayConfig = onDisplayConfig,
-            modifier = if (mode == TvScreenMode.PLAYLIST) {
-                Modifier.size(1.dp).alpha(0f)
-            } else {
-                Modifier.fillMaxSize()
-            }
+            onDisplayConfig = onDisplayConfig
         )
 
-        // 2. Overlays depending on mode
+        // 2. Pure Music UI Views (Zero Video): SALON (default) or PORTADA (minimalist)
         when (mode) {
-            TvScreenMode.VIDEO -> {
-                TvModeVideoOverlays(
+            TvScreenMode.PORTADA -> {
+                TvModePortadaOverlays(
                     feed = feed,
                     qrBitmap = qrBitmap,
                     currentTimeString = currentTimeString,
-                    showQueue = showQueue,
-                    showProposals = showProposals,
+                    elapsedSec = elapsedSec,
+                    durationSec = trackDurationSec,
+                    audioRoutingLabel = audioRoutingLabel,
                     theme = theme,
                     scaleFactor = scaleFactor,
                     syncStatus = syncStatus
                 )
             }
-            TvScreenMode.CLEAN -> {
-                TvModeVideoOverlays(
+            TvScreenMode.SALON -> {
+                TvModeSalonOverlays(
                     feed = feed,
                     qrBitmap = qrBitmap,
                     currentTimeString = currentTimeString,
-                    showQueue = false,
-                    showProposals = false,
+                    elapsedSec = elapsedSec,
+                    durationSec = trackDurationSec,
+                    audioRoutingLabel = audioRoutingLabel,
                     theme = theme,
                     scaleFactor = scaleFactor,
                     syncStatus = syncStatus
-                )
-            }
-            TvScreenMode.PLAYLIST -> {
-                TvModePlaylistOverlays(
-                    feed = feed,
-                    qrBitmap = qrBitmap,
-                    currentTimeString = currentTimeString,
-                    theme = theme,
-                    scaleFactor = scaleFactor
                 )
             }
         }
@@ -470,364 +574,302 @@ fun TvScreen(
 }
 
 /**
- * MODE 1: Fullscreen Video Player Overlays (Left Transparent Queue + Right Transparent Proposals + Bottom HUD).
+ * MODE PORTADA: Minimalist full-screen musical showcase (Album Art + Track + Progress + QR, zero video).
  */
 @Composable
-private fun TvModeVideoOverlays(
+private fun TvModePortadaOverlays(
     feed: TvFeed,
     qrBitmap: Bitmap?,
     currentTimeString: String,
-    showQueue: Boolean = true,
-    showProposals: Boolean = true,
+    elapsedSec: Int,
+    durationSec: Int,
+    audioRoutingLabel: String,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
     scaleFactor: Float = 1.0f,
     syncStatus: SyncStatusState? = null
 ) {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val maxFloatingItems = ((maxHeight.value - 205f) / (38f * scaleFactor)).toInt().coerceAtLeast(4)
-
-        // 2. Left Floating Queue (100% Invisible Transparent, no box/border, text only)
-        if (showQueue && feed.queue.isNotEmpty()) {
-            val textShadow = Shadow(
-                color = Color(0xF2000000),
-                offset = Offset(2f, 2f),
-                blurRadius = 6f
-            )
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = (28 * scaleFactor).dp, start = (32 * scaleFactor).dp)
-                    .width((310 * scaleFactor).dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "📋 COLA EN VIVO",
-                        color = theme.primaryColor,
-                        fontSize = (11.5f * scaleFactor).sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace,
-                        style = TextStyle(shadow = textShadow)
-                    )
-                    Text(
-                        text = "${feed.queue.size} temas",
-                        color = theme.secondaryColor,
-                        fontSize = (10f * scaleFactor).sp,
-                        fontFamily = FontFamily.Monospace,
-                        style = TextStyle(shadow = textShadow)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height((8 * scaleFactor).dp))
-
-                feed.queue.take(maxFloatingItems).forEachIndexed { idx, item ->
-                    if (idx > 0) Spacer(modifier = Modifier.height((7 * scaleFactor).dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "#${idx + 1}",
-                            color = theme.primaryColor,
-                            fontSize = (12f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            style = TextStyle(shadow = textShadow),
-                            modifier = Modifier.width((26 * scaleFactor).dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (item.isKaraoke) "🎤 ${item.title}" else item.title,
-                                color = Color.White,
-                                fontSize = (12f * scaleFactor).sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = TextStyle(shadow = textShadow)
-                            )
-                            val subText = if (!item.guestName.isNullOrBlank()) {
-                                "${item.artist} • 🎉 ${item.guestName}"
-                            } else {
-                                item.artist
-                            }
-                            Text(
-                                text = subText,
-                                color = if (!item.guestName.isNullOrBlank()) Color(0xFFF472B6) else Color(0xFFCBD5E1),
-                                fontSize = (10.5f * scaleFactor).sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = TextStyle(shadow = textShadow)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width((6 * scaleFactor).dp))
-                        val isBar = (item.voteCount >= 9999 || item.voteCount <= 0) && item.guestName.isNullOrBlank()
-                        Text(
-                            text = if (isBar) (if (feed.venue.venueType == "party") "⭐ DJ" else "⭐ BAR") else "${item.voteCount}v",
-                            color = if (isBar) theme.badgeColor else Color(0xFF6EE7B7),
-                            fontSize = (10f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            style = TextStyle(shadow = textShadow)
-                        )
-                    }
-                }
-            }
+    val thumbUrl = feed.nowPlaying?.thumbnailUrl
+        ?: feed.nowPlaying?.youtubeVideoId?.takeIf { it.isNotBlank() && !it.startsWith("http") }?.let {
+            "https://img.youtube.com/vi/$it/hqdefault.jpg"
         }
+    val progressFrac = (elapsedSec.toFloat() / durationSec.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
 
-        // 3. Right Floating Proposals (100% Invisible Transparent, no box/border, text only)
-        if (showProposals && feed.proposals.isNotEmpty()) {
-            val textShadow = Shadow(
-                color = Color(0xF2000000),
-                offset = Offset(2f, 2f),
-                blurRadius = 6f
-            )
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = (28 * scaleFactor).dp, end = (32 * scaleFactor).dp)
-                    .width((310 * scaleFactor).dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "🔥 EN VOTACIÓN",
-                        color = theme.accentColor,
-                        fontSize = (11.5f * scaleFactor).sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace,
-                        style = TextStyle(shadow = textShadow)
-                    )
-                    Text(
-                        text = "Pedí con QR",
-                        color = theme.secondaryColor,
-                        fontSize = (10f * scaleFactor).sp,
-                        fontWeight = FontWeight.Bold,
-                        style = TextStyle(shadow = textShadow)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height((8 * scaleFactor).dp))
-
-                feed.proposals.take(maxFloatingItems).forEachIndexed { idx, prop ->
-                    if (idx > 0) Spacer(modifier = Modifier.height((7 * scaleFactor).dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (prop.isKaraoke) "🎤 ${prop.title}" else prop.title,
-                                color = Color.White,
-                                fontSize = (12f * scaleFactor).sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = TextStyle(shadow = textShadow)
-                            )
-                            if (!prop.guestName.isNullOrBlank()) {
-                                Text(
-                                    text = "🎉 Pedido por ${prop.guestName}",
-                                    color = Color(0xFFF472B6),
-                                    fontSize = (10f * scaleFactor).sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = TextStyle(shadow = textShadow)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
-                        Text(
-                            text = "${prop.voteCount}/${prop.neededVotes}v",
-                            color = theme.accentColor,
-                            fontSize = (11f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            style = TextStyle(shadow = textShadow)
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. Subtle Dark Gradient at Bottom for HUD Readability
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height((170 * scaleFactor).dp)
-                .align(Alignment.BottomCenter)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color(0xCC070A13), Color(0xF2070A13))
-                    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xFF0A1022), Color(0xFF060912), Color(0xFF0B1124))
                 )
-        )
-
-        // 5. Bottom HUD Overlay (Responsive Balanced Typography)
+            )
+            .padding(horizontal = 36.dp, vertical = 26.dp)
+    ) {
+        // Top Header: Venue + Audio Routing + Sync + Clock
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = (32 * scaleFactor).dp, vertical = (18 * scaleFactor).dp),
+                .align(Alignment.TopCenter),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Left: Now Playing Info
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                // Live Pulse Dot
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "PONELEPLAY",
+                    color = Color.White,
+                    fontSize = (18f * scaleFactor).sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp
+                )
+                Text(
+                    text = "• ${feed.venue.name.uppercase()}",
+                    color = theme.secondaryColor,
+                    fontSize = (13f * scaleFactor).sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
                     modifier = Modifier
-                        .size((10 * scaleFactor).dp)
-                        .background(theme.secondaryColor, CircleShape)
+                        .background(theme.badgeBackground, RoundedCornerShape(18.dp))
+                        .border(1.dp, theme.primaryColor.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = audioRoutingLabel,
+                        color = theme.primaryColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                if (syncStatus?.connected == true) {
+                    val rttText = syncStatus.rttMs?.let { " ${it}ms" } ?: ""
+                    val syncLabel = if (syncStatus.transport == SyncTransportMode.LAN) "⚡ LAN$rttText" else "☁ Sync$rttText"
+                    Text(
+                        text = syncLabel,
+                        color = if (syncStatus.transport == SyncTransportMode.LAN) Color(0xFF22D3EE) else Color(0xFF818CF8),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                Text(
+                    text = currentTimeString,
+                    color = Color.White,
+                    fontSize = (17f * scaleFactor).sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
                 )
-                Spacer(modifier = Modifier.width((10 * scaleFactor).dp))
+            }
+        }
 
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+        // Center Showcase: Album Art + Track Info + Live Clock Progress
+        Row(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(0.86f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(32.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size((240 * scaleFactor).dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(theme.cardBackground)
+                    .border(2.dp, theme.primaryColor.copy(alpha = 0.5f), RoundedCornerShape(24.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (!thumbUrl.isNullOrBlank()) {
+                    AsyncThumbnail(
+                        url = thumbUrl,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "🎵", fontSize = 54.sp)
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = if (feed.venue.venueType == "party") "🎉 EN AIRE • FIESTA" else "EN AIRE",
-                            color = theme.secondaryColor,
-                            fontSize = (10f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
+                            text = if (feed.playback.isPaused) "EN PAUSA" else "EN VIVO",
+                            color = theme.primaryColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
                             fontFamily = FontFamily.Monospace
                         )
-                        if (feed.nowPlaying?.isKaraoke == true || feed.playback.karaokeMode) {
-                            Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
-                            Text(
-                                text = "🎤 KARAOKE",
-                                color = Color(0xFFF43F5E),
-                                fontSize = (10f * scaleFactor).sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        if (!feed.nowPlaying?.guestName.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.width((8 * scaleFactor).dp))
-                            Text(
-                                text = "🎉 Pedido por ${feed.nowPlaying?.guestName}",
-                                color = Color(0xFFF472B6),
-                                fontSize = (10.5f * scaleFactor).sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
-                    Text(
-                        text = feed.nowPlaying?.title ?: "Esperando temas...",
-                        color = Color.White,
-                        fontSize = (18f * scaleFactor).sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = feed.nowPlaying?.artist ?: feed.venue.name,
-                        color = Color(0xFF94A3B8),
-                        fontSize = (12.5f * scaleFactor).sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1
-                    )
-                    val bottomDedication = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
-                    if (!bottomDedication.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.height((4 * scaleFactor).dp))
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xD93B0764), RoundedCornerShape(8.dp))
-                                .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(8.dp))
-                                .padding(horizontal = (10 * scaleFactor).dp, vertical = (4 * scaleFactor).dp)
-                        ) {
-                            Text(
-                                text = "💬 \"$bottomDedication\"",
-                                color = Color(0xFFFDF2F8),
-                                fontSize = (11.5f * scaleFactor).sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
                 }
             }
 
-            // Right: Table QR Code + Clock
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (qrBitmap != null) {
-                    Image(
-                        bitmap = qrBitmap.asImageBitmap(),
-                        contentDescription = "QR Mesas",
-                        modifier = Modifier
-                            .size((64 * scaleFactor).dp)
-                            .clip(RoundedCornerShape(8.dp))
-                    )
-                    Spacer(modifier = Modifier.width((10 * scaleFactor).dp))
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = currentTimeString,
-                        color = Color.White,
-                        fontSize = (16f * scaleFactor).sp,
-                        fontWeight = FontWeight.Bold,
+                        text = if (feed.playback.isPaused) "⏸ PAUSADO" else if (feed.venue.venueType == "party") "🎉 SONANDO EN VIVO • FIESTA" else "▶ SONANDO EN VIVO",
+                        color = theme.primaryColor,
+                        fontSize = (12f * scaleFactor).sp,
+                        fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace
                     )
-                    Text(
-                        text = "Pedí tu música",
-                        color = theme.secondaryColor,
-                        fontSize = (10.5f * scaleFactor).sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    if (syncStatus?.connected == true) {
-                        val rttText = syncStatus.rttMs?.let { " ${it}ms" } ?: ""
-                        val syncLabel = if (syncStatus.transport == SyncTransportMode.LAN) {
-                            "⚡ LAN$rttText"
-                        } else {
-                            "☁ Sync$rttText"
-                        }
-                        val syncColor = if (syncStatus.transport == SyncTransportMode.LAN) {
-                            Color(0xFF22D3EE)
-                        } else {
-                            Color(0xFF818CF8)
-                        }
+                    if (feed.nowPlaying?.isKaraoke == true || feed.playback.karaokeMode) {
                         Text(
-                            text = syncLabel,
-                            color = syncColor,
-                            fontSize = (9f * scaleFactor).sp,
+                            text = "🎤 KARAOKE",
+                            color = Color(0xFFF43F5E),
+                            fontSize = (11f * scaleFactor).sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
                     }
                 }
+
+                Text(
+                    text = feed.nowPlaying?.title ?: "Esperando canciones...",
+                    color = Color.White,
+                    fontSize = (30f * scaleFactor).sp,
+                    fontWeight = FontWeight.Black,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = (36f * scaleFactor).sp
+                )
+
+                Text(
+                    text = feed.nowPlaying?.artist ?: feed.venue.name,
+                    color = Color(0xFFCBD5E1),
+                    fontSize = (19f * scaleFactor).sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val dedMsg = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
+                val dedGuest = feed.liveDedication?.guestName ?: feed.nowPlaying?.guestName
+                if (!dedGuest.isNullOrBlank() || !dedMsg.isNullOrBlank()) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0x66831843), RoundedCornerShape(12.dp))
+                            .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = buildString {
+                                if (!dedGuest.isNullOrBlank()) append("🎉 $dedGuest")
+                                if (!dedGuest.isNullOrBlank() && !dedMsg.isNullOrBlank()) append(" • ")
+                                if (!dedMsg.isNullOrBlank()) append("“$dedMsg”")
+                            },
+                            color = Color(0xFFFDF2F8),
+                            fontSize = (13f * scaleFactor).sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                LinearProgressIndicator(
+                    progress = { progressFrac },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = theme.primaryColor,
+                    trackColor = Color(0xFF1E293B)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatDurationMmSs(elapsedSec),
+                        color = theme.primaryColor,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    val nextUp = feed.queue.firstOrNull()
+                    if (nextUp != null) {
+                        Text(
+                            text = "Siguiente: ${nextUp.title} — ${nextUp.artist}",
+                            color = Color(0xFF94A3B8),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+                        )
+                    }
+                    Text(
+                        text = formatDurationMmSs(durationSec),
+                        color = Color(0xFF94A3B8),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+
+        // Bottom Right QR Card
+        if (qrBitmap != null) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .background(theme.cardBackground.copy(alpha = 0.92f), RoundedCornerShape(16.dp))
+                    .border(1.5.dp, theme.qrCardBorder, RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "¡PEDÍ TU MÚSICA!",
+                        color = theme.primaryColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "Escaneá desde tu mesa",
+                        color = Color(0xFFCBD5E1),
+                        fontSize = 10.5.sp
+                    )
+                }
+                Image(
+                    bitmap = qrBitmap.asImageBitmap(),
+                    contentDescription = "QR Mesas",
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.White)
+                        .padding(3.dp)
+                )
             }
         }
     }
 }
 
 /**
- * MODE 2: Party & Queue Emphasis Overlays (Split screen: Hero card + Queue + Proposals + Big QR).
+ * MODE SALON (Default): 3-column audio-only dashboard (Hero Album Card + Clock Progress + Live Queue + Big QR & Proposals).
  */
 @Composable
-private fun TvModePlaylistOverlays(
+private fun TvModeSalonOverlays(
     feed: TvFeed,
     qrBitmap: Bitmap?,
     currentTimeString: String,
+    elapsedSec: Int,
+    durationSec: Int,
+    audioRoutingLabel: String,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
-    scaleFactor: Float = 1.0f
+    scaleFactor: Float = 1.0f,
+    syncStatus: SyncStatusState? = null
 ) {
+    val thumbUrl = feed.nowPlaying?.thumbnailUrl
+        ?: feed.nowPlaying?.youtubeVideoId?.takeIf { it.isNotBlank() && !it.startsWith("http") }?.let {
+            "https://img.youtube.com/vi/$it/hqdefault.jpg"
+        }
+    val progressFrac = (elapsedSec.toFloat() / durationSec.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -862,7 +904,36 @@ private fun TvModePlaylistOverlays(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Audio Routing Badge
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF141A2E), RoundedCornerShape(20.dp))
+                            .border(1.dp, theme.secondaryColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                            .padding(horizontal = 10.dp, vertical = 3.5.dp)
+                    ) {
+                        Text(
+                            text = audioRoutingLabel,
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // Live Sync Pill
+                    if (syncStatus?.connected == true) {
+                        val rttText = syncStatus.rttMs?.let { " ${it}ms" } ?: ""
+                        val syncLabel = if (syncStatus.transport == SyncTransportMode.LAN) "⚡ LAN$rttText" else "☁ Sync$rttText"
+                        Text(
+                            text = syncLabel,
+                            color = if (syncStatus.transport == SyncTransportMode.LAN) Color(0xFF22D3EE) else Color(0xFF818CF8),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
                     // Live Session Pill
                     Box(
                         modifier = Modifier
@@ -890,8 +961,6 @@ private fun TvModePlaylistOverlays(
                             )
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(14.dp))
 
                     Text(
                         text = currentTimeString,
@@ -933,14 +1002,14 @@ private fun TvModePlaylistOverlays(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "EN AIRE • AHORA SUENA",
+                                    text = if (feed.playback.isPaused) "⏸ PAUSADO" else "🎵 EN AIRE • AHORA SUENA",
                                     color = theme.primaryColor,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontFamily = FontFamily.Monospace
                                 )
 
-                                if (feed.nowPlaying?.isKaraoke == true) {
+                                if (feed.nowPlaying?.isKaraoke == true || feed.playback.karaokeMode) {
                                     Text(
                                         text = "🎤 KARAOKE",
                                         color = Color(0xFFF43F5E),
@@ -953,44 +1022,81 @@ private fun TvModePlaylistOverlays(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Live Audio / Video Indicator Card
+                            // Album Art / Live Music Visual Card (Audio-Only — zero video)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(180.dp)
+                                    .height(175.dp)
                                     .clip(RoundedCornerShape(12.dp))
                                     .background(Color(0xFF0F1424))
                                     .border(1.dp, theme.cardBorder, RoundedCornerShape(12.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center
-                                ) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                        verticalAlignment = Alignment.Bottom,
-                                        modifier = Modifier.height(42.dp)
-                                    ) {
-                                        val bars = listOf(28.dp, 16.dp, 36.dp, 22.dp, 40.dp, 18.dp, 32.dp, 14.dp)
-                                        bars.forEach { h ->
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(5.dp)
-                                                    .height(h)
-                                                    .background(theme.primaryColor, RoundedCornerShape(2.dp))
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text(
-                                        text = "EN VIVO • VIDEO ACTIVO",
-                                        color = theme.primaryColor,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        fontFamily = FontFamily.Monospace,
-                                        letterSpacing = 1.sp
+                                if (!thumbUrl.isNullOrBlank()) {
+                                    AsyncThumbnail(
+                                        url = thumbUrl,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
                                     )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(
+                                                Brush.verticalGradient(
+                                                    colors = listOf(Color.Transparent, Color(0xCC070A13))
+                                                )
+                                            )
+                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .background(theme.primaryColor, CircleShape)
+                                        )
+                                        Text(
+                                            text = if (feed.nowPlaying?.source == "upload") "MP3 LOCAL • MÚSICA EN VIVO" else "MÚSICA EN VIVO",
+                                            color = theme.primaryColor,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                } else {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.Center
+                                    ) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            verticalAlignment = Alignment.Bottom,
+                                            modifier = Modifier.height(42.dp)
+                                        ) {
+                                            val bars = listOf(28.dp, 16.dp, 36.dp, 22.dp, 40.dp, 18.dp, 32.dp, 14.dp)
+                                            bars.forEach { h ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(5.dp)
+                                                        .height(h)
+                                                        .background(theme.primaryColor, RoundedCornerShape(2.dp))
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "MÚSICA EN VIVO • SOLO AUDIO",
+                                            color = theme.primaryColor,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            letterSpacing = 1.sp
+                                        )
+                                    }
                                 }
                             }
 
@@ -999,33 +1105,65 @@ private fun TvModePlaylistOverlays(
                             Text(
                                 text = feed.nowPlaying?.title ?: "Esperando temas...",
                                 color = Color.White,
-                                fontSize = 17.sp,
+                                fontSize = (17f * scaleFactor).sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                lineHeight = 22.sp
+                                lineHeight = (22f * scaleFactor).sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = feed.nowPlaying?.artist ?: "PonelePlay",
                                 color = Color(0xFF94A3B8),
-                                fontSize = 13.sp,
+                                fontSize = (13f * scaleFactor).sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
 
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Live Clock-Driven Progress Bar
+                            LinearProgressIndicator(
+                                progress = { progressFrac },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = theme.primaryColor,
+                                trackColor = Color(0xFF1E293B)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = formatDurationMmSs(elapsedSec),
+                                    color = theme.primaryColor,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    text = formatDurationMmSs(durationSec),
+                                    color = Color(0xFF94A3B8),
+                                    fontSize = 10.5.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+
                             val playlistDedication = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
                             val playlistGuest = feed.liveDedication?.guestName ?: feed.nowPlaying?.guestName
 
                             if (!playlistGuest.isNullOrBlank() || !playlistDedication.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .background(Color(0x55831843), RoundedCornerShape(10.dp))
                                         .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                        .padding(horizontal = 10.dp, vertical = 7.dp)
                                 ) {
                                     if (!playlistGuest.isNullOrBlank()) {
                                         Text(
@@ -1051,33 +1189,33 @@ private fun TvModePlaylistOverlays(
                             }
                         }
 
-                    // Bottom: Live Votes for Now Playing
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(theme.itemRowBackground, RoundedCornerShape(10.dp))
-                            .border(1.dp, theme.itemRowBorder, RoundedCornerShape(10.dp))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val votes = feed.nowPlaying?.voteCount ?: 0
-                        val isBarSelection = votes >= 9999 || votes <= 0
-                        Text(
-                            text = if (isBarSelection) "Selección del bar" else "Votado por el salón",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 11.sp
-                        )
-                        Text(
-                            text = if (isBarSelection) "⭐ BAR" else "$votes ${if (votes == 1) "voto" else "votos"}",
-                            color = theme.primaryColor,
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        // Bottom: Live Votes for Now Playing
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(theme.itemRowBackground, RoundedCornerShape(10.dp))
+                                .border(1.dp, theme.itemRowBorder, RoundedCornerShape(10.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val votes = feed.nowPlaying?.voteCount ?: 0
+                            val isBarSelection = votes >= 9999 || votes <= 0
+                            Text(
+                                text = if (isBarSelection) "Selección del bar" else "Votado por el salón",
+                                color = Color(0xFF94A3B8),
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = if (isBarSelection) "⭐ BAR" else "$votes ${if (votes == 1) "voto" else "votos"}",
+                                color = theme.primaryColor,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
                 }
-            }
 
             // ----- COLUMN 2: LIVE QUEUE (34%) -----
             Box(

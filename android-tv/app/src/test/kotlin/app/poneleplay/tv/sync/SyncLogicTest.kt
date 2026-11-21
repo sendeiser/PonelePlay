@@ -26,8 +26,8 @@ class SyncLogicTest {
             clientReceivedMs = 2_600L // rtt = 600ms, noisy
         )
         val est2 = SyncClockEstimator.merge(est1, noisySample)
-        // Blended only 20% and keeps lowest RTT
-        assertEquals(20L, est2.rttMs)
+        // Keeps offset locked (ignores noisy 600ms outlier) and gently decays best RTT by 1ms
+        assertEquals(21L, est2.rttMs)
         assertTrue(est2.offsetMs < 5_100L)
     }
 
@@ -130,6 +130,45 @@ class SyncLogicTest {
         assertEquals(0.236, SyncClockEstimator.updateAdaptiveSeekLeadSec(0.20, 0.08), 0.001)
         assertEquals(0.173, SyncClockEstimator.updateAdaptiveSeekLeadSec(0.20, -0.06), 0.001)
         assertEquals(0.20, SyncClockEstimator.updateAdaptiveSeekLeadSec(0.20, 2.5), 0.001)
+    }
+
+    @Test
+    fun audioOnlyHelpers_resolveUploadUrlElasticRateAndScreenModes() {
+        assertEquals(
+            "https://poneleplay.netlify.app/api/audio?path=venue-1%2Fsong.mp3",
+            SyncClockEstimator.resolveUploadAudioUrl(
+                serverUrl = "https://poneleplay.netlify.app/",
+                storagePath = "venue-1/song.mp3",
+                youtubeVideoId = null
+            )
+        )
+        assertEquals(
+            "https://cdn.example.com/live.mp3",
+            SyncClockEstimator.resolveUploadAudioUrl(
+                serverUrl = "https://poneleplay.netlify.app",
+                storagePath = null,
+                youtubeVideoId = "https://cdn.example.com/live.mp3"
+            )
+        )
+
+        // Deadzone returns 1.0
+        assertEquals(1.0, SyncClockEstimator.computeUploadElasticRate(0.03, false)!!, 0.001)
+        // Lagging behind anchor speeds up gently (1.01..1.05)
+        val catchUp = SyncClockEstimator.computeUploadElasticRate(-0.30, false)!!
+        assertTrue(catchUp > 1.0 && catchUp <= 1.05)
+        // Ahead of anchor slows down gently (0.95..0.99)
+        val slowDown = SyncClockEstimator.computeUploadElasticRate(0.30, false)!!
+        assertTrue(slowDown < 1.0 && slowDown >= 0.95)
+        // Large desync returns null (hard seek)
+        assertEquals(null, SyncClockEstimator.computeUploadElasticRate(1.5, false))
+        assertEquals(null, SyncClockEstimator.computeUploadElasticRate(-0.9, true))
+
+        // Screen mode migration
+        assertEquals("SALON", SyncClockEstimator.normalizeScreenModeName("VIDEO"))
+        assertEquals("SALON", SyncClockEstimator.normalizeScreenModeName("PLAYLIST"))
+        assertEquals("SALON", SyncClockEstimator.normalizeScreenModeName("SALON"))
+        assertEquals("PORTADA", SyncClockEstimator.normalizeScreenModeName("CLEAN"))
+        assertEquals("PORTADA", SyncClockEstimator.normalizeScreenModeName("PORTADA"))
     }
 }
 
