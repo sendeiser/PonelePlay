@@ -149,5 +149,16 @@ describe("PlayerRuntime component", () => {
       );
     });
   });
+
+  it("migrates legacy VIDEO/PLAYLIST/CLEAN TV display modes cleanly to SALON and PORTADA", async () => {
+    const { normalizeTvDisplayMode } = await import("@/components/player/tv-settings-modal");
+    expect(normalizeTvDisplayMode("VIDEO")).toBe("SALON");
+    expect(normalizeTvDisplayMode("PLAYLIST")).toBe("SALON");
+    expect(normalizeTvDisplayMode("SALON")).toBe("SALON");
+    expect(normalizeTvDisplayMode("CLEAN")).toBe("PORTADA");
+    expect(normalizeTvDisplayMode("PORTADA")).toBe("PORTADA");
+    expect(normalizeTvDisplayMode(null)).toBe("SALON");
+    expect(normalizeTvDisplayMode(undefined)).toBe("SALON");
+  });
 });
 

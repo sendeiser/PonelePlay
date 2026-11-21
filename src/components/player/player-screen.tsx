@@ -4,20 +4,21 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
-import { Flame, HelpCircle, Maximize2, Mic, Minimize2, Music2, Settings, Volume2, VolumeX, X } from "lucide-react";
+import { Flame, HelpCircle, Maximize2, Minimize2, Music2, Settings, Volume2, VolumeX, X } from "lucide-react";
 import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
-import {
-  createIframeEngine,
-  resolveVideoId,
-  type IframePlaybackEngine,
-} from "@/components/player/iframe-engine";
+import { resolveVideoId } from "@/components/player/iframe-engine";
+import { TvAudioEngine, type TvAudioEngineRef } from "@/components/player/tv-audio-engine";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
 import { TvPairingModal } from "@/components/player/tv-pairing-modal";
 import { TvStandbyScreen } from "@/components/player/tv-standby-screen";
-import { TvSettingsModal } from "@/components/player/tv-settings-modal";
+import {
+  TvSettingsModal,
+  normalizeTvDisplayMode,
+  type TvDisplayMode,
+} from "@/components/player/tv-settings-modal";
 import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import { partitionQueueAndProposals } from "@/lib/domain/queue";
@@ -27,8 +28,6 @@ import {
   type PoneleSyncClient,
 } from "@/lib/sync/client";
 import {
-  computeAdaptiveSeekLeadSec,
-  computeElasticPlaybackRate,
   computeTargetPositionSec,
   type PlaybackAnchor,
   type SyncTrack,
@@ -92,10 +91,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [activeSkipVote, setActiveSkipVote] = useState<PartySkipVoteState | null>(null);
   const [maxQueueFit, setMaxQueueFit] = useState(8);
   const [maxCandidatesFit, setMaxCandidatesFit] = useState(6);
-  // Screen mode: VIDEO (Video+Cola), PLAYLIST (Solo Playlist & Votos), CLEAN (Video 100% puro)
-  const [screenMode, setScreenMode] = useState<"VIDEO" | "PLAYLIST" | "CLEAN">("VIDEO");
-  // Video Mode: default to true so video is always visible
-  const [videoMode, setVideoMode] = useState<boolean>(true);
+  // Screen mode (audio-only, zero fullscreen video): SALON (Vinilo + Cola + Votos + QR) | PORTADA (Carátula minimalista)
+  const [screenMode, setScreenMode] = useState<TvDisplayMode>("SALON");
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [liveDedicationOverride, setLiveDedicationOverride] = useState<{
     dedication: string;
@@ -109,16 +106,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     const updateMaxFit = () => {
       if (typeof window === "undefined") return;
       const vh = window.innerHeight;
-      // Reserve header (~52px), footer (~36px), and card headers (~150px)
-      const availableForQueue = Math.max(240, vh - (videoMode ? 290 : 185));
-      const availableForCands = Math.max(220, vh - (videoMode ? 310 : 215));
+      const availableForQueue = Math.max(240, vh - 185);
+      const availableForCands = Math.max(220, vh - 215);
       setMaxQueueFit(Math.max(4, Math.floor(availableForQueue / 56)));
       setMaxCandidatesFit(Math.max(4, Math.floor(availableForCands / 74)));
     };
     updateMaxFit();
     window.addEventListener("resize", updateMaxFit);
     return () => window.removeEventListener("resize", updateMaxFit);
-  }, [videoMode]);
+  }, []);
 
   // Sync partyConfig + activeDuel + activeRoulette + activeSkipVote from server
   useEffect(() => {
@@ -274,70 +270,38 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [qr, setQr] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState(false);
   const [qrModalTimer, setQrModalTimer] = useState(25);
-  const [sidebarTab, setSidebarTab] = useState<"queue" | "candidates">("queue");
   const [showHotkeysHelp, setShowHotkeysHelp] = useState(false);
   const [liveToast, setLiveToast] = useState<{ icon: string; message: string } | null>(null);
   const [roundSecondsLeft, setRoundSecondsLeft] = useState<number>(180);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   const [mounted, setMounted] = useState<boolean>(false);
-  const [origin, setOrigin] = useState<string>(() =>
-    typeof window !== "undefined" ? window.location.origin : "",
-  );
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      (window as unknown as { toggleTvScreenMode?: () => void }).toggleTvScreenMode = () => {
-        toggleVideoMode();
-      };
-    }
-  }, []);
 
   useEffect(() => {
     setMounted(true);
     if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
       const savedMode = localStorage.getItem("poneleplay.player.screenMode");
-      if (savedMode === "PLAYLIST" || savedMode === "CLEAN" || savedMode === "VIDEO") {
-        setScreenMode(savedMode);
-        setVideoMode(savedMode !== "PLAYLIST");
-        if (savedMode === "CLEAN") setIsVideoFullscreen(true);
-      } else {
-        const saved = localStorage.getItem("poneleplay.player.videoMode");
-        if (saved !== null) {
-          const vm = saved === "true";
-          setVideoMode(vm);
-          setScreenMode(vm ? "VIDEO" : "PLAYLIST");
-        }
+      const migrated = normalizeTvDisplayMode(savedMode);
+      setScreenMode(migrated);
+      if (savedMode !== migrated) {
+        localStorage.setItem("poneleplay.player.screenMode", migrated);
       }
     }
   }, []);
 
   const [volume, setVolume] = useState(85);
-  const [isMuted, setIsMuted] = useState(false);
-  // audioRouting: derived from Cabina commands — BOTH | CABINA_ONLY | TV_ONLY
-  const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("BOTH");
+  // Default safe mode: CABINA_ONLY (TV visual-only until Cabina activates TV_ONLY or BOTH)
+  const [isMuted, setIsMuted] = useState(true);
+  const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
+  const audioRoutingRef = useRef<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
+  audioRoutingRef.current = audioRouting;
   const [isPlaying, setIsPlaying] = useState(true);
-  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [tvAudioBlocked, setTvAudioBlocked] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [hudMessage, setHudMessage] = useState<string | null>(null);
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
-
-  // Auto-cycle sidebar between upcoming queue and candidate proposals every 14 seconds
-  useEffect(() => {
-    const candidateCount = nightState?.candidates?.length || 0;
-    if (candidateCount === 0) {
-      setSidebarTab("queue");
-      return;
-    }
-    const timer = setInterval(() => {
-      setSidebarTab((prev) => (prev === "queue" ? "candidates" : "queue"));
-    }, 14000);
-    return () => clearInterval(timer);
-  }, [nightState?.candidates?.length]);
 
   // Auto-close Large QR modal after 25s
   useEffect(() => {
@@ -379,22 +343,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, [nightState?.votingRound?.enabled, nightState?.votingRound?.durationSeconds, refreshNightState]);
 
 
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-  const isVideoFullscreenRef = useRef(isVideoFullscreen);
-  isVideoFullscreenRef.current = isVideoFullscreen;
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const tvAudioRef = useRef<TvAudioEngineRef | null>(null);
   const handleSeekRef = useRef<(sec: number) => void>(() => {});
   const elapsedRef = useRef(0);
   elapsedRef.current = elapsed;
   const controlChannelRef = useRef<import("@supabase/supabase-js").RealtimeChannel | null>(null);
   const syncClientRef = useRef<PoneleSyncClient | null>(null);
   const [syncConnected, setSyncConnected] = useState(false);
-  const [remoteMediaStream, setRemoteMediaStream] = useState<MediaStream | null>(null);
-  const remoteMediaStreamRef = useRef<MediaStream | null>(null);
-  remoteMediaStreamRef.current = remoteMediaStream;
-  const remoteMediaVideoRef = useRef<HTMLVideoElement | null>(null);
-  const [liveStreamAudioBlocked, setLiveStreamAudioBlocked] = useState(false);
   const syncAnchorRef = useRef<PlaybackAnchor | null>(null);
+  const [syncAnchorState, setSyncAnchorState] = useState<PlaybackAnchor | null>(null);
   const activeBarrierRef = useRef<{ barrierId: string; videoId: string | null } | null>(null);
   const lastReadyBarrierSentRef = useRef<string | null>(null);
   const startScheduleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -404,47 +361,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     isPaused: false,
   });
   const lastSeekSeqRef = useRef<number>(0);
-
-  // Single playback engine: controls the ONE visible YouTube iframe (no hidden 2nd player)
-  const engine: IframePlaybackEngine = useMemo(
-    () =>
-      createIframeEngine(
-        () => iframeRef.current,
-        (playing) => setIsPlaying(playing),
-        (videoId) => {
-          // 1. Notify Cabina that TV finished buffering the new video so both start at 0:00 in lockstep
-          if (controlChannelRef.current) {
-            void controlChannelRef.current.send({
-              type: "broadcast",
-              event: "tv_ready",
-              payload: { videoId, timestamp: Date.now() },
-            });
-          }
-          // 2. Only if TV joined mid-song (Cabina is already > 1.8s ahead), catch up once on first frame
-          const mt = masterTargetTimeRef.current;
-          if (!mt.isPaused && mt.updatedAtMs > 0 && Date.now() - mt.updatedAtMs < 8000) {
-            const liveMasterSec = mt.seconds + Math.max(0, (Date.now() - mt.updatedAtMs) / 1000);
-            const tvCur = engine.getCurrentTime?.() ?? 0;
-            if (liveMasterSec > 1.8 && Math.abs(tvCur - liveMasterSec) > 1.8) {
-              lastTvSeekAtRef.current = Date.now();
-              engine.seekTo?.(liveMasterSec);
-              setElapsed(Math.floor(liveMasterSec));
-              elapsedRef.current = Math.floor(liveMasterSec);
-            }
-          }
-        },
-      ),
-    [],
-  );
-
-  // Listen to the iframe's messages (time, duration, state, ended, errors)
-  useEffect(() => engine.attach(), [engine]);
-
-  // YouTube embed handshake, repeated gently until live bridge responds
-  useEffect(() => {
-    const timer = setInterval(() => engine.handshake(), 2000);
-    return () => clearInterval(timer);
-  }, [engine]);
 
   const [checkedStorage, setCheckedStorage] = useState(false);
 
@@ -471,11 +387,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       localStorage.removeItem(`poneleplay.player.${slug}`);
       localStorage.removeItem("poneleplay.player.screenMode");
       localStorage.removeItem("poneleplay.player.videoMode");
-      engine.pause?.();
       setIsPlaying(false);
       window.location.href = "/tv";
     }
-  }, [slug, engine]);
+  }, [slug]);
 
   // Fetch venue fallback tracks directly from Supabase & listen for playlist updates
   useEffect(() => {
@@ -574,26 +489,50 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => window.clearInterval(interval);
   }, []);
 
-  // Elapsed runner: real position/duration reported by the single YouTube iframe
+  // Elapsed runner (250ms clock-driven): computes exact progress from PlaybackAnchor + NTP-lite clock
   useEffect(() => {
-    if (!isPlaying) return;
     const timer = setInterval(() => {
-      const d = Math.floor(engine.getDuration());
-      if (d > 0) setVideoDuration(d);
-      if (engine.hasLiveTime()) {
-        const ct = Math.floor(engine.getCurrentTime());
-        setElapsed(ct);
-        elapsedRef.current = ct;
+      const anchor = syncAnchorRef.current;
+      const client = syncClientRef.current;
+      if (anchor && anchor.track) {
+        if (typeof anchor.track.durationSeconds === "number" && anchor.track.durationSeconds > 0) {
+          setVideoDuration(anchor.track.durationSeconds);
+        }
+        const computed = computeTargetPositionSec(
+          anchor,
+          client ? client.estimatedServerMs() : Date.now(),
+        );
+        const rounded = Math.floor(computed);
+        if (rounded !== elapsedRef.current) {
+          elapsedRef.current = rounded;
+          setElapsed(rounded);
+        }
         return;
       }
-      setElapsed((prev) => {
-        const next = prev + 1;
-        elapsedRef.current = next;
-        return next;
-      });
-    }, 1000);
+
+      const mt = masterTargetTimeRef.current;
+      if (mt.updatedAtMs > 0) {
+        const liveSec = mt.isPaused
+          ? mt.seconds
+          : mt.seconds + Math.max(0, (Date.now() - mt.updatedAtMs) / 1000);
+        const rounded = Math.floor(liveSec);
+        if (rounded !== elapsedRef.current) {
+          elapsedRef.current = rounded;
+          setElapsed(rounded);
+        }
+        return;
+      }
+
+      if (isPlaying) {
+        setElapsed((prev) => {
+          const next = prev + 0.25;
+          elapsedRef.current = Math.floor(next);
+          return Math.floor(next);
+        });
+      }
+    }, 250);
     return () => clearInterval(timer);
-  }, [engine, isPlaying]);
+  }, [isPlaying]);
 
   // QR Code generator
   useEffect(() => {
@@ -621,108 +560,52 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     };
   }, [slug]);
 
-  const nativeFsActiveRef = useRef(false);
-
-  // Fullscreen state listener (window or dedicated video container)
+  // Fullscreen state listener
   useEffect(() => {
     const onFsChange = () => {
-      const isFs = Boolean(document.fullscreenElement);
-      setIsFullscreen(isFs);
-      if (isFs) {
-        nativeFsActiveRef.current = true;
-      } else if (nativeFsActiveRef.current) {
-        // User exited native browser fullscreen via Esc
-        nativeFsActiveRef.current = false;
-        setIsVideoFullscreen(false);
-        isVideoFullscreenRef.current = false;
-      }
+      setIsFullscreen(Boolean(document.fullscreenElement));
     };
     document.addEventListener("fullscreenchange", onFsChange);
     return () => document.removeEventListener("fullscreenchange", onFsChange);
   }, []);
 
-  const toggleVideoFullscreen = useCallback(() => {
-    setIsVideoFullscreen((prev) => {
-      const next = !prev;
-      isVideoFullscreenRef.current = next;
-      if (next) {
-        setVideoMode(true);
-      }
-      return next;
-    });
-  }, []);
-
   const toggleFullscreen = useCallback(() => {
-    toggleVideoFullscreen();
-  }, [toggleVideoFullscreen]);
+    if (typeof document === "undefined") return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  }, []);
 
   const toggleScreenMode = useCallback(() => {
     setScreenMode((prev) => {
-      const next = prev === "VIDEO" ? "PLAYLIST" : prev === "PLAYLIST" ? "CLEAN" : "VIDEO";
+      const next: TvDisplayMode = prev === "SALON" ? "PORTADA" : "SALON";
       if (typeof window !== "undefined") {
         localStorage.setItem("poneleplay.player.screenMode", next);
-        localStorage.setItem("poneleplay.player.videoMode", String(next !== "PLAYLIST"));
       }
-      setVideoMode(next !== "PLAYLIST");
-      setIsVideoFullscreen(next === "CLEAN");
       setLiveToast({
-        icon: next === "VIDEO" ? "smart_display" : next === "PLAYLIST" ? "queue_music" : "fullscreen",
+        icon: next === "SALON" ? "queue_music" : "album",
         message:
-          next === "VIDEO"
-            ? "Modo: Video Salón + Playlist"
-            : next === "PLAYLIST"
-              ? "Modo: Solo Playlist & Votos"
-              : "Modo: Video Limpio 100%",
+          next === "SALON"
+            ? "Modo Salón: Vinilo, Cola, Votos y QR"
+            : "Modo Portada: Carátula Minimalista",
       });
       setTimeout(() => setLiveToast(null), 3000);
       return next;
     });
   }, []);
 
-  function toggleVideoMode() {
-    toggleScreenMode();
-  }
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as unknown as { toggleTvScreenMode?: () => void }).toggleTvScreenMode = toggleScreenMode;
+    }
+  }, [toggleScreenMode]);
 
   const handleUnlockAudio = useCallback(() => {
-    void engine.play();
-    setAudioUnlocked(true);
-    if (isMuted) {
-      engine.mute?.();
-    } else {
-      engine.unMute?.();
-      engine.setVolume?.(volume);
-    }
-  }, [engine, isMuted, volume]);
-
-  // Sync isPlaying with the player
-  useEffect(() => {
-    if (isPlaying) {
-      void engine.play();
-    } else {
-      engine.pause?.();
-    }
-  }, [isPlaying, engine]);
-
-  // Sync volume and mute with the TV engine
-  useEffect(() => {
-    engine.setVolume?.(volume);
-    if (isMuted) {
-      engine.mute?.();
-    } else {
-      engine.unMute?.();
-    }
-  }, [volume, isMuted, engine]);
-
-  // Global click anywhere to ensure video playback begins smoothly
-  useEffect(() => {
-    const onFirstClick = () => {
-      if (!audioUnlocked) {
-        handleUnlockAudio();
-      }
-    };
-    window.addEventListener("click", onFirstClick, { once: true });
-    return () => window.removeEventListener("click", onFirstClick);
-  }, [audioUnlocked, handleUnlockAudio]);
+    tvAudioRef.current?.unlockAudio();
+    setTvAudioBlocked(false);
+  }, []);
 
   // TV Screen Remote Navigation & Hotkeys
   useEffect(() => {
@@ -731,28 +614,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
       const key = event.key.toLowerCase();
 
-      // Space: Toggle Play / Pause
-      if (key === " " || event.code === "Space") {
-        event.preventDefault();
-        setIsPlaying((prev) => {
-          const next = !prev;
-          if (next) void engine.play?.();
-          else engine.pause?.();
-          setLiveToast({
-            icon: next ? "play_arrow" : "pause",
-            message: next ? "▶️ Reproducción Reanudada" : "⏸️ Reproducción Pausada",
-          });
-          setTimeout(() => setLiveToast(null), 2500);
-          return next;
-        });
-      }
       if (key === "f" || key === "enter") {
-        toggleVideoFullscreen();
+        toggleFullscreen();
       }
       if (key === "v" || key === "p") {
         toggleScreenMode();
       }
-      // M key — mute is now cabina-only. Keep for local testing but show a toast hint.
       if (key === "m") {
         setLiveToast({ icon: "volume_off", message: "El audio se controla desde la Cabina" });
         setTimeout(() => setLiveToast(null), 3000);
@@ -787,14 +654,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           document.exitFullscreen().catch(() => {});
           return;
         }
-        // Esc opens Settings menu when no modal is active (mirroring Android TV Back button!)
         setShowSettingsModal(true);
       }
     }
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [screenMode, toggleScreenMode, toggleVideoFullscreen, showSettingsModal, showHotkeysHelp, qrModal, pairModalOpen, engine]);
+  }, [toggleScreenMode, toggleFullscreen, showSettingsModal, showHotkeysHelp, qrModal, pairModalOpen]);
 
   // Unified track list (live night queue -> runtime queue -> venue fallback -> demo)
   const allTracks: PlayerTrack[] = useMemo(() => {
@@ -912,27 +778,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return [...allTracks.slice(idx + 1), ...allTracks.slice(0, idx)];
   }, [allTracks, nowPlaying]);
 
-  const activeVideoId = resolveVideoId(nowPlaying);
-  const initialIframeSrcRef = useRef<string>("");
-  if (mounted && !initialIframeSrcRef.current) {
-    initialIframeSrcRef.current = `https://www.youtube.com/embed/${activeVideoId}?autoplay=1&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${origin ? `&origin=${encodeURIComponent(origin)}&widget_referrer=${encodeURIComponent(origin)}` : ""}`;
-  }
-
-  // Load new track into the single YouTube iframe ONLY when the resolved videoId changes
-  useEffect(() => {
-    if (token && nowPlaying && mounted) {
-      if (
-        activeBarrierRef.current &&
-        activeBarrierRef.current.videoId &&
-        resolveVideoId(nowPlaying) === activeBarrierRef.current.videoId
-      ) {
-        return;
-      }
-      void engine.load(nowPlaying);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, activeVideoId, mounted, engine]);
-
   const venueName =
     nightState?.venue.name ||
     playerState?.venue.name ||
@@ -957,19 +802,15 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const lastAdminProgressAtRef = useRef<number>(0);
   const lastTvSeekAtRef = useRef<number>(0);
 
-
-  const handleSeek = useCallback(
-    (targetSec: number) => {
-      const maxDur = durationRef.current || 210;
-      const clamped = Math.max(0, Math.min(maxDur, Math.floor(targetSec)));
-      setElapsed(clamped);
-      elapsedRef.current = clamped;
-      engine.seekTo?.(clamped);
-      setHudMessage(`⏩ Posición: ${formatDuration(clamped)}`);
-      setTimeout(() => setHudMessage(null), 2000);
-    },
-    [engine],
-  );
+  const handleSeek = useCallback((targetSec: number) => {
+    const maxDur = durationRef.current || 210;
+    const clamped = Math.max(0, Math.min(maxDur, Math.floor(targetSec)));
+    setElapsed(clamped);
+    elapsedRef.current = clamped;
+    tvAudioRef.current?.seekTo(clamped);
+    setHudMessage(`⏩ Posición: ${formatDuration(clamped)}`);
+    setTimeout(() => setHudMessage(null), 2000);
+  }, []);
 
   useEffect(() => {
     handleSeekRef.current = handleSeek;
@@ -980,7 +821,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     setElapsed(0);
     elapsedRef.current = 0;
     setVideoDuration(null);
-  }, [nowPlaying?.itemId, nowPlaying?.youtubeVideoId]);
+  }, [nowPlaying?.itemId, nowPlaying?.youtubeVideoId, nowPlaying?.storagePath]);
 
   const handleSkipNext = useCallback(
     async (fromRemote = false) => {
@@ -992,7 +833,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         elapsedRef.current = 0;
         setVideoDuration(nextTrack.durationSeconds ?? null);
         setIsPlaying(true);
-        void engine.load(nextTrack);
         setHudMessage(`⏭️ Siguiente: ${nextTrack.title}`);
         setTimeout(() => setHudMessage(null), 3000);
 
@@ -1016,80 +856,34 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setTimeout(() => setHudMessage(null), 2500);
       }
     },
-    [slug, queue, allTracks, engine],
+    [slug, queue, allTracks],
   );
 
-  // Auto-advance exactly once when the video ends
+  // Auto-advance only as autonomous fallback when Cabina has been silent > 12s
   const handleSkipNextRef = useRef(handleSkipNext);
   useEffect(() => {
     handleSkipNextRef.current = handleSkipNext;
   }, [handleSkipNext]);
 
-  useEffect(
-    () =>
-      engine.onEnded(() => {
-        if (remoteMediaStreamRef.current) return;
-        if (Date.now() - lastAdminProgressAtRef.current > 12000) {
-          void handleSkipNextRef.current(false);
-        }
-      }),
-    [engine],
-  );
-
-  // Synchronize Option 2 WebRTC live stream (<video>) & pause duplicate YT iframe while live
-  useEffect(() => {
-    const videoEl = remoteMediaVideoRef.current;
-    if (remoteMediaStream) {
-      engine.setPlaybackRate?.(1);
-      engine.pause?.();
-      engine.mute?.();
-      if (videoEl) {
-        if (videoEl.srcObject !== remoteMediaStream) {
-          videoEl.srcObject = remoteMediaStream;
-        }
-        videoEl.muted = isMuted;
-        videoEl.volume = Math.max(0, Math.min(1, volume / 100));
-        void videoEl.play().then(
-          () => setLiveStreamAudioBlocked(false),
-          () => {
-            if (!isMuted) {
-              videoEl.muted = true;
-              setLiveStreamAudioBlocked(true);
-              void videoEl.play().catch(() => {});
-            }
-          },
-        );
-      }
-      return;
+  const handleTvAudioEnded = useCallback(() => {
+    if (Date.now() - lastAdminProgressAtRef.current > 12000) {
+      void handleSkipNextRef.current(false);
     }
+  }, []);
 
-    if (videoEl && videoEl.srcObject) {
-      videoEl.srcObject = null;
+  const handleTvAudioCued = useCallback((videoId: string) => {
+    const b = activeBarrierRef.current;
+    const client = syncClientRef.current;
+    if (
+      b &&
+      client &&
+      (!b.videoId || b.videoId === videoId) &&
+      lastReadyBarrierSentRef.current !== b.barrierId
+    ) {
+      lastReadyBarrierSentRef.current = b.barrierId;
+      client.sendReady(b.barrierId);
     }
-    setLiveStreamAudioBlocked(false);
-
-    // Restore YouTube synced playback smoothly when live broadcast stops
-    const anchor = syncAnchorRef.current;
-    if (anchor) {
-      if (anchor.tvMuted) {
-        engine.mute?.();
-      } else {
-        engine.unMute?.();
-        engine.setVolume?.(anchor.volume);
-      }
-      if (anchor.track) {
-        const client = syncClientRef.current;
-        const targetSec = computeTargetPositionSec(
-          anchor,
-          client ? client.estimatedServerMs() : Date.now(),
-        );
-        lastTvSeekAtRef.current = Date.now();
-        engine.seekTo?.(targetSec);
-        if (anchor.isPaused) engine.pause?.();
-        else void engine.play?.();
-      }
-    }
-  }, [remoteMediaStream, isMuted, volume, engine]);
+  }, []);
 
 
   // Master Remote Control synchronization (LAN/Cloud WebSocket Sync primary + Supabase fallback)
@@ -1105,6 +899,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       source: t.source || "youtube",
       durationSeconds: t.durationSeconds ?? 210,
       youtubeVideoId: t.youtubeVideoId || undefined,
+      storagePath: t.storagePath ?? null,
       thumbnailUrl: t.thumbnailUrl ?? null,
       voteCount: t.voteCount ?? 0,
       isKaraoke: Boolean(t.isKaraoke),
@@ -1113,23 +908,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     });
 
     const applyDisplayConfigPayload = (cfg: Record<string, unknown>) => {
-      if (cfg.mode === "VIDEO") {
-        setScreenMode("VIDEO");
-        setIsVideoFullscreen(false);
-        setVideoMode(true);
-      } else if (cfg.mode === "PLAYLIST") {
-        setScreenMode("PLAYLIST");
-        setIsVideoFullscreen(false);
-        setVideoMode(false);
-      } else if (cfg.mode === "CLEAN") {
-        setScreenMode("CLEAN");
-        setIsVideoFullscreen(true);
-        setVideoMode(true);
+      if (typeof cfg.mode === "string") {
+        const nextMode = normalizeTvDisplayMode(cfg.mode);
+        setScreenMode(nextMode);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("poneleplay.player.screenMode", nextMode);
+        }
       }
       if (typeof cfg.tvMuted === "boolean") {
+        isMutedRef.current = cfg.tvMuted;
         setIsMuted(cfg.tvMuted);
-        if (cfg.tvMuted) engine.mute?.();
-        else engine.unMute?.();
       }
       setHudMessage("📺 Pantalla Actualizada desde Cabina");
       setTimeout(() => setHudMessage(null), 3000);
@@ -1194,16 +982,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (active) setSyncConnected(st.connected);
     });
 
-    const initialMediaStream = syncClient.getRemoteMediaStream();
-    if (initialMediaStream) {
-      setRemoteMediaStream(initialMediaStream);
-    }
-    const unsubMedia = syncClient.onMediaStream((stream) => {
-      if (active) {
-        setRemoteMediaStream(stream);
-      }
-    });
-
     let legacyFallbackStarted = false;
     let startLegacySupabaseFallback = () => {};
 
@@ -1220,9 +998,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         if (!tvData?.ok) return;
         const pb = tvData.playback || {};
         if (typeof pb.tvMuted === "boolean") {
+          isMutedRef.current = pb.tvMuted;
           setIsMuted(pb.tvMuted);
-          if (pb.tvMuted) engine.mute?.();
-          else engine.unMute?.();
+          const cm = Boolean(pb.cabinaMuted);
+          const nextRouting = cm && !pb.tvMuted ? "TV_ONLY" : !cm && pb.tvMuted ? "CABINA_ONLY" : "BOTH";
+          audioRoutingRef.current = nextRouting;
+          setAudioRouting(nextRouting);
         }
         if (typeof pb.positionSeconds === "number" && pb.positionSeconds >= 0) {
           masterTargetTimeRef.current = {
@@ -1232,9 +1013,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           };
           setElapsed(Math.floor(pb.positionSeconds));
           elapsedRef.current = Math.floor(pb.positionSeconds);
-          if (pb.positionSeconds > 0.5) {
-            engine.seekTo?.(pb.positionSeconds);
-          }
         }
         if (typeof pb.seekSeq === "number") {
           lastSeekSeqRef.current = pb.seekSeq;
@@ -1246,17 +1024,16 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         }
       });
 
-    let unsubCued: (() => void) | null = null;
     let unsubSnap: (() => void) | null = null;
     let unsubAnchor: (() => void) | null = null;
     let unsubPreload: (() => void) | null = null;
     let unsubGo: (() => void) | null = null;
     let unsubParty: (() => void) | null = null;
-    let driftTimer: ReturnType<typeof setInterval> | null = null;
 
     const applyAnchorToTv = (anchor: PlaybackAnchor, forceSeek = false) => {
       if (!active) return;
       syncAnchorRef.current = anchor;
+      setSyncAnchorState(anchor);
 
       if (anchor.seq > 0) {
         if (lastCommandSeqRef.current !== null && anchor.seq < lastCommandSeqRef.current) return;
@@ -1270,32 +1047,25 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (typeof anchor.volume === "number" && anchor.volume !== volumeRef.current) {
         volumeRef.current = anchor.volume;
         setVolume(anchor.volume);
-        if (!remoteMediaStreamRef.current) {
-          engine.setVolume?.(anchor.volume);
-        }
+      }
+
+      const nextRouting =
+        anchor.cabinaMuted && !anchor.tvMuted
+          ? "TV_ONLY"
+          : !anchor.cabinaMuted && anchor.tvMuted
+            ? "CABINA_ONLY"
+            : "BOTH";
+      if (nextRouting !== audioRoutingRef.current) {
+        audioRoutingRef.current = nextRouting;
+        setAudioRouting(nextRouting);
       }
 
       if (anchor.tvMuted !== isMutedRef.current) {
         isMutedRef.current = anchor.tvMuted;
         setIsMuted(anchor.tvMuted);
-        if (!remoteMediaStreamRef.current) {
-          if (anchor.tvMuted) engine.mute?.();
-          else {
-            engine.unMute?.();
-            engine.setVolume?.(anchor.volume);
-          }
-        }
-        setAudioRouting(
-          anchor.cabinaMuted && !anchor.tvMuted
-            ? "TV_ONLY"
-            : !anchor.cabinaMuted && anchor.tvMuted
-              ? "CABINA_ONLY"
-              : "BOTH",
-        );
       }
 
       setKaraokeMode(anchor.karaokeMode);
-      if (anchor.karaokeMode) setVideoMode(true);
 
       const targetSec = computeTargetPositionSec(anchor, syncClient.estimatedServerMs());
       masterTargetTimeRef.current = {
@@ -1309,10 +1079,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       if (nextPlaying !== isPlayingRef.current) {
         isPlayingRef.current = nextPlaying;
         setIsPlaying(nextPlaying);
-        if (!remoteMediaStreamRef.current) {
-          if (anchor.isPaused) engine.pause?.();
-          else void engine.play?.();
-        }
       }
 
       const incomingTrack = anchor.track ? toPlayerTrack(anchor.track) : null;
@@ -1320,8 +1086,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       const isDiffTrack =
         incomingTrack &&
         (!cur ||
+          (incomingTrack.storagePath && cur.storagePath !== incomingTrack.storagePath) ||
           (incomingTrack.youtubeVideoId && cur.youtubeVideoId !== incomingTrack.youtubeVideoId) ||
           (!incomingTrack.youtubeVideoId &&
+            !incomingTrack.storagePath &&
             cur.title.toLowerCase() !== incomingTrack.title.toLowerCase()));
 
       if (isDiffTrack && incomingTrack && !activeBarrierRef.current) {
@@ -1329,22 +1097,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setManualNowPlaying(incomingTrack);
         setElapsed(Math.floor(targetSec));
         elapsedRef.current = Math.floor(targetSec);
-        if (!remoteMediaStreamRef.current) {
-          void engine.load(incomingTrack).then(() => {
-            if (remoteMediaStreamRef.current) return;
-            if (targetSec > 0.25) {
-              engine.seekTo?.(targetSec);
-            }
-            if (anchor.isPaused) engine.pause?.();
-            else void engine.play?.();
-          });
-        }
-        return;
-      }
-
-      if (remoteMediaStreamRef.current) {
-        engine.pause?.();
-        engine.mute?.();
         return;
       }
 
@@ -1355,36 +1107,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         if (Date.now() - lastTvSeekAtRef.current < 250 && Math.abs(elapsedRef.current - targetSec) <= 0.8) {
           return;
         }
-        engine.setPlaybackRate?.(1);
         lastTvSeekAtRef.current = Date.now();
         handleSeekRef.current(targetSec);
       }
     };
 
-    unsubCued = engine.onCued((videoId) => {
-      const b = activeBarrierRef.current;
-      if (
-        b &&
-        (!b.videoId || b.videoId === videoId) &&
-        lastReadyBarrierSentRef.current !== b.barrierId
-      ) {
-        lastReadyBarrierSentRef.current = b.barrierId;
-        syncClient.sendReady(b.barrierId);
-      }
-    });
-
     const latest = syncClient.getLatestSnapshot();
     if (latest?.anchor) applyAnchorToTv(latest.anchor, false);
-
-    let prebufferedVideoId: string | null = null;
-    let prebufferedStartSec: number | null = null;
-    let adaptiveSeekLeadSec = 0.16;
-    let pendingSeekVerification: {
-      seekAtMs: number;
-      verifyAtMs: number;
-      baselineLeadSec: number;
-    } | null = null;
-    let lastDriftCheckAtMs = 0;
 
     unsubSnap = syncClient.on("room:snapshot", ({ snapshot }) => {
       if (!activeBarrierRef.current) {
@@ -1399,13 +1128,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     unsubPreload = syncClient.on("sync:preload", ({ barrierId, track, startPositionSec }) => {
       if (!active) return;
       const incoming = toPlayerTrack(track);
-      const preloadVideoId = resolveVideoId(incoming);
-      prebufferedVideoId = preloadVideoId;
-      prebufferedStartSec = startPositionSec;
-      pendingSeekVerification = null;
+      const preloadId = incoming.source === "upload" ? incoming.trackId : resolveVideoId(incoming);
       activeBarrierRef.current = {
         barrierId,
-        videoId: preloadVideoId,
+        videoId: preloadId,
       };
       if (startScheduleTimerRef.current) {
         clearTimeout(startScheduleTimerRef.current);
@@ -1413,20 +1139,19 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
       isPlayingRef.current = false;
       setIsPlaying(false);
-      setVideoMode(true);
       setManualNowPlaying(incoming);
       setElapsed(Math.floor(startPositionSec));
       elapsedRef.current = Math.floor(startPositionSec);
-      engine.setPlaybackRate?.(1);
-      engine.pause?.();
-      if (remoteMediaStreamRef.current) {
+
+      // Only pre-buffer hidden audio in BOTH mode; CABINA_ONLY/TV_ONLY release barrier immediately
+      if (audioRoutingRef.current !== "BOTH" || isMutedRef.current) {
         lastReadyBarrierSentRef.current = barrierId;
         syncClient.sendReady(barrierId);
         return;
       }
-      void engine.cue(incoming, startPositionSec);
 
-      // Safety timer if YT pre-buffer takes longer than 1500ms
+      void tvAudioRef.current?.cue(incoming, startPositionSec);
+
       setTimeout(() => {
         if (
           active &&
@@ -1446,20 +1171,25 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         activeBarrierRef.current = null;
       }
       syncAnchorRef.current = anchor;
+      setSyncAnchorState(anchor);
       lastSeekSeqRef.current = anchor.seekSeq;
       lastCommandSeqRef.current = Math.max(lastCommandSeqRef.current ?? 0, anchor.seq);
       setManualNowPlaying(incoming);
-      setVideoMode(true);
       setElapsed(Math.floor(startPositionSec));
       elapsedRef.current = Math.floor(startPositionSec);
 
-      if (anchor.tvMuted !== isMutedRef.current) {
-        isMutedRef.current = anchor.tvMuted;
-        setIsMuted(anchor.tvMuted);
-        if (anchor.tvMuted) engine.mute?.();
-        else engine.unMute?.();
-      }
-      engine.setVolume?.(anchor.volume);
+      const nextRouting =
+        anchor.cabinaMuted && !anchor.tvMuted
+          ? "TV_ONLY"
+          : !anchor.cabinaMuted && anchor.tvMuted
+            ? "CABINA_ONLY"
+            : "BOTH";
+      audioRoutingRef.current = nextRouting;
+      setAudioRouting(nextRouting);
+      isMutedRef.current = anchor.tvMuted;
+      setIsMuted(anchor.tvMuted);
+      volumeRef.current = anchor.volume;
+      setVolume(anchor.volume);
 
       if (startScheduleTimerRef.current) {
         clearTimeout(startScheduleTimerRef.current);
@@ -1468,34 +1198,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
       const startNow = () => {
         if (!active) return;
-        const incomingVideoId = resolveVideoId(incoming);
-        const alreadyPrebufferedSpot =
-          prebufferedStartSec !== null &&
-          prebufferedVideoId === incomingVideoId &&
-          Math.abs(prebufferedStartSec - startPositionSec) <= 0.15;
-        prebufferedVideoId = null;
-        prebufferedStartSec = null;
-        pendingSeekVerification = null;
-        engine.setPlaybackRate?.(1);
         isPlayingRef.current = true;
         setIsPlaying(true);
-        if (remoteMediaStreamRef.current) {
-          engine.pause?.();
-          engine.mute?.();
-          setHudMessage(`🎵 Reproduciendo: ${incoming.title}`);
-          setTimeout(() => setHudMessage(null), 3500);
-          return;
-        }
         lastTvSeekAtRef.current = Date.now();
-        if (!alreadyPrebufferedSpot && startPositionSec > 0.05) {
-          engine.seekTo?.(startPositionSec);
+        if (!anchor.tvMuted) {
+          tvAudioRef.current?.playAt(startPositionSec);
         }
-        if (anchor.tvMuted) engine.mute?.();
-        else {
-          engine.unMute?.();
-          engine.setVolume?.(anchor.volume);
-        }
-        void engine.play();
         setHudMessage(`🎵 Reproduciendo: ${incoming.title}`);
         setTimeout(() => setHudMessage(null), 3500);
       };
@@ -1514,75 +1222,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     unsubParty = syncClient.on("party:event", ({ payload }) => {
       applyPartyEventPayload(payload);
     });
-
-    // Continuous elastic drift guard (Option 1 playbackRate micro-bending + buffering suppression + adaptive seek fallback)
-    driftTimer = setInterval(() => {
-      if (remoteMediaStreamRef.current) {
-        pendingSeekVerification = null;
-        return;
-      }
-      const anchor = syncAnchorRef.current;
-      if (!anchor || anchor.isPaused || activeBarrierRef.current || !syncClient.isConnected()) {
-        pendingSeekVerification = null;
-        engine.setPlaybackRate?.(1);
-        return;
-      }
-      if (engine.isBuffering?.()) {
-        pendingSeekVerification = null;
-        engine.setPlaybackRate?.(1);
-        return;
-      }
-      if (!engine.hasLiveTime?.()) return;
-
-      const now = Date.now();
-      const expected = computeTargetPositionSec(anchor, syncClient.estimatedServerMs());
-      const actual = engine.getCurrentTime?.() ?? elapsedRef.current;
-
-      if (pendingSeekVerification) {
-        if (lastTvSeekAtRef.current > pendingSeekVerification.seekAtMs + 25) {
-          pendingSeekVerification = null;
-        } else if (now >= pendingSeekVerification.verifyAtMs) {
-          const postSeekDriftSec = expected - actual;
-          adaptiveSeekLeadSec = computeAdaptiveSeekLeadSec(
-            pendingSeekVerification.baselineLeadSec,
-            postSeekDriftSec,
-          );
-          pendingSeekVerification = null;
-        }
-      }
-
-      const isEarlyWindow = expected < 10;
-      const minCheckIntervalMs = isEarlyWindow ? 200 : 450;
-      if (now - lastDriftCheckAtMs < minCheckIntervalMs) return;
-      lastDriftCheckAtMs = now;
-
-      const driftSec = actual - expected;
-      const decision = computeElasticPlaybackRate(
-        driftSec,
-        engine.getAvailablePlaybackRates?.(),
-        {
-          isEarlyWindow,
-          isMuted: isMutedRef.current,
-        },
-      );
-
-      if (decision.action === "rate") {
-        engine.setPlaybackRate?.(decision.playbackRate);
-        return;
-      }
-
-      const cooldownMs = isEarlyWindow ? 950 : 1800;
-      engine.setPlaybackRate?.(1);
-      if (decision.action === "seek" && now - lastTvSeekAtRef.current > cooldownMs) {
-        lastTvSeekAtRef.current = now;
-        const seekLead = expected > 0.25 ? adaptiveSeekLeadSec : 0;
-        engine.seekTo?.(expected + seekLead);
-        pendingSeekVerification =
-          expected > 0.25
-            ? { seekAtMs: now, verifyAtMs: now + 780, baselineLeadSec: adaptiveSeekLeadSec }
-            : null;
-      }
-    }, 200);
 
     startLegacySupabaseFallback = () => {
       if (legacyFallbackStarted || !active) return;
@@ -1610,14 +1249,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
               if (cmd === "pause") {
                 masterTargetTimeRef.current.isPaused = true;
-                engine.pause?.();
                 setIsPlaying(false);
                 setHudMessage("⏸️ Música Pausada desde Cabina");
                 setTimeout(() => setHudMessage(null), 3500);
               } else if (cmd === "resume") {
                 masterTargetTimeRef.current.isPaused = false;
                 masterTargetTimeRef.current.updatedAtMs = Date.now();
-                void engine.play?.();
                 setIsPlaying(true);
                 setHudMessage("▶️ Música Reanudada desde Cabina");
                 setTimeout(() => setHudMessage(null), 3500);
@@ -1626,50 +1263,47 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   const next = !prev;
                   masterTargetTimeRef.current.isPaused = !next;
                   masterTargetTimeRef.current.updatedAtMs = Date.now();
-                  if (next) void engine.play?.();
-                  else engine.pause?.();
                   setHudMessage(next ? "▶️ Música Reanudada" : "⏸️ Música Pausada");
                   setTimeout(() => setHudMessage(null), 3500);
                   return next;
                 });
               } else if (cmd === "set_volume") {
                 const vol = Number(p.volume ?? 85);
+                volumeRef.current = vol;
                 setVolume(vol);
-                engine.setVolume?.(vol);
                 setHudMessage(`🔊 Volumen: ${vol}%`);
                 setTimeout(() => setHudMessage(null), 3500);
               } else if (cmd === "mute") {
+                isMutedRef.current = true;
                 setIsMuted(true);
-                engine.mute?.();
                 setHudMessage("🔇 Salón Silenciado (Corte de Emergencia)");
                 setTimeout(() => setHudMessage(null), 3500);
               } else if (cmd === "unmute") {
+                isMutedRef.current = false;
                 setIsMuted(false);
-                engine.unMute?.();
                 setHudMessage("🔊 Audio Restablecido");
                 setTimeout(() => setHudMessage(null), 3500);
               } else if (cmd === "toggle_mute") {
                 setIsMuted((prev) => {
                   const next = !prev;
-                  if (next) engine.mute?.();
-                  else engine.unMute?.();
+                  isMutedRef.current = next;
                   setHudMessage(next ? "🔇 Audio Silenciado" : "🔊 Audio Activo");
                   setTimeout(() => setHudMessage(null), 3500);
                   return next;
                 });
               } else if (cmd === "set_tv_mute") {
                 const tvMuted = Boolean(p.tvMuted ?? p.muted);
+                isMutedRef.current = tvMuted;
                 setIsMuted(tvMuted);
-                if (tvMuted) engine.mute?.();
-                else {
-                  engine.unMute?.();
-                  engine.setVolume?.(volume);
-                }
                 if (typeof p.cabinaMuted === "boolean") {
                   const cm = Boolean(p.cabinaMuted);
-                  setAudioRouting(cm && !tvMuted ? "TV_ONLY" : !cm && tvMuted ? "CABINA_ONLY" : "BOTH");
+                  const nextRouting = cm && !tvMuted ? "TV_ONLY" : !cm && tvMuted ? "CABINA_ONLY" : "BOTH";
+                  audioRoutingRef.current = nextRouting;
+                  setAudioRouting(nextRouting);
                 } else {
-                  setAudioRouting(tvMuted ? "CABINA_ONLY" : "BOTH");
+                  const nextRouting = tvMuted ? "CABINA_ONLY" : "BOTH";
+                  audioRoutingRef.current = nextRouting;
+                  setAudioRouting(nextRouting);
                 }
                 setHudMessage(tvMuted ? "🔇 Audio TV Silenciado desde Cabina" : "🔊 Audio TV Activado desde Cabina");
                 setTimeout(() => setHudMessage(null), 3500);
@@ -1703,10 +1337,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 lastTvSeekAtRef.current = Date.now();
                 setManualNowPlaying(track);
                 setIsPlaying(true);
-                setVideoMode(true);
                 setElapsed(0);
                 elapsedRef.current = 0;
-                void engine.load(track);
                 setHudMessage(`🎵 Reproduciendo: ${track.title}`);
                 setTimeout(() => setHudMessage(null), 3500);
               } else if (cmd === "reload") {
@@ -1715,56 +1347,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               } else if (cmd === "set_karaoke_mode") {
                 const enabled = Boolean(p.enabled);
                 setKaraokeMode(enabled);
-                if (enabled) {
-                  setVideoMode(true);
-                  setHudMessage("🎤 Modo Karaoke Activado!");
-                } else {
-                  setHudMessage("🎧 Modo Normal Restaurado");
-                }
+                setHudMessage(enabled ? "🎤 Modo Karaoke Activado!" : "🎧 Modo Normal Restaurado");
                 setTimeout(() => setHudMessage(null), 3500);
-              } else if (cmd === "toggle_fullscreen") {
-                setIsVideoFullscreen((prev) => {
-                  const next = !prev;
-                  isVideoFullscreenRef.current = next;
-                  if (next) {
-                    setVideoMode(true);
-                    setHudMessage("🖥️ Pantalla Completa Activada");
-                  } else {
-                    setHudMessage("🖥️ Modo Normal Restaurado");
-                    if (document.fullscreenElement) {
-                      document.exitFullscreen().catch(() => {});
-                    }
-                  }
-                  setTimeout(() => setHudMessage(null), 3500);
-                  return next;
-                });
-              } else if (cmd === "toggle_video_mode") {
-                toggleVideoMode();
-              } else if (cmd === "set_video_mode") {
-                const enable = Boolean(p.enabled);
-                setVideoMode(enable);
-                if (typeof window !== "undefined") {
-                  localStorage.setItem("poneleplay.player.videoMode", String(enable));
-                }
-                setLiveToast({
-                  icon: enable ? "smart_display" : "queue_music",
-                  message: enable ? "Modo: Video Salón HD" : "Modo: Énfasis en Playlist & Propuestas",
-                });
-                setTimeout(() => setLiveToast(null), 3000);
-              } else if (cmd === "set_fullscreen") {
-                const enableFs = Boolean(p.isFullscreen);
-                setIsVideoFullscreen(enableFs);
-                isVideoFullscreenRef.current = enableFs;
-                if (enableFs) {
-                  setVideoMode(true);
-                  setHudMessage("🖥️ Pantalla Completa Activada");
-                } else {
-                  setHudMessage("🖥️ Modo Normal Restaurado");
-                  if (document.fullscreenElement) {
-                    document.exitFullscreen().catch(() => {});
-                  }
-                }
-                setTimeout(() => setHudMessage(null), 3500);
+              } else if (cmd === "toggle_fullscreen" || cmd === "set_fullscreen") {
+                toggleFullscreen();
+              } else if (cmd === "toggle_video_mode" || cmd === "set_video_mode") {
+                toggleScreenMode();
               } else if (cmd === "set_tv_display") {
                 const cfg = (p.config || p.displayConfig || {}) as Record<string, unknown>;
                 applyDisplayConfigPayload(cfg);
@@ -1824,14 +1412,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 if (nextPlaying !== isPlayingRef.current) {
                   isPlayingRef.current = nextPlaying;
                   setIsPlaying(nextPlaying);
-                  if (st.is_paused) engine.pause?.();
-                  else void engine.play?.();
                 }
               }
               if (typeof st.volume === "number" && st.volume !== volumeRef.current) {
                 volumeRef.current = st.volume;
                 setVolume(st.volume);
-                engine.setVolume?.(st.volume);
               }
               const trkObj = (st.current_track as unknown as Record<string, unknown>) || {};
               if (typeof trkObj.tvMuted === "boolean") {
@@ -1839,13 +1424,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 if (tvMuted !== isMutedRef.current) {
                   isMutedRef.current = tvMuted;
                   setIsMuted(tvMuted);
-                  if (tvMuted) engine.mute?.();
-                  else engine.unMute?.();
                 }
               }
               if (typeof st.karaoke_mode === "boolean") {
                 setKaraokeMode(st.karaoke_mode);
-                if (st.karaoke_mode) setVideoMode(true);
               }
               if (isNewCommand && st.last_command === "seek" && typeof trkObj.positionSeconds === "number") {
                 const dbSeekSeq = typeof trkObj.seekSeq === "number" ? trkObj.seekSeq : 0;
@@ -1870,7 +1452,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   setManualNowPlaying(st.current_track);
                   setElapsed(0);
                   elapsedRef.current = 0;
-                  void engine.load(st.current_track);
                 } else {
                   void handleSkipNextRef.current(true);
                 }
@@ -1884,7 +1465,6 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 setManualNowPlaying(st.current_track);
                 setElapsed(0);
                 elapsedRef.current = 0;
-                void engine.load(st.current_track);
               }
             },
           )
@@ -1944,35 +1524,24 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               }
               if (typeof p === "boolean") {
                 if (p) {
-                  if (isPlayingRef.current) {
-                    setIsPlaying(false);
-                    engine.pause?.();
-                  }
+                  if (isPlayingRef.current) setIsPlaying(false);
                 } else {
-                  if (!isPlayingRef.current) {
-                    setIsPlaying(true);
-                    void engine.play?.();
-                  }
+                  if (!isPlayingRef.current) setIsPlaying(true);
                 }
               }
               if (typeof tvMuted === "boolean") {
                 if (tvMuted !== isMutedRef.current) {
                   isMutedRef.current = tvMuted;
                   setIsMuted(tvMuted);
-                  if (tvMuted) engine.mute?.();
-                  else engine.unMute?.();
                 }
               } else if (!isFromAdminAudio) {
                 if (typeof vol === "number" && vol !== volumeRef.current) {
                   volumeRef.current = vol;
                   setVolume(vol);
-                  engine.setVolume?.(vol);
                 }
                 if (typeof muted === "boolean" && muted !== isMutedRef.current) {
                   isMutedRef.current = muted;
                   setIsMuted(muted);
-                  if (muted) engine.mute?.();
-                  else engine.unMute?.();
                 }
               }
 
@@ -1996,24 +1565,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 const cur = nowPlayingRef.current;
                 const isDiff =
                   !cur ||
+                  (trk.storagePath && cur.storagePath !== trk.storagePath) ||
                   (trk.youtubeVideoId && cur.youtubeVideoId !== trk.youtubeVideoId) ||
-                  (!trk.youtubeVideoId && cur.title.toLowerCase() !== trk.title.toLowerCase());
+                  (!trk.youtubeVideoId && !trk.storagePath && cur.title.toLowerCase() !== trk.title.toLowerCase());
                 if (isDiff) {
                   setManualNowPlaying(trk);
                   lastTvSeekAtRef.current = Date.now();
-                  void engine.load(trk);
-                } else if (
-                  typeof currentTime === "number" &&
-                  !isNaN(currentTime) &&
-                  !p &&
-                  engine.hasLiveTime?.()
-                ) {
-                  const tvSec = engine.getCurrentTime?.() ?? elapsedRef.current;
-                  const drift = Math.abs(tvSec - targetTime);
-                  if (drift >= 3.5 && Date.now() - lastTvSeekAtRef.current > 6000) {
-                    lastTvSeekAtRef.current = Date.now();
-                    engine.seekTo?.(targetTime);
-                  }
                 }
               }
             },
@@ -2034,14 +1591,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     return () => {
       active = false;
       unsubStatus();
-      unsubMedia();
-      unsubCued?.();
       unsubSnap?.();
       unsubAnchor?.();
       unsubPreload?.();
       unsubGo?.();
       unsubParty?.();
-      if (driftTimer) clearInterval(driftTimer);
       if (startScheduleTimerRef.current) {
         clearTimeout(startScheduleTimerRef.current);
         startScheduleTimerRef.current = null;
@@ -2058,7 +1612,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         });
       }
     };
-  }, [slug, token, engine, refreshNightState, toggleVideoMode]);
+  }, [slug, token, refreshNightState, toggleFullscreen, toggleScreenMode]);
 
   // TV Standby Guard: NO audio, NO video until paired!
   if (mounted && checkedStorage && !token) {
@@ -2081,11 +1635,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   return (
     <div
       className={
-        screenMode !== "PLAYLIST"
-          ? "fixed inset-0 w-screen h-screen bg-black overflow-hidden select-none"
+        screenMode === "PORTADA"
+          ? "fixed inset-0 w-screen h-screen bg-[#070a13] overflow-hidden select-none text-[#dfe2ef]"
           : "tech-bg relative flex h-screen max-h-screen w-screen flex-col justify-between overflow-hidden p-2.5 sm:p-3 md:p-3.5 lg:p-4 text-[#dfe2ef] select-none"
       }
     >
+      {/* Hidden Audio-Only Engine (idle in CABINA_ONLY; HTML5 <audio> + hidden YT audio in TV_ONLY/BOTH) */}
+      <TvAudioEngine
+        ref={tvAudioRef}
+        track={nowPlaying}
+        audioActive={!isMuted}
+        syncBothMode={audioRouting === "BOTH"}
+        isPaused={!isPlaying}
+        volume={volume}
+        anchor={syncAnchorState}
+        estimatedServerMs={() =>
+          syncClientRef.current ? syncClientRef.current.estimatedServerMs() : Date.now()
+        }
+        onBlockedChange={setTvAudioBlocked}
+        onCued={handleTvAudioCued}
+        onEnded={handleTvAudioEnded}
+      />
+
       {/* Realtime Master Control HUD Message Toast */}
       {hudMessage && (
         <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#0A0E17]/95 text-white font-mono text-xs font-bold px-5 py-1.5 rounded-full border border-indigo-500/50 shadow-2xl animate-fade-in flex items-center gap-2">
@@ -2103,8 +1674,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         />
       ) : null}
 
-      {/* ================= TOP BAR (COMPACT & SLEEK BROADCAST HEADER — PLAYLIST MODE ONLY) ================= */}
-      {screenMode === "PLAYLIST" && (
+      {/* ================= TOP BAR (COMPACT & SLEEK BROADCAST HEADER — SALON MODE) ================= */}
+      {screenMode === "SALON" && (
         <header className="w-full px-3.5 py-1.5 flex justify-between items-center z-40 bg-[#121622] border border-[#232b42] rounded-lg shadow-md shrink-0 mb-2">
           {/* Brand & Venue Info */}
           <div className="flex items-center gap-2.5">
@@ -2170,10 +1741,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               type="button"
               onClick={toggleScreenMode}
               className="flex items-center gap-1.5 px-3 py-1 rounded-lg border font-mono text-[11px] font-bold transition-all shadow-md active:scale-95 bg-gradient-to-r from-cyan-500/25 to-blue-500/25 text-cyan-300 border-cyan-400/50 hover:bg-cyan-500/35 hover:text-white shadow-[0_0_12px_rgba(34,211,238,0.25)]"
-              title="Alternar Modo de Pantalla (V o control remoto)"
+              title="Alternar Modo Salón / Portada (V o control remoto)"
             >
               <span className="material-symbols-outlined text-[15px] text-cyan-400">queue_music</span>
-              <span>Modo: Solo Playlist</span>
+              <span>Modo: Salón</span>
               <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">(V)</span>
             </button>
 
@@ -2181,20 +1752,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
                 isMuted
-                  ? "bg-rose-500/15 border-rose-500/30 text-rose-300"
+                  ? "bg-indigo-500/15 border-indigo-400/35 text-indigo-200"
                   : "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
               }`}
               title="Audio controlado desde la Cabina"
             >
               {isMuted ? (
                 <>
-                  <VolumeX className="size-3.5 text-rose-400 shrink-0" />
-                  <span className="hidden sm:inline">TV Silenciada</span>
+                  <VolumeX className="size-3.5 text-indigo-300 shrink-0" />
+                  <span className="hidden sm:inline">Audio Cabina</span>
                 </>
               ) : (
                 <>
                   <Volume2 className="size-3.5 text-emerald-400 shrink-0" />
-                  <span className="hidden sm:inline">Audio TV</span>
+                  <span className="hidden sm:inline">
+                    {audioRouting === "BOTH" ? "Ambos Sync" : "Audio TV"}
+                  </span>
                 </>
               )}
             </div>
@@ -2239,280 +1812,171 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </header>
       )}
 
-      {/* ================= PERSISTENT FULLSCREEN VIDEO PLAYER (EXACT TV NATIVE PARITY) ================= */}
-      <div
-        ref={videoContainerRef}
-        className={
-          screenMode === "PLAYLIST"
-            ? "fixed -left-[9999px] -top-[9999px] w-1 h-1 opacity-0 invisible pointer-events-none -z-50 overflow-hidden"
-            : "fixed inset-0 w-screen h-screen bg-black overflow-hidden z-0 select-none"
-        }
-      >
-        <div className="w-full h-full relative">
-          {mounted && (
-            <iframe
-              id="poneleplay-tv-iframe"
-              ref={iframeRef}
-              src={initialIframeSrcRef.current}
-              title={nowPlaying?.title || "TV Player"}
-              className="w-full h-full border-0 pointer-events-none select-none object-cover"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              onLoad={() => {
-                engine.handshake();
-                if (remoteMediaStreamRef.current) {
-                  engine.pause?.();
-                  engine.mute?.();
-                  return;
-                }
-                if (isMuted) {
-                  engine.mute?.();
-                } else {
-                  engine.unMute?.();
-                  engine.setVolume?.(volume);
-                }
-              }}
-            />
-          )}
-
-          {remoteMediaStream && (
-            <video
-              ref={remoteMediaVideoRef}
-              autoPlay
-              playsInline
-              muted={isMuted}
-              className="absolute inset-0 w-full h-full object-contain bg-black z-[5] pointer-events-none select-none"
-            />
-          )}
-
-          {/* Transparent protection overlay */}
-          <div
-            className="absolute inset-0 z-10 cursor-default"
-            onDoubleClick={toggleFullscreen}
-            title="PonelePlay TV Salón"
-          />
-        </div>
-      </div>
-
-      {/* Live WebRTC Audio Unmute Fallback (if browser blocked unmuted stream autoplay) */}
-      {remoteMediaStream && liveStreamAudioBlocked && !isMuted && (
-        <button
-          type="button"
-          onClick={() => {
-            const v = remoteMediaVideoRef.current;
-            if (!v) return;
-            v.muted = false;
-            v.volume = Math.max(0, Math.min(1, volume / 100));
-            void v.play().then(
-              () => setLiveStreamAudioBlocked(false),
-              () => {},
-            );
-          }}
-          className="fixed top-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-2xl border border-amber-200 animate-bounce cursor-pointer"
+      {/* ================= MODE: PORTADA (MINIMALIST MUSIC-ONLY ALBUM ART VIEW · 0% VIDEO) ================= */}
+      {screenMode === "PORTADA" && (
+        <div
+          className="fixed inset-0 z-10 flex flex-col justify-between overflow-hidden select-none"
+          onDoubleClick={toggleFullscreen}
         >
-          <Volume2 className="size-4" />
-          <span>Clic para activar audio del Stream en vivo</span>
-        </button>
-      )}
-
-      {/* ================= TV MODE VIDEO OVERLAYS (EXACT ANDROID TV PARITY) ================= */}
-      {screenMode !== "PLAYLIST" && (
-        <div className="fixed inset-0 z-20 pointer-events-none overflow-hidden select-none">
-          {/* Top-Right Floating Controls (Hover / Focus) */}
-          <div className="absolute top-4 right-6 z-40 pointer-events-auto flex items-center gap-2 opacity-25 hover:opacity-100 focus-within:opacity-100 transition-opacity bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-2xl">
-            {/* Mode Switcher */}
-            <button
-              type="button"
-              onClick={toggleScreenMode}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/30 font-mono text-[11px] font-bold transition-all"
-              title="Cambiar Modo de Pantalla (Tecla V)"
-            >
-              <span className="material-symbols-outlined text-[14px] text-cyan-400">
-                {screenMode === "VIDEO" ? "smart_display" : "fullscreen"}
-              </span>
-              <span>{screenMode === "VIDEO" ? "Modo: Video Completo" : "Modo: Video Limpio"}</span>
-              <span className="text-[10px] text-slate-400 font-normal">(V)</span>
-            </button>
-
-            {/* Live WebRTC 0ms Stream Pill */}
-            {remoteMediaStream && (
-              <div
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/20 border border-cyan-400/40 font-mono text-[11px] font-bold text-cyan-200"
-                title="Recibiendo Video y Audio directo de Cabina sin desfase (WebRTC)"
-              >
-                <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
-                <span>STREAM 0ms</span>
-              </div>
-            )}
-
-            {/* TV Audio Indicator (Read-only) */}
+          {/* Ambient blurred artwork background */}
+          {nowPlaying?.thumbnailUrl ? (
             <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
-                isMuted
-                  ? "bg-rose-500/20 border-rose-500/40 text-rose-300"
-                  : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-              }`}
-              title="El audio se controla exclusivamente desde la Cabina"
-            >
-              {isMuted ? (
-                <>
-                  <VolumeX className="size-3.5 text-rose-400" />
-                  <span>TV Silenciada</span>
-                </>
-              ) : (
-                <>
-                  <Volume2 className="size-3.5 text-emerald-400" />
-                  <span>Audio TV</span>
-                </>
+              className="absolute inset-0 bg-cover bg-center scale-110 blur-3xl opacity-30 pointer-events-none"
+              style={{ backgroundImage: `url(${nowPlaying.thumbnailUrl})` }}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-[#0b1024] via-[#090d1a] to-[#050811] pointer-events-none" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#050811]/95 via-[#070a13]/65 to-[#050811]/75 pointer-events-none" />
+
+          {/* Top-Right Floating Controls */}
+          <div className="relative z-30 flex items-center justify-between px-6 pt-5">
+            <div className="flex items-center gap-2.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-400/35 text-cyan-300 font-mono text-xs font-bold">
+                <span className="size-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span>{venueName.toUpperCase()}</span>
+              </div>
+              {(nowPlaying?.isKaraoke || karaokeMode) && (
+                <span className="px-2.5 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 font-mono text-xs font-bold text-pink-200">
+                  🎤 KARAOKE
+                </span>
               )}
-              <span className="text-[9px] text-slate-400 font-normal hidden sm:inline">(Cabina)</span>
             </div>
 
-            {/* Settings Modal Button */}
-            <button
-              type="button"
-              onClick={() => setShowSettingsModal(true)}
-              className="flex items-center gap-1.5 bg-[#121622] hover:bg-[#1c2234] px-2.5 py-1 rounded-lg border border-[#2b354e] font-mono text-[11px] text-slate-200 hover:text-white transition-all"
-              title="Ajustes de Pantalla TV (Esc / O)"
-            >
-              <Settings className="size-3.5 text-cyan-400" />
-              <span>Ajustes</span>
-            </button>
+            <div className="flex items-center gap-2 bg-black/55 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 shadow-2xl">
+              <button
+                type="button"
+                onClick={toggleScreenMode}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/30 font-mono text-[11px] font-bold transition-all cursor-pointer"
+                title="Cambiar a Modo Salón (Tecla V)"
+              >
+                <span className="material-symbols-outlined text-[14px] text-cyan-400">queue_music</span>
+                <span>Modo: Portada</span>
+                <span className="text-[10px] text-slate-400 font-normal">(V)</span>
+              </button>
 
-            {/* Fullscreen Button */}
-            <button
-              type="button"
-              onClick={toggleFullscreen}
-              className="size-7 rounded-lg bg-[#121622] hover:bg-[#1c2234] border border-[#2b354e] flex items-center justify-center text-slate-300 hover:text-white transition-colors"
-              title="Pantalla completa (F)"
-            >
-              {isFullscreen ? <Minimize2 className="size-3.5 text-cyan-400" /> : <Maximize2 className="size-3.5 text-cyan-400" />}
-            </button>
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono text-[11px] font-bold ${
+                  isMuted
+                    ? "bg-indigo-500/20 border-indigo-400/35 text-indigo-200"
+                    : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+                }`}
+                title="El audio se controla exclusivamente desde la Cabina"
+              >
+                {isMuted ? (
+                  <>
+                    <VolumeX className="size-3.5 text-indigo-300" />
+                    <span>Audio Cabina</span>
+                  </>
+                ) : (
+                  <>
+                    <Volume2 className="size-3.5 text-emerald-400" />
+                    <span>{audioRouting === "BOTH" ? "Ambos Sync" : "Audio TV"}</span>
+                  </>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(true)}
+                className="flex items-center gap-1.5 bg-[#121622] hover:bg-[#1c2234] px-2.5 py-1 rounded-lg border border-[#2b354e] font-mono text-[11px] text-slate-200 hover:text-white transition-all cursor-pointer"
+                title="Ajustes de Pantalla TV (Esc / O)"
+              >
+                <Settings className="size-3.5 text-cyan-400" />
+                <span>Ajustes</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="size-7 rounded-lg bg-[#121622] hover:bg-[#1c2234] border border-[#2b354e] flex items-center justify-center text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Pantalla completa (F)"
+              >
+                {isFullscreen ? <Minimize2 className="size-3.5 text-cyan-400" /> : <Maximize2 className="size-3.5 text-cyan-400" />}
+              </button>
+            </div>
           </div>
 
-          {/* Left Floating Queue (100% Transparent, no box/border, text only with drop shadow) */}
-          {screenMode === "VIDEO" && queue.length > 0 && (
-            <div className="absolute top-7 left-8 w-[310px] flex flex-col z-20 pointer-events-none">
-              <div className="flex items-center justify-between w-full mb-2">
-                <span className="font-mono text-xs font-black text-cyan-400 tracking-wider [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                  📋 COLA EN VIVO
-                </span>
-                <span className="font-mono text-[11px] text-cyan-200 font-bold [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                  {queue.length} temas
-                </span>
-              </div>
-
-              {queue.slice(0, 7).map((item, idx) => {
-                const isBar = (item.voteCount >= 9999 || item.voteCount <= 0) && !item.guestName;
-                return (
-                  <div key={item.itemId || item.trackId || idx} className="flex items-center w-full mb-1.5 min-w-0">
-                    <span className="font-mono text-xs font-bold text-cyan-400 w-7 shrink-0 [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                      #{idx + 1}
-                    </span>
-                    <div className="flex-1 min-w-0 pr-2">
-                      <p className="text-xs font-bold text-white truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                        {item.isKaraoke ? "🎤 " : ""}{decodeHtml(item.title)}
-                      </p>
-                      {item.guestName ? (
-                        <p className="text-[10.5px] font-medium text-pink-400 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                          {item.artist} • 🎉 {item.guestName}
-                        </p>
-                      ) : (
-                        <p className="text-[10.5px] font-medium text-slate-300 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                          {item.artist}
-                        </p>
-                      )}
-                    </div>
-                    <span
-                      className={`font-mono text-[10.5px] font-bold shrink-0 [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)] ${
-                        isBar ? "text-amber-400" : "text-emerald-300"
-                      }`}
-                    >
-                      {isBar ? (isParty ? "⭐ DJ" : "⭐ BAR") : `${item.voteCount}v`}
-                    </span>
+          {/* Center Artwork + Vinyl + Track Info */}
+          <div className="relative z-20 flex-1 flex flex-col items-center justify-center px-8 text-center max-w-4xl mx-auto w-full">
+            <div className="relative size-56 sm:size-64 mb-6 flex items-center justify-center">
+              <div
+                className={`absolute -right-6 size-56 sm:size-64 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
+                  isPlaying ? "animate-spin-vinyl" : ""
+                }`}
+              >
+                <div className="size-36 sm:size-44 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                  <div className="size-20 sm:size-24 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
+                    <div className="size-3 rounded-full bg-[#0a0e17]" />
                   </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Right Floating Proposals (100% Transparent, no box/border, text only with drop shadow) */}
-          {screenMode === "VIDEO" && candidateProposals.length > 0 && (
-            <div className="absolute top-7 right-8 w-[310px] flex flex-col z-20 pointer-events-none">
-              <div className="flex items-center justify-between w-full mb-2">
-                <span className="font-mono text-xs font-black text-amber-400 tracking-wider [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                  🔥 EN VOTACIÓN
-                </span>
-                <span className="text-[11px] text-cyan-300 font-bold [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                  Pedí con QR
-                </span>
-              </div>
-
-              {candidateProposals.slice(0, 7).map((prop, idx) => (
-                <div key={prop.id || prop.trackId || idx} className="flex items-center justify-between w-full mb-1.5 min-w-0">
-                  <div className="flex-1 min-w-0 pr-2">
-                    <p className="text-xs font-bold text-white truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                      {prop.isKaraoke ? "🎤 " : ""}{decodeHtml(prop.title)}
-                    </p>
-                    {prop.guestName ? (
-                      <p className="text-[10px] font-semibold text-pink-400 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                        🎉 Pedido por {prop.guestName}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] font-medium text-slate-300 truncate [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                        {prop.artist}
-                      </p>
-                    )}
-                  </div>
-                  <span className="font-mono text-xs font-bold text-amber-400 shrink-0 [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]">
-                    {prop.voteCount}/{effectiveThreshold}v
-                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Bottom Subtle Dark Gradient */}
-          <div className="absolute bottom-0 inset-x-0 h-44 bg-gradient-to-t from-[#070a13]/95 via-[#070a13]/70 to-transparent pointer-events-none z-20" />
-
-          {/* Bottom HUD Overlay */}
-          <div className="absolute bottom-0 inset-x-0 px-8 py-5 flex items-center justify-between z-30 pointer-events-auto">
-            {/* Left: Now Playing Info */}
-            <div className="flex items-center min-w-0 mr-4">
-              <div className="size-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse shrink-0 mr-3" />
-              <div className="min-w-0">
-                <div className="flex items-center flex-wrap gap-x-2.5">
-                  <span className="font-mono text-[11px] font-bold text-cyan-300 tracking-wider [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
-                    {isParty ? "🎉 EN AIRE • FIESTA" : "EN AIRE"}
-                  </span>
-                  {(nowPlaying?.isKaraoke || karaokeMode) && (
-                    <span className="font-mono text-[11px] font-bold text-rose-500 [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
-                      🎤 KARAOKE
-                    </span>
-                  )}
-                  {nowPlaying?.guestName && (
-                    <span className="font-mono text-[11px] font-black text-pink-400 [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
-                      🎉 Pedido por {nowPlaying.guestName}
-                    </span>
-                  )}
-                </div>
-                <h1 className="text-xl sm:text-2xl font-bold text-white truncate max-w-2xl mt-0.5 [text-shadow:_2px_2px_8px_rgba(0,0,0,0.95)]">
-                  {decodeHtml(nowPlaying?.title || "Esperando temas...")}
-                </h1>
-                <p className="text-xs sm:text-sm font-medium text-slate-300 truncate max-w-xl [text-shadow:_1px_1px_4px_rgba(0,0,0,0.95)]">
-                  {nowPlaying?.artist || venueName}
-                </p>
-                {nowPlaying?.dedication && (
-                  <div className="mt-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-purple-950/90 border border-pink-500 shadow-lg max-w-xl">
-                    <span className="text-xs font-bold text-pink-100 truncate">
-                      💬 &ldquo;{nowPlaying.dedication}&rdquo;
-                    </span>
-                  </div>
+              </div>
+              <div className="relative size-56 sm:size-64 rounded-3xl overflow-hidden border-2 border-white/15 shadow-2xl z-10 bg-[#0d1220] flex items-center justify-center">
+                {nowPlaying?.thumbnailUrl ? (
+                  <Image
+                    src={nowPlaying.thumbnailUrl}
+                    alt={nowPlaying.title}
+                    width={256}
+                    height={256}
+                    className="w-full h-full object-cover"
+                    unoptimized
+                  />
+                ) : (
+                  <Music2 className="size-20 text-cyan-400" />
                 )}
               </div>
             </div>
 
-            {/* Right: Table QR Code + Clock */}
+            {nowPlaying?.guestName && (
+              <span className="mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 font-mono text-xs font-bold text-pink-200">
+                🎉 Pedido por {nowPlaying.guestName}
+              </span>
+            )}
+            <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
+              {decodeHtml(nowPlaying?.title || "Esperando temas...")}
+            </h1>
+            <p className="mt-2 text-lg sm:text-2xl font-medium text-cyan-200/90 truncate max-w-2xl">
+              {nowPlaying?.artist || venueName}
+            </p>
+            {nowPlaying?.dedication && (
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/85 border border-pink-400/60 shadow-lg max-w-2xl">
+                <span className="text-sm font-bold text-pink-100 truncate">
+                  💬 &ldquo;{nowPlaying.dedication}&rdquo;
+                </span>
+              </div>
+            )}
+
+            {/* Clock-driven progress bar */}
+            <div className="mt-6 w-full max-w-xl">
+              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500 rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between font-mono text-xs text-slate-300 tabular-nums">
+                <span>{formatDuration(elapsed)}</span>
+                <span>{isPlaying ? "SONANDO" : "EN PAUSA"}</span>
+                <span>{formatDuration(duration)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Bar: Next Up + QR + Clock */}
+          <div className="relative z-30 px-8 pb-6 flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              {queue[0] && (
+                <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-black/50 border border-white/10 backdrop-blur-md max-w-md">
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-cyan-400 shrink-0">
+                    A continuación
+                  </span>
+                  <span className="text-xs font-bold text-white truncate">
+                    {decodeHtml(queue[0].title)} — {queue[0].artist}
+                  </span>
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-3 shrink-0">
               {qr && (
                 <div
@@ -2531,20 +1995,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 </div>
               )}
               <div className="flex flex-col items-end">
-                <span className="font-mono text-lg font-bold text-white [text-shadow:_2px_2px_6px_rgba(0,0,0,0.95)]" suppressHydrationWarning>
+                <span className="font-mono text-lg font-bold text-white" suppressHydrationWarning>
                   {clock}
                 </span>
-                <span className="text-xs font-semibold text-cyan-300 [text-shadow:_1px_1px_3px_rgba(0,0,0,0.95)]">
-                  Pedí tu música
-                </span>
+                <span className="text-xs font-semibold text-cyan-300">Pedí tu música</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ================= MODE 2: ENFASIS EN PLAYLIST Y PROPUESTAS (AUDIO SALON + MAXIMA PARTICIPACION) ================= */}
-      {screenMode === "PLAYLIST" && (
+      {/* ================= MODE: SALON (VINILO, PROGRESO, COLA, VOTOS Y QR) ================= */}
+      {screenMode === "SALON" && (
         <main className="w-full flex-1 grid grid-cols-12 gap-3 min-h-0 overflow-hidden mb-2">
             {/* COL 1: HERO NOW PLAYING & QR CARD (4 COLS) */}
             <section className="col-span-4 flex flex-col justify-between gap-2.5 min-h-0">
@@ -2565,8 +2027,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 {/* Central Vinyl & Album Artwork Showcase */}
                 <div className="flex flex-col items-center justify-center my-auto py-2 text-center">
                   <div className="relative size-36 sm:size-44 mb-3 flex items-center justify-center">
-                    {/* Spinning Vinyl */}
-                    <div className="absolute -right-3 size-36 sm:size-44 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 animate-spin-vinyl">
+                    {/* Spinning Vinyl (rotates only while playing) */}
+                    <div
+                      className={`absolute -right-3 size-36 sm:size-44 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
+                        isPlaying ? "animate-spin-vinyl" : ""
+                      }`}
+                    >
                       <div className="size-24 sm:size-28 rounded-full border border-neutral-700/40 flex items-center justify-center">
                         <div className="size-14 sm:size-16 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
                           <div className="size-2 rounded-full bg-[#0a0e17]" />
@@ -2853,8 +2319,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </main>
       )}
 
-      {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER — PLAYLIST MODE ONLY) ================= */}
-      {screenMode === "PLAYLIST" && (
+      {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER — SALON MODE) ================= */}
+      {screenMode === "SALON" && (
         <footer className="w-full bg-[#0d1017] border border-[#1e2333] rounded-lg py-1 px-3 overflow-hidden z-40 shrink-0 shadow-sm">
           <div className="animate-marquee items-center gap-10 font-mono text-[10px] text-slate-400 whitespace-nowrap">
             <span className="flex items-center gap-3 shrink-0 whitespace-nowrap">
@@ -3139,48 +2605,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         </div>
       )}
 
-      {/* Floating Audio Unlock Banner (Browsers block autoplay unmuted by default) */}
-      {!audioUnlocked && !isMuted && (
-        <div
+      {/* Floating Audio Unlock Banner (only when TV audio is active and browser blocked autoplay) */}
+      {tvAudioBlocked && !isMuted && (
+        <button
+          type="button"
           onClick={handleUnlockAudio}
           className="fixed bottom-14 left-1/2 -translate-x-1/2 z-[110] cursor-pointer bg-gradient-to-r from-cyan-600 via-indigo-600 to-purple-600 text-white font-mono text-xs font-black px-6 py-3 rounded-full border-2 border-white/50 shadow-2xl animate-bounce flex items-center gap-2.5 hover:scale-105 transition-all"
         >
           <Volume2 className="size-4 animate-pulse text-cyan-300" />
-          <span>🔊 Hacé clic acá o presioná cualquier tecla para activar el audio del salón</span>
-        </div>
+          <span>🔊 Activar sonido en TV</span>
+        </button>
       )}
 
-      {/* Floating Quick Settings button when in fullscreen or clean video */}
-      {(isVideoFullscreen || screenMode === "CLEAN") && (
-        <div className="fixed top-4 right-4 z-[9999] opacity-0 hover:opacity-100 transition-opacity flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setShowSettingsModal(true)}
-            className="bg-black/85 hover:bg-black text-white font-mono text-xs px-3.5 py-1.5 rounded-lg border border-white/20 flex items-center gap-1.5 shadow-2xl backdrop-blur-md cursor-pointer transition-colors"
-          >
-            <Settings className="size-3.5 text-cyan-400" />
-            <span>Ajustes</span>
-          </button>
-          <button
-            type="button"
-            onClick={toggleVideoFullscreen}
-            className="bg-black/85 hover:bg-black text-white font-mono text-xs px-3.5 py-1.5 rounded-lg border border-white/20 flex items-center gap-1.5 shadow-2xl backdrop-blur-md cursor-pointer transition-colors"
-          >
-            <Minimize2 className="size-3.5 text-cyan-400" />
-            <span>Salir Fullscreen</span>
-          </button>
-        </div>
-      )}
-
-      {/* PC Kiosk TV Settings Modal (Full native TV parity) */}
+      {/* PC Kiosk TV Settings Modal */}
       <TvSettingsModal
         isOpen={showSettingsModal}
         currentSlug={slug}
         venueName={venueName}
         screenMode={screenMode}
         isMuted={isMuted}
+        audioRouting={audioRouting}
         isFullscreen={isFullscreen}
-        versionName="2.6.0"
+        versionName="2.9.2"
         partyConfig={partyConfig}
         onUpdatePartyConfig={async (patch) => {
           try {

@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Monitor,
-  Volume2,
-  VolumeX,
   Maximize2,
   Minimize2,
   RefreshCw,
@@ -14,16 +12,23 @@ import {
 } from "lucide-react";
 import {
   DEDICATION_STYLES,
-  type DedicationStyle,
   type PartyConfig,
 } from "@/lib/domain/party";
+
+export type TvDisplayMode = "SALON" | "PORTADA";
+
+export function normalizeTvDisplayMode(raw: string | null | undefined): TvDisplayMode {
+  if (raw === "PORTADA" || raw === "CLEAN") return "PORTADA";
+  return "SALON";
+}
 
 interface TvSettingsModalProps {
   isOpen: boolean;
   currentSlug: string;
   venueName: string;
-  screenMode: "VIDEO" | "PLAYLIST" | "CLEAN";
+  screenMode: TvDisplayMode;
   isMuted: boolean;
+  audioRouting?: "CABINA_ONLY" | "TV_ONLY" | "BOTH";
   isFullscreen: boolean;
   versionName?: string;
   partyConfig?: PartyConfig;
@@ -41,6 +46,7 @@ export function TvSettingsModal({
   venueName,
   screenMode,
   isMuted,
+  audioRouting,
   isFullscreen,
   versionName = "2.6.0",
   partyConfig,
@@ -109,18 +115,16 @@ export function TvSettingsModal({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-xl">
-                {screenMode === "VIDEO" ? "🎬" : screenMode === "PLAYLIST" ? "📋" : "✨"}
+                {screenMode === "SALON" ? "🎵" : "✨"}
               </span>
               <div>
                 <span className="block text-xs font-mono font-bold text-cyan-400 uppercase tracking-wider">
-                  Modo de Pantalla (Presioná para cambiar)
+                  Modo de Pantalla Musical (Presioná para cambiar)
                 </span>
                 <span className="text-sm font-extrabold text-white">
-                  {screenMode === "VIDEO"
-                    ? "🎬 VIDEO COMPLETO (Video Salón + Cola)"
-                    : screenMode === "PLAYLIST"
-                      ? "📋 SOLO PLAYLIST & VOTOS (Máxima Participación)"
-                      : "✨ VIDEO LIMPIO (Pantalla Completa Pura)"}
+                  {screenMode === "SALON"
+                    ? "🎵 MODO SALÓN (Vinilo, Cola, Votos y QR)"
+                    : "✨ MODO PORTADA (Carátula Minimalista y QR)"}
                 </span>
               </div>
             </div>
@@ -143,12 +147,14 @@ export function TvSettingsModal({
               <span className="text-xl">{isMuted ? "🔇" : "🔊"}</span>
               <div>
                 <span className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
-                  Audio de la TV
+                  Audio de la TV (Solo Música · Sin Video)
                 </span>
                 <span className={`text-sm font-extrabold ${isMuted ? "text-rose-300" : "text-emerald-300"}`}>
                   {isMuted
-                    ? "🔇 SILENCIADO (Audio solo en Cabina)"
-                    : "🔊 ACTIVO (Audio en este TV / Parlante)"}
+                    ? "🔇 SOLO CABINA (TV solo visual)"
+                    : audioRouting === "BOTH"
+                      ? "🔊 CABINA + TV SINCRONIZADO"
+                      : "🔊 SOLO TV (Audio activo en esta pantalla)"}
                 </span>
                 <span className="block text-[10px] font-mono text-slate-400 mt-0.5">
                   Controlado exclusivamente desde el Panel Admin / Cabina
@@ -156,7 +162,7 @@ export function TvSettingsModal({
               </div>
             </div>
             <span className="font-mono text-[10px] px-2 py-1 rounded bg-black/40 text-slate-400 border border-white/10 whitespace-nowrap">
-              Solo Cabina
+              {isMuted ? "Solo Cabina" : audioRouting === "BOTH" ? "Ambos" : "Solo TV"}
             </span>
           </div>
         </div>
