@@ -466,6 +466,11 @@ fun NativeTvApp(
     var isScanningLan by remember { mutableStateOf(false) }
     var lanScanStatusText by remember { mutableStateOf<String?>(null) }
     var manualRefreshTick by remember { mutableStateOf(0) }
+    var karaokeOffsetSec by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(feed?.nowPlaying?.id, feed?.nowPlaying?.youtubeVideoId) {
+        karaokeOffsetSec = 0f
+    }
 
     var lastAnchorSeq by remember { mutableStateOf(0L) }
     var lastAnchorSeekSeq by remember { mutableStateOf(0L) }
@@ -718,6 +723,9 @@ fun NativeTvApp(
                         }
                     } else if (evType == "party_skip_vote_passed") {
                         feed = feed?.copy(activeSkipVote = null)
+                    } else if (evType == "karaoke_offset") {
+                        val nextOffset = p.optDouble("offsetSec", 0.0).toFloat().coerceIn(-15f, 15f)
+                        karaokeOffsetSec = nextOffset
                     }
                 } catch (_: Exception) {}
             }
@@ -904,6 +912,7 @@ fun NativeTvApp(
                     useLegacySupabaseWs = useLegacySupabaseWs,
                     syncStatus = syncStatus,
                     liveAnchor = liveAnchor,
+                    karaokeOffsetSec = karaokeOffsetSec,
                     estimatedServerMs = { syncClient.estimatedServerMs() },
                     videoController = videoController,
                     onVideoEnded = {

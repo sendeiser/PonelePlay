@@ -100,6 +100,7 @@ export function PanelPlaybackFooter({
   const audioRoutingRef = useRef<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
   audioRoutingRef.current = audioRouting;
   const [karaokeMode, setKaraokeMode] = useState(false);
+  const [karaokeOffsetSec, setKaraokeOffsetSec] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
@@ -1208,6 +1209,39 @@ export function PanelPlaybackFooter({
     showToast(labels[routing]);
   };
 
+  useEffect(() => {
+    setKaraokeOffsetSec(0);
+  }, [currentTrack?.itemId, currentTrack?.youtubeVideoId]);
+
+  const broadcastKaraokeOffset = (nextOffset: number) => {
+    const payload = {
+      type: "karaoke_offset",
+      offsetSec: nextOffset,
+      timestamp: Date.now(),
+    };
+    syncClientRef.current?.sendPartyEvent(payload);
+    if (channelRef.current) {
+      void channelRef.current.send({
+        type: "broadcast",
+        event: "karaoke_offset",
+        payload,
+      });
+    }
+  };
+
+  const handleAdjustKaraokeOffset = (deltaSec: number) => {
+    const next = Math.max(-15, Math.min(15, Math.round((karaokeOffsetSec + deltaSec) * 10) / 10));
+    setKaraokeOffsetSec(next);
+    broadcastKaraokeOffset(next);
+    showToast(`🎤 Letra Karaoke: ${next > 0 ? "+" : ""}${next.toFixed(1)}s`);
+  };
+
+  const handleResetKaraokeOffset = () => {
+    setKaraokeOffsetSec(0);
+    broadcastKaraokeOffset(0);
+    showToast("🎤 Letra Karaoke: 0.0s (restablecida)");
+  };
+
   const handleToggleKaraoke = async () => {
     const next = !karaokeMode;
     setKaraokeMode(next);
@@ -1628,6 +1662,42 @@ export function PanelPlaybackFooter({
               <Mic className="size-3.5 shrink-0" />
               <span className="hidden lg:inline">{karaokeMode ? "Karaoke ON" : "Karaoke"}</span>
             </button>
+
+            {(karaokeMode || currentTrack?.isKaraoke) && (
+              <div
+                className="h-8 shrink-0 inline-flex items-center rounded-xl border border-th-accent/40 bg-th-recessed p-0.5 gap-0.5"
+                title="Calibrar sincronización de letra Karaoke en vivo en las TVs"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleAdjustKaraokeOffset(-0.5)}
+                  className="h-full px-1.5 rounded-lg text-[10px] font-mono font-bold text-th-text-2 hover:text-th-text hover:bg-th-hover transition-colors cursor-pointer"
+                  title="Atrasar letra 0.5s en TV"
+                >
+                  -0.5s
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetKaraokeOffset}
+                  className={`h-full px-1.5 rounded-lg text-[10px] font-mono font-bold tabular-nums transition-colors cursor-pointer ${
+                    karaokeOffsetSec !== 0
+                      ? "bg-th-accent/20 text-th-accent"
+                      : "text-th-muted hover:text-th-text"
+                  }`}
+                  title="Restablecer desfase de letra a 0.0s"
+                >
+                  {karaokeOffsetSec > 0 ? `+${karaokeOffsetSec.toFixed(1)}s` : `${karaokeOffsetSec.toFixed(1)}s`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAdjustKaraokeOffset(0.5)}
+                  className="h-full px-1.5 rounded-lg text-[10px] font-mono font-bold text-th-text-2 hover:text-th-text hover:bg-th-hover transition-colors cursor-pointer"
+                  title="Adelantar letra 0.5s en TV"
+                >
+                  +0.5s
+                </button>
+              </div>
+            )}
 
             {isAudioBlocked ? (
               <button

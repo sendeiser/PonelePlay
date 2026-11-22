@@ -310,6 +310,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [tvAudioBlocked, setTvAudioBlocked] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
+  const [karaokeOffsetSec, setKaraokeOffsetSec] = useState(0);
   const [hudMessage, setHudMessage] = useState<string | null>(null);
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
 
@@ -624,6 +625,21 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     setTvAudioBlocked(false);
   }, []);
 
+  const adjustKaraokeOffset = useCallback((deltaSec: number) => {
+    setKaraokeOffsetSec((prev) => {
+      const next = Math.max(-15, Math.min(15, Math.round((prev + deltaSec) * 10) / 10));
+      setHudMessage(`🎤 Desfase letra: ${next > 0 ? "+" : ""}${next.toFixed(1)}s`);
+      setTimeout(() => setHudMessage(null), 2000);
+      return next;
+    });
+  }, []);
+
+  const resetKaraokeOffset = useCallback(() => {
+    setKaraokeOffsetSec(0);
+    setHudMessage("🎤 Desfase letra: 0.0s");
+    setTimeout(() => setHudMessage(null), 1800);
+  }, []);
+
   // TV Screen Remote Navigation & Hotkeys
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -636,6 +652,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
       if (key === "v" || key === "p") {
         toggleScreenMode();
+      }
+      if (key === "[") {
+        adjustKaraokeOffset(-0.5);
+      }
+      if (key === "]") {
+        adjustKaraokeOffset(0.5);
       }
       if (key === "m") {
         setLiveToast({ icon: "volume_off", message: "El audio se controla desde la Cabina" });
@@ -677,7 +699,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleScreenMode, toggleFullscreen, showSettingsModal, showHotkeysHelp, qrModal, pairModalOpen]);
+  }, [toggleScreenMode, toggleFullscreen, adjustKaraokeOffset, showSettingsModal, showHotkeysHelp, qrModal, pairModalOpen]);
 
   // Unified track list (live night queue -> runtime queue -> venue fallback -> demo)
   const allTracks: PlayerTrack[] = useMemo(() => {
@@ -845,6 +867,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       setElapsed(0);
       elapsedRef.current = 0;
     }
+    setKaraokeOffsetSec(0);
     setVideoDuration(null);
   }, [nowPlaying?.itemId, nowPlaying?.trackId, nowPlaying?.youtubeVideoId, nowPlaying?.storagePath]);
 
@@ -1041,6 +1064,11 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         });
         setHudMessage(`💌 "${p.dedication}"${guestName ? ` — ${guestName}` : ""}`);
         setTimeout(() => setHudMessage(null), 8000);
+      } else if (p.type === "karaoke_offset" && typeof p.offsetSec === "number") {
+        const clamped = Math.max(-15, Math.min(15, Math.round(p.offsetSec * 10) / 10));
+        setKaraokeOffsetSec(clamped);
+        setHudMessage(`🎤 Letra Karaoke: ${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}s`);
+        setTimeout(() => setHudMessage(null), 2000);
       } else if (p.type === "tv_display_config" && p.config && typeof p.config === "object") {
         const target = typeof p.targetDeviceId === "string" ? p.targetDeviceId : "all";
         if (!target || target === "all" || !token || target === token) {
@@ -1465,6 +1493,17 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               });
               setHudMessage(`💌 "${dedication}"${guestName ? ` — ${guestName}` : ""}`);
               setTimeout(() => setHudMessage(null), 8000);
+            },
+          )
+          .on(
+            "broadcast",
+            { event: "karaoke_offset" },
+            (msg: { payload?: { offsetSec?: number } }) => {
+              if (!active || typeof msg.payload?.offsetSec !== "number") return;
+              const clamped = Math.max(-15, Math.min(15, Math.round(msg.payload.offsetSec * 10) / 10));
+              setKaraokeOffsetSec(clamped);
+              setHudMessage(`🎤 Desfase letra: ${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}s`);
+              setTimeout(() => setHudMessage(null), 2000);
             },
           )
           .on(
@@ -2044,8 +2083,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   <KaraokeLyricsOverlay
                     title={decodeHtml(nowPlaying?.title || "")}
                     artist={nowPlaying?.artist || ""}
+                    videoId={nowPlaying?.youtubeVideoId ?? null}
                     durationSec={duration}
                     elapsedSec={elapsed}
+                    offsetSec={karaokeOffsetSec}
+                    onAdjustOffset={adjustKaraokeOffset}
+                    onResetOffset={resetKaraokeOffset}
                     isPlaying={isPlaying}
                     variant="stage"
                   />
@@ -2227,8 +2270,12 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                       <KaraokeLyricsOverlay
                         title={decodeHtml(nowPlaying?.title || "")}
                         artist={nowPlaying?.artist || ""}
+                        videoId={nowPlaying?.youtubeVideoId ?? null}
                         durationSec={duration}
                         elapsedSec={elapsed}
+                        offsetSec={karaokeOffsetSec}
+                        onAdjustOffset={adjustKaraokeOffset}
+                        onResetOffset={resetKaraokeOffset}
                         isPlaying={isPlaying}
                         variant="compact"
                       />

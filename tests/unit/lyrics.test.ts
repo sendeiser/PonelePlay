@@ -3,11 +3,13 @@ import {
   cleanTrackQuery,
   parseLrcLyrics,
   parsePlainLyrics,
+  parseYoutubeJson3Captions,
+  parseYoutubeXmlCaptions,
   resolveActiveLyricIndex,
 } from "@/lib/domain/lyrics";
 
 describe("karaoke lyrics domain helpers", () => {
-  it("cleans messy YouTube titles and extracts embedded artist - song pairs", () => {
+  it("cleans messy YouTube & Karaoke titles and extracts embedded artist - song pairs", () => {
     expect(
       cleanTrackQuery(
         "Soda Stereo - De Música Ligera (Video Oficial) [Karaoke HD]",
@@ -26,7 +28,7 @@ describe("karaoke lyrics domain helpers", () => {
     });
 
     expect(
-      cleanTrackQuery("Bad Bunny - Tití Me Preguntó (Letra)", "YouTube"),
+      cleanTrackQuery("Bad Bunny - Tití Me Preguntó (Pista Karaoke con Letra)", "Karaoke Hits"),
     ).toEqual({
       title: "Tití Me Preguntó",
       artist: "Bad Bunny",
@@ -49,20 +51,43 @@ describe("karaoke lyrics domain helpers", () => {
     ]);
   });
 
-  it("resolves active lyric line index for synced LRC and proportional plain fallback", () => {
+  it("parses YouTube JSON3 and XML timedtext captions while filtering [Música] noise", () => {
+    const json3 = {
+      events: [
+        { tStartMs: 1200, segs: [{ utf8: "[Música]" }] },
+        { tStartMs: 5400, segs: [{ utf8: "Ella " }, { utf8: "durmió" }] },
+        { tStartMs: 9800, segs: [{ utf8: "al calor\nde las masas" }] },
+      ],
+    };
+    expect(parseYoutubeJson3Captions(json3)).toEqual([
+      { timeSec: 5.4, text: "Ella durmió" },
+      { timeSec: 9.8, text: "al calor de las masas" },
+    ]);
+
+    const xml = `<transcript><text start="2.0" dur="1.5">[Music]</text><text start="6.25" dur="3.0">De m&uacute;sica &amp; luz</text><text start="11.5" dur="2.0">Nada m&#39;as</text></transcript>`;
+    expect(parseYoutubeXmlCaptions(xml)).toEqual([
+      { timeSec: 6.25, text: "De m&uacute;sica & luz" },
+      { timeSec: 11.5, text: "Nada m'as" },
+    ]);
+  });
+
+  it("resolves active lyric line index with manual offsetSec calibration (positive & negative)", () => {
     const synced = [
       { timeSec: 5, text: "Intro" },
       { timeSec: 12, text: "Verso 1" },
       { timeSec: 25, text: "Coro" },
     ];
-    expect(resolveActiveLyricIndex(synced, [], 0, 180)).toBe(0);
-    expect(resolveActiveLyricIndex(synced, [], 11.8, 180)).toBe(1);
-    expect(resolveActiveLyricIndex(synced, [], 30, 180)).toBe(2);
+    expect(resolveActiveLyricIndex(synced, [], 0, 180, 0)).toBe(0);
+    expect(resolveActiveLyricIndex(synced, [], 11.8, 180, 0)).toBe(1);
+    // Negative offset (-3s) delays lyrics when YouTube video has a 3s extra intro
+    expect(resolveActiveLyricIndex(synced, [], 14.0, 180, -3.0)).toBe(0);
+    // Positive offset (+4s) advances lyrics when lyrics lag behind
+    expect(resolveActiveLyricIndex(synced, [], 21.5, 180, 4.0)).toBe(2);
 
     const plain = parsePlainLyrics("Linea 1\n\nLinea 2\nLinea 3\nLinea 4");
     expect(plain).toEqual(["Linea 1", "Linea 2", "Linea 3", "Linea 4"]);
-    expect(resolveActiveLyricIndex([], plain, 10, 200)).toBe(0);
-    expect(resolveActiveLyricIndex([], plain, 100, 200)).toBeGreaterThanOrEqual(1);
-    expect(resolveActiveLyricIndex([], plain, 190, 200)).toBe(3);
+    expect(resolveActiveLyricIndex([], plain, 10, 200, 0)).toBe(0);
+    expect(resolveActiveLyricIndex([], plain, 100, 200, 0)).toBeGreaterThanOrEqual(1);
+    expect(resolveActiveLyricIndex([], plain, 190, 200, 0)).toBe(3);
   });
 });

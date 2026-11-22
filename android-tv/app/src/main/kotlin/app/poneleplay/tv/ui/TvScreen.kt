@@ -176,6 +176,7 @@ fun TvScreen(
     useLegacySupabaseWs: Boolean = true,
     syncStatus: SyncStatusState? = null,
     liveAnchor: SyncAnchorData? = null,
+    karaokeOffsetSec: Float = 0f,
     estimatedServerMs: (() -> Long)? = null,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit,
@@ -506,6 +507,7 @@ fun TvScreen(
                     elapsedSec = elapsedSec,
                     durationSec = trackDurationSec,
                     audioRoutingLabel = audioRoutingLabel,
+                    karaokeOffsetSec = karaokeOffsetSec,
                     showQueue = showQueue,
                     showProposals = showProposals,
                     theme = theme,
@@ -521,6 +523,7 @@ fun TvScreen(
                     elapsedSec = elapsedSec,
                     durationSec = trackDurationSec,
                     audioRoutingLabel = audioRoutingLabel,
+                    karaokeOffsetSec = karaokeOffsetSec,
                     theme = theme,
                     scaleFactor = scaleFactor,
                     syncStatus = syncStatus
@@ -592,6 +595,7 @@ private fun TvModePortadaOverlays(
     elapsedSec: Int,
     durationSec: Int,
     audioRoutingLabel: String,
+    karaokeOffsetSec: Float = 0f,
     showQueue: Boolean = true,
     showProposals: Boolean = true,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
@@ -779,8 +783,10 @@ private fun TvModePortadaOverlays(
                     KaraokeLyricsPanel(
                         title = feed.nowPlaying.title,
                         artist = feed.nowPlaying.artist,
+                        videoId = feed.nowPlaying.youtubeVideoId,
                         durationSec = durationSec,
                         elapsedSec = elapsedSec,
+                        offsetSec = karaokeOffsetSec,
                         isPaused = feed.playback.isPaused,
                         compact = false,
                         modifier = Modifier.fillMaxWidth(0.96f)
@@ -1019,6 +1025,7 @@ private fun TvModeSalonOverlays(
     elapsedSec: Int,
     durationSec: Int,
     audioRoutingLabel: String,
+    karaokeOffsetSec: Float = 0f,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
     scaleFactor: Float = 1.0f,
     syncStatus: SyncStatusState? = null
@@ -1187,8 +1194,10 @@ private fun TvModeSalonOverlays(
                                 KaraokeLyricsPanel(
                                     title = feed.nowPlaying.title,
                                     artist = feed.nowPlaying.artist,
+                                    videoId = feed.nowPlaying.youtubeVideoId,
                                     durationSec = durationSec,
                                     elapsedSec = elapsedSec,
+                                    offsetSec = karaokeOffsetSec,
                                     isPaused = feed.playback.isPaused,
                                     compact = true,
                                     modifier = Modifier.fillMaxWidth().height(175.dp)
@@ -2120,6 +2129,7 @@ private data class NativeLyricsState(
     val loading: Boolean = false,
     val found: Boolean = false,
     val synced: Boolean = false,
+    val source: String = "none",
     val lines: List<NativeLyricLine> = emptyList(),
     val plainLines: List<String> = emptyList()
 )
@@ -2130,20 +2140,23 @@ private val nativeLyricsCache = mutableMapOf<String, NativeLyricsState>()
 private fun KaraokeLyricsPanel(
     title: String,
     artist: String,
+    videoId: String? = null,
     durationSec: Int,
     elapsedSec: Int,
+    offsetSec: Float = 0f,
     isPaused: Boolean,
     compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val cacheKey = "${title.trim().lowercase()}|${artist.trim().lowercase()}"
+    val cleanVid = videoId?.trim().orEmpty()
+    val cacheKey = "$cleanVid|${title.trim().lowercase()}|${artist.trim().lowercase()}"
     var state by remember(cacheKey) {
         mutableStateOf(nativeLyricsCache[cacheKey] ?: NativeLyricsState(loading = true))
     }
 
     LaunchedEffect(cacheKey) {
         val cleanTitle = title.trim()
-        if (cleanTitle.isEmpty()) {
+        if (cleanTitle.isEmpty() && cleanVid.isEmpty()) {
             state = NativeLyricsState(loading = false, found = false)
             return@LaunchedEffect
         }
@@ -2156,10 +2169,11 @@ private fun KaraokeLyricsPanel(
             try {
                 val encTitle = URLEncoder.encode(cleanTitle, "UTF-8")
                 val encArtist = URLEncoder.encode(artist.trim(), "UTF-8")
-                val urlStr = "https://poneleplay.netlify.app/api/lyrics?title=$encTitle&artist=$encArtist&duration=${durationSec.coerceAtLeast(0)}"
+                val vidParam = if (cleanVid.isNotEmpty()) "&videoId=${URLEncoder.encode(cleanVid, "UTF-8")}" else ""
+                val urlStr = "https://poneleplay.netlify.app/api/lyrics?title=$encTitle&artist=$encArtist&duration=${durationSec.coerceAtLeast(0)}$vidParam"
                 val conn = URL(urlStr).openConnection() as HttpURLConnection
-                conn.connectTimeout = 4500
-                conn.readTimeout = 4500
+                conn.connectTimeout = 5000
+                conn.readTimeout = 5000
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("Accept", "application/json")
                 if (conn.responseCode in 200..299) {
@@ -2168,6 +2182,7 @@ private fun KaraokeLyricsPanel(
                     val json = JSONObject(body)
                     val found = json.optBoolean("found", false)
                     val synced = json.optBoolean("synced", false)
+                    val source = json.optString("source", "none")
                     val parsedLines = mutableListOf<NativeLyricLine>()
                     val linesArr = json.optJSONArray("lines")
                     if (linesArr != null) {
@@ -2192,6 +2207,7 @@ private fun KaraokeLyricsPanel(
                         loading = false,
                         found = found && (parsedLines.isNotEmpty() || parsedPlain.isNotEmpty()),
                         synced = synced && parsedLines.isNotEmpty(),
+                        source = source,
                         lines = parsedLines,
                         plainLines = parsedPlain
                     )
@@ -2210,11 +2226,12 @@ private fun KaraokeLyricsPanel(
     val displayLines = remember(state) {
         if (state.lines.isNotEmpty()) state.lines.map { it.text } else state.plainLines
     }
-    val activeIdx = remember(state, elapsedSec, durationSec) {
+    val activeIdx = remember(state, elapsedSec, durationSec, offsetSec) {
+        val effectiveSec = (elapsedSec.toDouble() + offsetSec.toDouble().coerceIn(-15.0, 15.0)).coerceAtLeast(0.0)
         if (!state.found || displayLines.isEmpty()) {
             -1
         } else if (state.lines.isNotEmpty()) {
-            val target = elapsedSec.toDouble() + 0.25
+            val target = effectiveSec + 0.25
             var idx = 0
             for (i in state.lines.indices) {
                 if (state.lines[i].timeSec <= target) idx = i else break
@@ -2222,10 +2239,15 @@ private fun KaraokeLyricsPanel(
             idx
         } else {
             val safeDur = durationSec.coerceAtLeast(15).toDouble()
-            val ratio = ((elapsedSec.toDouble() - safeDur * 0.04) / (safeDur * 0.9)).coerceIn(0.0, 0.999)
+            val ratio = ((effectiveSec - safeDur * 0.04) / (safeDur * 0.9)).coerceIn(0.0, 0.999)
             (ratio * displayLines.size).toInt().coerceIn(0, displayLines.size - 1)
         }
     }
+
+    val offsetSuffix = if (kotlin.math.abs(offsetSec) >= 0.05f) {
+        val sign = if (offsetSec > 0f) "+" else ""
+        " • $sign${String.format(Locale.US, "%.1f", offsetSec)}s"
+    } else ""
 
     Column(
         modifier = modifier
@@ -2255,8 +2277,10 @@ private fun KaraokeLyricsPanel(
             Text(
                 text = when {
                     state.loading -> "Buscando letra..."
-                    state.found && state.synced -> "⚡ Sincronizada"
-                    state.found -> "📝 Letra estimada"
+                    state.found && state.source == "youtube_captions" -> "⚡ Subtítulos YT$offsetSuffix"
+                    state.found && state.source == "youtube_asr" -> "⚡ Auto-Subs YT$offsetSuffix"
+                    state.found && state.synced -> "⚡ Sincronizada$offsetSuffix"
+                    state.found -> "📝 Letra estimada$offsetSuffix"
                     isPaused -> "⏸ En pausa"
                     else -> "🎤 Cantá en vivo"
                 },

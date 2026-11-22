@@ -6,13 +6,13 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      versionCode: 10,
-      versionName: "3.1.0",
+      versionCode: 11,
+      versionName: "3.2.0",
       apkUrl: "https://poneleplay.netlify.app/tv.apk",
       releaseNotes:
-        "Corrección de sonido en TV (WebView 200x112dp + desbloqueo automático de mute remoto), estabilidad total de modos de pantalla sin cambios espontáneos y letras sincronizadas en vivo para Modo Karaoke.",
+        "Karaoke 0% video potenciado: subtítulos sincronizados de YouTube + LRCLIB + lyrics.ovh y ajuste de sincronización de letras en vivo (±0.5s) desde Cabina.",
       mandatory: false,
-      publishedAt: "2026-11-22T20:30:00.000Z",
+      publishedAt: "2026-11-22T21:30:00.000Z",
     },
     {
       headers: {
