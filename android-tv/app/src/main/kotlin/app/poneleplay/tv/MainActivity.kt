@@ -80,6 +80,7 @@ class MainActivity : ComponentActivity() {
     private var themeState = mutableStateOf("neon")
     private var scaleState = mutableStateOf("normal")
     private var isMutedState = mutableStateOf(false)
+    private var lastDisplayConfigUpdatedAt: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -101,7 +102,9 @@ class MainActivity : ComponentActivity() {
         showProposalsState.value = prefs.getBoolean("tv_show_proposals", true)
         themeState.value = prefs.getString("tv_theme", "neon") ?: "neon"
         scaleState.value = prefs.getString("tv_scale", "normal") ?: "normal"
-        isMutedState.value = prefs.getBoolean("tv_is_muted", false)
+        // Always start with local emergency mute OFF; Cabina controls tvMuted via feed/anchor
+        isMutedState.value = false
+        prefs.edit().putBoolean("tv_is_muted", false).apply()
 
         setContent {
             PonelePlayTVTheme {
@@ -134,12 +137,27 @@ class MainActivity : ComponentActivity() {
     private fun applyDisplayConfig(jsonStr: String) {
         try {
             val obj = org.json.JSONObject(jsonStr)
+            val incomingUpdatedAt = obj.optLong("updatedAt", 0L)
+            // Ignore stale/repeated displayConfig payloads from periodic polls or progress ticks
+            if (lastDisplayConfigUpdatedAt > 0L && incomingUpdatedAt <= lastDisplayConfigUpdatedAt) {
+                // Still allow remote unmute from Cabina if explicitly sent as tvMuted=false
+                if (obj.has("tvMuted") && !obj.optBoolean("tvMuted", true) && isMutedState.value) {
+                    isMutedState.value = false
+                    prefs.edit().putBoolean("tv_is_muted", false).apply()
+                    videoController.unMute()
+                }
+                return
+            }
+            lastDisplayConfigUpdatedAt = if (incomingUpdatedAt > 0L) incomingUpdatedAt else System.currentTimeMillis()
+
             if (obj.has("mode")) {
                 val modeStr = obj.optString("mode", "")
                 if (modeStr.isNotBlank()) {
                     val nextMode = normalizeTvScreenMode(modeStr)
-                    screenModeState.value = nextMode
-                    prefs.edit().putString("tv_screen_mode", nextMode.name).apply()
+                    if (nextMode != screenModeState.value) {
+                        screenModeState.value = nextMode
+                        prefs.edit().putString("tv_screen_mode", nextMode.name).apply()
+                    }
                 }
             }
             if (obj.has("showQueue")) {
@@ -166,11 +184,12 @@ class MainActivity : ComponentActivity() {
                     prefs.edit().putString("tv_scale", sc.lowercase()).apply()
                 }
             }
-            if (obj.has("tvMuted")) {
-                val muted = obj.optBoolean("tvMuted", false)
-                isMutedState.value = muted
-                prefs.edit().putBoolean("tv_is_muted", muted).apply()
-                if (muted) videoController.mute() else videoController.unMute()
+            // NEVER lock local emergency mute (isMutedState) to true when Cabina sets tvMuted=true;
+            // only clear local mute when Cabina explicitly activates TV audio (tvMuted=false).
+            if (obj.has("tvMuted") && !obj.optBoolean("tvMuted", true)) {
+                isMutedState.value = false
+                prefs.edit().putBoolean("tv_is_muted", false).apply()
+                videoController.unMute()
             }
         } catch (e: Exception) {
             android.util.Log.e("PonelePlayTV", "Error parsing displayConfig: ${e.message}")
@@ -178,6 +197,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun toggleMode() {
+        lastDisplayConfigUpdatedAt = System.currentTimeMillis()
         val next = if (screenModeState.value == TvScreenMode.SALON) {
             TvScreenMode.PORTADA
         } else {

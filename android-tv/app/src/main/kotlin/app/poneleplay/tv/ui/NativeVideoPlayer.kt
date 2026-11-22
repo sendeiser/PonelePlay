@@ -541,10 +541,10 @@ fun NativeVideoPlayer(
         }
     }
 
-    // Audio-only: hidden 1dp invisible WebView mounted ONLY when TV is actively playing a YouTube track
+    // Audio-only: 200x112dp WebView kept behind opaque music UI so YouTube Embed NEVER blocks audio playback
     if (shouldMountYoutubeAudio) {
         AndroidView(
-            modifier = modifier.size(1.dp).alpha(0f),
+            modifier = modifier.size(200.dp, 112.dp).alpha(0.01f),
             factory = { context ->
                 WebView(context).apply {
                     layoutParams = ViewGroup.LayoutParams(200, 112)

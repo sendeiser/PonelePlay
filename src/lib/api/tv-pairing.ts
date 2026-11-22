@@ -34,6 +34,7 @@ export interface TvDisplayConfig {
   theme: "neon" | "minimal" | "gold" | "emerald";
   scale: "compact" | "normal" | "large" | "xlarge";
   tvMuted?: boolean;
+  updatedAt?: number;
 }
 
 export const DEFAULT_TV_DISPLAY_CONFIG: TvDisplayConfig = {
@@ -294,6 +295,11 @@ export async function updateTvDeviceDisplay(
 ): Promise<boolean> {
   const supabase = createBrowserSupabase();
   const targetDeviceId = deviceId || "all";
+  const nowMs = Date.now();
+  const stampedConfig: Partial<TvDisplayConfig> = {
+    ...config,
+    updatedAt: typeof config.updatedAt === "number" ? config.updatedAt : nowMs,
+  };
 
   // 1. Dispatch IMMEDIATELY over active LAN/Direct/Cloud WebSocket Sync (<30ms to Web TV & Android TV)
   try {
@@ -302,13 +308,13 @@ export async function updateTvDeviceDisplay(
       activeSync.sendPartyEvent({
         type: "tv_display_config",
         targetDeviceId,
-        config,
-        timestamp: Date.now(),
+        config: stampedConfig,
+        timestamp: nowMs,
       });
       if (targetDeviceId === "all") {
         activeSync.sendCommand("set_tv_display", {
           targetDeviceId,
-          config,
+          config: stampedConfig,
         });
       }
     }
@@ -331,8 +337,8 @@ export async function updateTvDeviceDisplay(
         event: "tv_display_config",
         payload: {
           targetDeviceId,
-          config,
-          timestamp: Date.now(),
+          config: stampedConfig,
+          timestamp: nowMs,
         },
       });
       void active.send({
@@ -342,9 +348,9 @@ export async function updateTvDeviceDisplay(
           command: "set_tv_display",
           payload: {
             targetDeviceId,
-            config,
+            config: stampedConfig,
           },
-          timestamp: Date.now(),
+          timestamp: nowMs,
         },
       });
     }
@@ -357,7 +363,7 @@ export async function updateTvDeviceDisplay(
     const res = await fetch("/api/tv/display-config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, deviceId, config }),
+      body: JSON.stringify({ slug, deviceId, config: stampedConfig }),
     });
     return res.ok;
   } catch {

@@ -9,6 +9,7 @@ import { BallChip } from "@/components/ball-chip";
 import { PlayerRuntime } from "@/components/player/player-runtime";
 import { resolveVideoId } from "@/components/player/iframe-engine";
 import { TvAudioEngine, type TvAudioEngineRef } from "@/components/player/tv-audio-engine";
+import { KaraokeLyricsOverlay } from "@/components/player/karaoke-lyrics-overlay";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
@@ -294,6 +295,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [volume, setVolume] = useState(85);
   const [showQueue, setShowQueue] = useState(true);
   const [showProposals, setShowProposals] = useState(true);
+  const screenModeRef = useRef<TvDisplayMode>("SALON");
+  screenModeRef.current = screenMode;
+  const showQueueRef = useRef(true);
+  showQueueRef.current = showQueue;
+  const showProposalsRef = useRef(true);
+  showProposalsRef.current = showProposals;
+  const lastDisplayConfigTsRef = useRef<number>(0);
   // Default safe mode: CABINA_ONLY (TV visual-only until Cabina activates TV_ONLY or BOTH)
   const [isMuted, setIsMuted] = useState(true);
   const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
@@ -586,8 +594,10 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   }, []);
 
   const toggleScreenMode = useCallback(() => {
+    lastDisplayConfigTsRef.current = Date.now();
     setScreenMode((prev) => {
       const next: TvDisplayMode = prev === "SALON" ? "PORTADA" : "SALON";
+      screenModeRef.current = next;
       if (typeof window !== "undefined") {
         localStorage.setItem("poneleplay.player.screenMode", next);
       }
@@ -596,7 +606,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         message:
           next === "SALON"
             ? "Modo Salón: Vinilo, Cola, Votos y QR"
-            : "Modo Portada: Carátula Minimalista",
+            : "Modo Portada: Carátula y Listas",
       });
       setTimeout(() => setLiveToast(null), 3000);
       return next;
@@ -932,25 +942,57 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       dedication: t.dedication ?? null,
     });
 
-    const applyDisplayConfigPayload = (cfg: Record<string, unknown>, silent = false) => {
+    const applyDisplayConfigPayload = (
+      cfg: Record<string, unknown>,
+      opts?: { silent?: boolean; fromAnchor?: boolean },
+    ) => {
+      const incomingTs = typeof cfg.updatedAt === "number" ? cfg.updatedAt : 0;
+      if (opts?.fromAnchor) {
+        // Never flip screen modes on repeated progress/anchor ticks unless updatedAt strictly advanced
+        if (lastDisplayConfigTsRef.current > 0 && incomingTs <= lastDisplayConfigTsRef.current) {
+          return;
+        }
+      } else if (incomingTs > 0 && incomingTs < lastDisplayConfigTsRef.current) {
+        return;
+      }
+
+      if (incomingTs > lastDisplayConfigTsRef.current) {
+        lastDisplayConfigTsRef.current = incomingTs;
+      } else if (!opts?.fromAnchor && lastDisplayConfigTsRef.current === 0) {
+        lastDisplayConfigTsRef.current = Date.now();
+      }
+
+      let changed = false;
       if (typeof cfg.mode === "string") {
         const nextMode = normalizeTvDisplayMode(cfg.mode);
-        setScreenMode(nextMode);
-        if (typeof window !== "undefined") {
-          localStorage.setItem("poneleplay.player.screenMode", nextMode);
+        if (nextMode !== screenModeRef.current) {
+          screenModeRef.current = nextMode;
+          setScreenMode(nextMode);
+          changed = true;
+          if (typeof window !== "undefined") {
+            localStorage.setItem("poneleplay.player.screenMode", nextMode);
+          }
         }
       }
-      if (typeof cfg.showQueue === "boolean") {
+      if (typeof cfg.showQueue === "boolean" && cfg.showQueue !== showQueueRef.current) {
+        showQueueRef.current = cfg.showQueue;
         setShowQueue(cfg.showQueue);
+        changed = true;
       }
-      if (typeof cfg.showProposals === "boolean") {
+      if (
+        typeof cfg.showProposals === "boolean" &&
+        cfg.showProposals !== showProposalsRef.current
+      ) {
+        showProposalsRef.current = cfg.showProposals;
         setShowProposals(cfg.showProposals);
+        changed = true;
       }
-      if (typeof cfg.tvMuted === "boolean") {
+      if (typeof cfg.tvMuted === "boolean" && cfg.tvMuted !== isMutedRef.current) {
         isMutedRef.current = cfg.tvMuted;
         setIsMuted(cfg.tvMuted);
+        changed = true;
       }
-      if (!silent) {
+      if (!opts?.silent && changed) {
         setHudMessage("📺 Pantalla Actualizada desde Cabina");
         setTimeout(() => setHudMessage(null), 3000);
       }
@@ -1034,7 +1076,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         if (!tvData?.ok) return;
         const pb = tvData.playback || {};
         if (pb.displayConfig && typeof pb.displayConfig === "object") {
-          applyDisplayConfigPayload(pb.displayConfig as Record<string, unknown>, true);
+          applyDisplayConfigPayload(pb.displayConfig as Record<string, unknown>, { silent: true });
         }
         if (typeof pb.tvMuted === "boolean") {
           isMutedRef.current = pb.tvMuted;
@@ -1080,7 +1122,9 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       }
 
       if (anchor.displayConfig) {
-        applyDisplayConfigPayload(anchor.displayConfig);
+        applyDisplayConfigPayload(anchor.displayConfig, {
+          fromAnchor: anchor.lastCommand !== "set_tv_display",
+        });
       }
 
       if (typeof anchor.volume === "number" && anchor.volume !== volumeRef.current) {
@@ -1984,53 +2028,77 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
               <div className="hidden lg:block w-16 shrink-0" />
             )}
 
-            {/* Center Artwork + Vinyl + Track Info */}
+            {/* Center Artwork + Vinyl (or Synchronized Karaoke Lyrics Stage when Karaoke is active) */}
             <div className="flex-1 flex flex-col items-center justify-center text-center max-w-2xl mx-auto min-w-0">
-              <div className="relative size-48 sm:size-60 mb-5 flex items-center justify-center">
-                <div
-                  className={`absolute -right-6 size-48 sm:size-60 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
-                    isPlaying ? "animate-spin-vinyl" : ""
-                  }`}
-                >
-                  <div className="size-32 sm:size-40 rounded-full border border-neutral-700/40 flex items-center justify-center">
-                    <div className="size-18 sm:size-22 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
-                      <div className="size-3 rounded-full bg-[#0a0e17]" />
+              {karaokeMode || nowPlaying?.isKaraoke ? (
+                <div className="w-full space-y-3">
+                  <div className="flex flex-col items-center">
+                    <h1 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight line-clamp-1">
+                      {decodeHtml(nowPlaying?.title || "Esperando temas...")}
+                    </h1>
+                    <p className="text-sm sm:text-base font-medium text-cyan-200/90 truncate max-w-full">
+                      {nowPlaying?.artist || venueName}
+                      {nowPlaying?.guestName ? ` · 🎉 ${nowPlaying.guestName}` : ""}
+                    </p>
+                  </div>
+                  <KaraokeLyricsOverlay
+                    title={decodeHtml(nowPlaying?.title || "")}
+                    artist={nowPlaying?.artist || ""}
+                    durationSec={duration}
+                    elapsedSec={elapsed}
+                    isPlaying={isPlaying}
+                    variant="stage"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="relative size-48 sm:size-60 mb-5 flex items-center justify-center">
+                    <div
+                      className={`absolute -right-6 size-48 sm:size-60 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
+                        isPlaying ? "animate-spin-vinyl" : ""
+                      }`}
+                    >
+                      <div className="size-32 sm:size-40 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                        <div className="size-18 sm:size-22 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
+                          <div className="size-3 rounded-full bg-[#0a0e17]" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="relative size-48 sm:size-60 rounded-3xl overflow-hidden border-2 border-white/15 shadow-2xl z-10 bg-[#0d1220] flex items-center justify-center">
+                      {nowPlaying?.thumbnailUrl ? (
+                        <Image
+                          src={nowPlaying.thumbnailUrl}
+                          alt={nowPlaying.title}
+                          width={240}
+                          height={240}
+                          className="w-full h-full object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <Music2 className="size-20 text-cyan-400" />
+                      )}
                     </div>
                   </div>
-                </div>
-                <div className="relative size-48 sm:size-60 rounded-3xl overflow-hidden border-2 border-white/15 shadow-2xl z-10 bg-[#0d1220] flex items-center justify-center">
-                  {nowPlaying?.thumbnailUrl ? (
-                    <Image
-                      src={nowPlaying.thumbnailUrl}
-                      alt={nowPlaying.title}
-                      width={240}
-                      height={240}
-                      className="w-full h-full object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <Music2 className="size-20 text-cyan-400" />
-                  )}
-                </div>
-              </div>
 
-              {nowPlaying?.guestName && (
-                <span className="mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 font-mono text-xs font-bold text-pink-200">
-                  🎉 Pedido por {nowPlaying.guestName}
-                </span>
-              )}
-              <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
-                {decodeHtml(nowPlaying?.title || "Esperando temas...")}
-              </h1>
-              <p className="mt-1.5 text-base sm:text-xl font-medium text-cyan-200/90 truncate max-w-full">
-                {nowPlaying?.artist || venueName}
-              </p>
-              {nowPlaying?.dedication && (
-                <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/85 border border-pink-400/60 shadow-lg max-w-xl">
-                  <span className="text-sm font-bold text-pink-100 truncate">
-                    💬 &ldquo;{nowPlaying.dedication}&rdquo;
-                  </span>
-                </div>
+                  {nowPlaying?.guestName && (
+                    <span className="mb-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/20 border border-pink-400/40 font-mono text-xs font-bold text-pink-200">
+                      🎉 Pedido por {nowPlaying.guestName}
+                    </span>
+                  )}
+                  <h1 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight leading-tight line-clamp-2">
+                    {decodeHtml(nowPlaying?.title || "Esperando temas...")}
+                  </h1>
+                  <p className="mt-1.5 text-base sm:text-xl font-medium text-cyan-200/90 truncate max-w-full">
+                    {nowPlaying?.artist || venueName}
+                  </p>
+                  {nowPlaying?.dedication && (
+                    <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl bg-purple-950/85 border border-pink-400/60 shadow-lg max-w-xl">
+                      <span className="text-sm font-bold text-pink-100 truncate">
+                        💬 &ldquo;{nowPlaying.dedication}&rdquo;
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Clock-driven progress bar */}
@@ -2142,51 +2210,72 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   </div>
                   <div className="flex items-center gap-1.5 text-indigo-300 font-mono text-[10px]">
                     <span className="material-symbols-outlined text-[13px] text-cyan-400">speaker</span>
-                    <span>Audio Cabina</span>
+                    <span>
+                      {isMuted
+                        ? "Solo Cabina"
+                        : audioRouting === "BOTH"
+                          ? "Cabina + TV"
+                          : "Audio TV"}
+                    </span>
                   </div>
                 </div>
 
-                {/* Central Vinyl & Album Artwork Showcase */}
+                {/* Central Vinyl & Album Artwork (or Synchronized Karaoke Lyrics when Karaoke is active) */}
                 <div className="flex flex-col items-center justify-center my-auto py-2 text-center">
-                  <div className="relative size-36 sm:size-44 mb-3 flex items-center justify-center">
-                    {/* Spinning Vinyl (rotates only while playing) */}
-                    <div
-                      className={`absolute -right-3 size-36 sm:size-44 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
-                        isPlaying ? "animate-spin-vinyl" : ""
-                      }`}
-                    >
-                      <div className="size-24 sm:size-28 rounded-full border border-neutral-700/40 flex items-center justify-center">
-                        <div className="size-14 sm:size-16 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
-                          <div className="size-2 rounded-full bg-[#0a0e17]" />
+                  {karaokeMode || nowPlaying?.isKaraoke ? (
+                    <div className="w-full mb-2">
+                      <KaraokeLyricsOverlay
+                        title={decodeHtml(nowPlaying?.title || "")}
+                        artist={nowPlaying?.artist || ""}
+                        durationSec={duration}
+                        elapsedSec={elapsed}
+                        isPlaying={isPlaying}
+                        variant="compact"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative size-36 sm:size-44 mb-3 flex items-center justify-center">
+                        {/* Spinning Vinyl (rotates only while playing) */}
+                        <div
+                          className={`absolute -right-3 size-36 sm:size-44 rounded-full bg-[#080B12] border-2 border-[#1E2433] shadow-2xl flex items-center justify-center z-0 ${
+                            isPlaying ? "animate-spin-vinyl" : ""
+                          }`}
+                        >
+                          <div className="size-24 sm:size-28 rounded-full border border-neutral-700/40 flex items-center justify-center">
+                            <div className="size-14 sm:size-16 rounded-full bg-gradient-to-tr from-[#6366F1] to-[#06B6D4] flex items-center justify-center">
+                              <div className="size-2 rounded-full bg-[#0a0e17]" />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Cover art */}
+                        <div className="relative size-36 sm:size-44 rounded-2xl overflow-hidden border-2 border-[#283250] shadow-2xl z-10 bg-[#0a0e17] flex items-center justify-center shrink-0">
+                          {nowPlaying?.thumbnailUrl ? (
+                            <Image
+                              src={nowPlaying.thumbnailUrl}
+                              alt={nowPlaying.title}
+                              width={176}
+                              height={176}
+                              className="w-full h-full object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <Music2 className="size-12 text-indigo-400" />
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
                         </div>
                       </div>
-                    </div>
-                    {/* Cover art */}
-                    <div className="relative size-36 sm:size-44 rounded-2xl overflow-hidden border-2 border-[#283250] shadow-2xl z-10 bg-[#0a0e17] flex items-center justify-center shrink-0">
-                      {nowPlaying?.thumbnailUrl ? (
-                        <Image
-                          src={nowPlaying.thumbnailUrl}
-                          alt={nowPlaying.title}
-                          width={176}
-                          height={176}
-                          className="w-full h-full object-cover"
-                          unoptimized
-                        />
-                      ) : (
-                        <Music2 className="size-12 text-indigo-400" />
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                    </div>
-                  </div>
 
-                  {/* Equalizer Waveform Bars */}
-                  <div className="flex items-center justify-center gap-1 h-5 mb-2">
-                    <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
-                    <span className="w-1 h-5 bg-indigo-400 rounded-full animate-bounce" />
-                    <span className="w-1 h-4 bg-cyan-300 rounded-full animate-pulse" />
-                    <span className="w-1 h-5 bg-purple-400 rounded-full animate-bounce" />
-                    <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
-                  </div>
+                      {/* Equalizer Waveform Bars */}
+                      <div className="flex items-center justify-center gap-1 h-5 mb-2">
+                        <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
+                        <span className="w-1 h-5 bg-indigo-400 rounded-full animate-bounce" />
+                        <span className="w-1 h-4 bg-cyan-300 rounded-full animate-pulse" />
+                        <span className="w-1 h-5 bg-purple-400 rounded-full animate-bounce" />
+                        <span className="w-1 h-3 bg-cyan-400 rounded-full animate-pulse" />
+                      </div>
+                    </>
+                  )}
 
                   <h1 className="text-base sm:text-lg font-extrabold text-white tracking-tight leading-snug line-clamp-2 max-w-full px-2">
                     {decodeHtml(nowPlaying?.title || "Esperando tema...")}

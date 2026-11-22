@@ -69,17 +69,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Update target
+    // 3. Update target with monotonic updatedAt so stale ticks/polls never flip modes back
+    const stampedNow = typeof config.updatedAt === "number" ? config.updatedAt : Date.now();
+    const stampedPatch: Partial<TvDisplayConfig> = { ...config, updatedAt: stampedNow };
     const isGlobal = !deviceId || deviceId === "all";
     if (isGlobal) {
-      stored.global = { ...stored.global, ...config };
+      stored.global = { ...stored.global, ...stampedPatch };
       // Also update all individual devices if global was set
       for (const dId of Object.keys(stored.devices)) {
-        stored.devices[dId] = { ...stored.devices[dId], ...config };
+        stored.devices[dId] = { ...stored.devices[dId], ...stampedPatch };
       }
     } else {
       const curDev = stored.devices[deviceId] || { ...stored.global };
-      stored.devices[deviceId] = { ...curDev, ...config };
+      stored.devices[deviceId] = { ...curDev, ...stampedPatch };
     }
 
     // 4. Save into venue_playlists

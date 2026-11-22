@@ -63,6 +63,7 @@ class TvSyncSocketClient(
     @Volatile private var activeCandidate: SyncWsCandidate? = null
     @Volatile private var clockEstimate: ClockSyncEstimate? = null
     @Volatile private var status = SyncStatusState()
+    @Volatile private var lastDispatchedDisplayConfigJson: String? = null
 
     private var pingRunnable: Runnable? = null
     private var reconnectRunnable: Runnable? = null
@@ -414,7 +415,11 @@ class TvSyncSocketClient(
                 val forceSeek = msg.optBoolean("forceSeek", false)
                 val anchor = parseAnchor(anchorObj)
                 mainHandler.post {
-                    anchor.displayConfigJson?.let { listener.onDisplayConfig(it) }
+                    val cfg = anchor.displayConfigJson
+                    if (cfg != null && (anchor.lastCommand == "set_tv_display" || cfg != lastDispatchedDisplayConfigJson)) {
+                        lastDispatchedDisplayConfigJson = cfg
+                        listener.onDisplayConfig(cfg)
+                    }
                     listener.onAnchor(anchor, forceSeek)
                 }
             }

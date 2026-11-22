@@ -6,13 +6,13 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      versionCode: 9,
-      versionName: "3.0.1",
+      versionCode: 10,
+      versionName: "3.1.0",
       apkUrl: "https://poneleplay.netlify.app/tv.apk",
       releaseNotes:
-        "Modo Portada con listas de Cola en Vivo y Votación flotantes, cambio instantáneo de modo de pantalla desde Cabina y corrección al saltear canciones para nunca repetir temas ya reproducidos.",
+        "Corrección de sonido en TV (WebView 200x112dp + desbloqueo automático de mute remoto), estabilidad total de modos de pantalla sin cambios espontáneos y letras sincronizadas en vivo para Modo Karaoke.",
       mandatory: false,
-      publishedAt: "2026-11-21T23:55:00.000Z",
+      publishedAt: "2026-11-22T20:30:00.000Z",
     },
     {
       headers: {

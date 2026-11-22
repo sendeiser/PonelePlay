@@ -51,8 +51,14 @@ import app.poneleplay.tv.sync.SyncClockEstimator
 import app.poneleplay.tv.sync.SyncStatusState
 import app.poneleplay.tv.sync.SyncTransportMode
 import app.poneleplay.tv.util.QrGenerator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import kotlin.math.abs
 import java.text.SimpleDateFormat
 import java.util.*
@@ -745,101 +751,122 @@ private fun TvModePortadaOverlays(
                 }
             }
 
-            // Center Showcase: Album Art + Track Info + Live Clock Progress
+            // Center Showcase: Karaoke Lyrics Stage when Karaoke is active, otherwise Album Art
+            val isKaraokeActive = feed.playback.karaokeMode || feed.nowPlaying?.isKaraoke == true
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size((195 * scaleFactor).dp)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(theme.cardBackground)
-                        .border(2.dp, theme.primaryColor.copy(alpha = 0.55f), RoundedCornerShape(22.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!thumbUrl.isNullOrBlank()) {
-                        AsyncThumbnail(
-                            url = thumbUrl,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(text = "🎵", fontSize = 48.sp)
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (feed.playback.isPaused) "EN PAUSA" else "EN VIVO",
-                                color = theme.primaryColor,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black,
-                                fontFamily = FontFamily.Monospace
+                if (isKaraokeActive && feed.nowPlaying != null) {
+                    Text(
+                        text = feed.nowPlaying.title,
+                        color = Color.White,
+                        fontSize = (20f * scaleFactor).sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Text(
+                        text = feed.nowPlaying.artist,
+                        color = Color(0xFFCBD5E1),
+                        fontSize = (13.5f * scaleFactor).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    KaraokeLyricsPanel(
+                        title = feed.nowPlaying.title,
+                        artist = feed.nowPlaying.artist,
+                        durationSec = durationSec,
+                        elapsedSec = elapsedSec,
+                        isPaused = feed.playback.isPaused,
+                        compact = false,
+                        modifier = Modifier.fillMaxWidth(0.96f)
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size((195 * scaleFactor).dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(theme.cardBackground)
+                            .border(2.dp, theme.primaryColor.copy(alpha = 0.55f), RoundedCornerShape(22.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (!thumbUrl.isNullOrBlank()) {
+                            AsyncThumbnail(
+                                url = thumbUrl,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
+                        } else {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(text = "🎵", fontSize = 48.sp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (feed.playback.isPaused) "EN PAUSA" else "EN VIVO",
+                                    color = theme.primaryColor,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
                     }
-                }
 
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        text = if (feed.playback.isPaused) "⏸ PAUSADO" else if (feed.venue.venueType == "party") "🎉 SONANDO EN VIVO • FIESTA" else "▶ SONANDO EN VIVO",
-                        color = theme.primaryColor,
-                        fontSize = (11.5f * scaleFactor).sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    if (feed.nowPlaying?.isKaraoke == true || feed.playback.karaokeMode) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = "🎤 KARAOKE",
-                            color = Color(0xFFF43F5E),
-                            fontSize = (10.5f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
+                            text = if (feed.playback.isPaused) "⏸ PAUSADO" else if (feed.venue.venueType == "party") "🎉 SONANDO EN VIVO • FIESTA" else "▶ SONANDO EN VIVO",
+                            color = theme.primaryColor,
+                            fontSize = (11.5f * scaleFactor).sp,
+                            fontWeight = FontWeight.ExtraBold,
                             fontFamily = FontFamily.Monospace
                         )
                     }
-                }
 
-                Text(
-                    text = feed.nowPlaying?.title ?: "Esperando canciones...",
-                    color = Color.White,
-                    fontSize = (24f * scaleFactor).sp,
-                    fontWeight = FontWeight.Black,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    lineHeight = (29f * scaleFactor).sp
-                )
+                    Text(
+                        text = feed.nowPlaying?.title ?: "Esperando canciones...",
+                        color = Color.White,
+                        fontSize = (24f * scaleFactor).sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lineHeight = (29f * scaleFactor).sp
+                    )
 
-                Text(
-                    text = feed.nowPlaying?.artist ?: feed.venue.name,
-                    color = Color(0xFFCBD5E1),
-                    fontSize = (16f * scaleFactor).sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                    Text(
+                        text = feed.nowPlaying?.artist ?: feed.venue.name,
+                        color = Color(0xFFCBD5E1),
+                        fontSize = (16f * scaleFactor).sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-                val dedMsg = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
-                val dedGuest = feed.liveDedication?.guestName ?: feed.nowPlaying?.guestName
-                if (!dedGuest.isNullOrBlank() || !dedMsg.isNullOrBlank()) {
-                    Box(
-                        modifier = Modifier
-                            .background(Color(0x66831843), RoundedCornerShape(12.dp))
-                            .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(12.dp))
-                            .padding(horizontal = 14.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = buildString {
-                                if (!dedGuest.isNullOrBlank()) append("🎉 $dedGuest")
-                                if (!dedGuest.isNullOrBlank() && !dedMsg.isNullOrBlank()) append(" • ")
-                                if (!dedMsg.isNullOrBlank()) append("“$dedMsg”")
-                            },
-                            color = Color(0xFFFDF2F8),
-                            fontSize = (12f * scaleFactor).sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    val dedMsg = feed.liveDedication?.message ?: feed.nowPlaying?.dedication
+                    val dedGuest = feed.liveDedication?.guestName ?: feed.nowPlaying?.guestName
+                    if (!dedGuest.isNullOrBlank() || !dedMsg.isNullOrBlank()) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0x66831843), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color(0xFFEC4899), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = buildString {
+                                    if (!dedGuest.isNullOrBlank()) append("🎉 $dedGuest")
+                                    if (!dedGuest.isNullOrBlank() && !dedMsg.isNullOrBlank()) append(" • ")
+                                    if (!dedMsg.isNullOrBlank()) append("“$dedMsg”")
+                                },
+                                color = Color(0xFFFDF2F8),
+                                fontSize = (12f * scaleFactor).sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
@@ -1154,8 +1181,19 @@ private fun TvModeSalonOverlays(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Album Art / Live Music Visual Card (Audio-Only — zero video)
-                            Box(
+                            // Album Art / Live Music Visual Card (or Synchronized Karaoke Lyrics when Karaoke is active)
+                            val salonKaraokeActive = feed.playback.karaokeMode || feed.nowPlaying?.isKaraoke == true
+                            if (salonKaraokeActive && feed.nowPlaying != null) {
+                                KaraokeLyricsPanel(
+                                    title = feed.nowPlaying.title,
+                                    artist = feed.nowPlaying.artist,
+                                    durationSec = durationSec,
+                                    elapsedSec = elapsedSec,
+                                    isPaused = feed.playback.isPaused,
+                                    compact = true,
+                                    modifier = Modifier.fillMaxWidth().height(175.dp)
+                                )
+                            } else Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(175.dp)
@@ -2069,6 +2107,248 @@ private fun TvRouletteOverlay(
                         fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class NativeLyricLine(val timeSec: Double, val text: String)
+
+private data class NativeLyricsState(
+    val loading: Boolean = false,
+    val found: Boolean = false,
+    val synced: Boolean = false,
+    val lines: List<NativeLyricLine> = emptyList(),
+    val plainLines: List<String> = emptyList()
+)
+
+private val nativeLyricsCache = mutableMapOf<String, NativeLyricsState>()
+
+@Composable
+private fun KaraokeLyricsPanel(
+    title: String,
+    artist: String,
+    durationSec: Int,
+    elapsedSec: Int,
+    isPaused: Boolean,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val cacheKey = "${title.trim().lowercase()}|${artist.trim().lowercase()}"
+    var state by remember(cacheKey) {
+        mutableStateOf(nativeLyricsCache[cacheKey] ?: NativeLyricsState(loading = true))
+    }
+
+    LaunchedEffect(cacheKey) {
+        val cleanTitle = title.trim()
+        if (cleanTitle.isEmpty()) {
+            state = NativeLyricsState(loading = false, found = false)
+            return@LaunchedEffect
+        }
+        nativeLyricsCache[cacheKey]?.let {
+            state = it
+            return@LaunchedEffect
+        }
+        state = NativeLyricsState(loading = true)
+        val fetched = withContext(Dispatchers.IO) {
+            try {
+                val encTitle = URLEncoder.encode(cleanTitle, "UTF-8")
+                val encArtist = URLEncoder.encode(artist.trim(), "UTF-8")
+                val urlStr = "https://poneleplay.netlify.app/api/lyrics?title=$encTitle&artist=$encArtist&duration=${durationSec.coerceAtLeast(0)}"
+                val conn = URL(urlStr).openConnection() as HttpURLConnection
+                conn.connectTimeout = 4500
+                conn.readTimeout = 4500
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("Accept", "application/json")
+                if (conn.responseCode in 200..299) {
+                    val body = conn.inputStream.bufferedReader().use { it.readText() }
+                    conn.disconnect()
+                    val json = JSONObject(body)
+                    val found = json.optBoolean("found", false)
+                    val synced = json.optBoolean("synced", false)
+                    val parsedLines = mutableListOf<NativeLyricLine>()
+                    val linesArr = json.optJSONArray("lines")
+                    if (linesArr != null) {
+                        for (i in 0 until linesArr.length()) {
+                            val item = linesArr.optJSONObject(i) ?: continue
+                            val t = item.optDouble("timeSec", -1.0)
+                            val txt = item.optString("text", "").trim()
+                            if (t >= 0.0 && txt.isNotEmpty()) {
+                                parsedLines.add(NativeLyricLine(t, txt))
+                            }
+                        }
+                    }
+                    val parsedPlain = mutableListOf<String>()
+                    val plainArr = json.optJSONArray("plainLines")
+                    if (plainArr != null) {
+                        for (i in 0 until plainArr.length()) {
+                            val txt = plainArr.optString(i, "").trim()
+                            if (txt.isNotEmpty()) parsedPlain.add(txt)
+                        }
+                    }
+                    NativeLyricsState(
+                        loading = false,
+                        found = found && (parsedLines.isNotEmpty() || parsedPlain.isNotEmpty()),
+                        synced = synced && parsedLines.isNotEmpty(),
+                        lines = parsedLines,
+                        plainLines = parsedPlain
+                    )
+                } else {
+                    conn.disconnect()
+                    NativeLyricsState(loading = false, found = false)
+                }
+            } catch (_: Exception) {
+                NativeLyricsState(loading = false, found = false)
+            }
+        }
+        nativeLyricsCache[cacheKey] = fetched
+        state = fetched
+    }
+
+    val displayLines = remember(state) {
+        if (state.lines.isNotEmpty()) state.lines.map { it.text } else state.plainLines
+    }
+    val activeIdx = remember(state, elapsedSec, durationSec) {
+        if (!state.found || displayLines.isEmpty()) {
+            -1
+        } else if (state.lines.isNotEmpty()) {
+            val target = elapsedSec.toDouble() + 0.25
+            var idx = 0
+            for (i in state.lines.indices) {
+                if (state.lines[i].timeSec <= target) idx = i else break
+            }
+            idx
+        } else {
+            val safeDur = durationSec.coerceAtLeast(15).toDouble()
+            val ratio = ((elapsedSec.toDouble() - safeDur * 0.04) / (safeDur * 0.9)).coerceIn(0.0, 0.999)
+            (ratio * displayLines.size).toInt().coerceIn(0, displayLines.size - 1)
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xE61A0B2E), Color(0xEB100920), Color(0xF2090D1A))
+                ),
+                RoundedCornerShape(16.dp)
+            )
+            .border(1.5.dp, Color(0xFFEC4899), RoundedCornerShape(16.dp))
+            .padding(horizontal = if (compact) 12.dp else 20.dp, vertical = if (compact) 10.dp else 16.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "🎤 KARAOKE EN VIVO",
+                color = Color(0xFFF472B6),
+                fontSize = if (compact) 9.5.sp else 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = when {
+                    state.loading -> "Buscando letra..."
+                    state.found && state.synced -> "⚡ Sincronizada"
+                    state.found -> "📝 Letra estimada"
+                    isPaused -> "⏸ En pausa"
+                    else -> "🎤 Cantá en vivo"
+                },
+                color = Color(0xFF67E8F9),
+                fontSize = if (compact) 9.sp else 10.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = !compact)
+                .padding(vertical = if (compact) 6.dp else 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            when {
+                state.loading -> {
+                    Text(
+                        text = "Cargando letra de $title...",
+                        color = Color(0xFFFBCFE8),
+                        fontSize = if (compact) 11.sp else 15.sp,
+                        fontFamily = FontFamily.Monospace,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+                state.found && activeIdx >= 0 && displayLines.isNotEmpty() -> {
+                    Text(
+                        text = if (activeIdx > 0) displayLines[activeIdx - 1] else "♪ ♪ ♪",
+                        color = Color(0x9994A3B8),
+                        fontSize = if (compact) 10.sp else 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(if (compact) 4.dp else 8.dp))
+                    Text(
+                        text = displayLines[activeIdx],
+                        color = Color.White,
+                        fontSize = if (compact) 13.5.sp else 24.sp,
+                        fontWeight = FontWeight.Black,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        lineHeight = if (compact) 17.sp else 30.sp,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color(0xCCEC4899),
+                                offset = Offset(0f, 0f),
+                                blurRadius = 14f
+                            )
+                        )
+                    )
+                    if (activeIdx + 1 < displayLines.size) {
+                        Spacer(modifier = Modifier.height(if (compact) 4.dp else 8.dp))
+                        Text(
+                            text = displayLines[activeIdx + 1],
+                            color = Color(0xDDA5F3FC),
+                            fontSize = if (compact) 11.sp else 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                    if (!compact && activeIdx + 2 < displayLines.size) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = displayLines[activeIdx + 2],
+                            color = Color(0x99CBD5E1),
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
+                }
+                else -> {
+                    Text(
+                        text = "🎤 Modo Karaoke Activo",
+                        color = Color(0xFFFBCFE8),
+                        fontSize = if (compact) 12.sp else 18.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Letra no disponible para esta pista",
+                        color = Color(0xFF94A3B8),
+                        fontSize = if (compact) 10.sp else 12.sp,
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }

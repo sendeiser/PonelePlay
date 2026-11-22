@@ -92,6 +92,9 @@ export function PanelPlaybackFooter({
   const [volume, setVolume] = useState(85);
   const [isMuted, setIsMuted] = useState(false);
   const [tvMuted, setTvMuted] = useState(true);
+  const tvMutedRef = useRef(true);
+  tvMutedRef.current = tvMuted;
+  const routingLockUntilRef = useRef(0);
   // 3-way audio routing (audio-only, zero video on TV): CABINA_ONLY (default) | BOTH | TV_ONLY
   const [audioRouting, setAudioRouting] = useState<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
   const audioRoutingRef = useRef<"BOTH" | "CABINA_ONLY" | "TV_ONLY">("CABINA_ONLY");
@@ -613,15 +616,18 @@ export function PanelPlaybackFooter({
       }
       setIsPaused(anchor.isPaused);
       setVolume(anchor.volume);
-      setIsMuted(anchor.cabinaMuted);
-      setTvMuted(anchor.tvMuted);
-      setAudioRouting(
-        anchor.cabinaMuted && !anchor.tvMuted
-          ? "TV_ONLY"
-          : !anchor.cabinaMuted && !anchor.tvMuted
-            ? "BOTH"
-            : "CABINA_ONLY",
-      );
+      if (Date.now() >= routingLockUntilRef.current) {
+        setIsMuted(anchor.cabinaMuted);
+        tvMutedRef.current = anchor.tvMuted;
+        setTvMuted(anchor.tvMuted);
+        setAudioRouting(
+          anchor.cabinaMuted && !anchor.tvMuted
+            ? "TV_ONLY"
+            : !anchor.cabinaMuted && !anchor.tvMuted
+              ? "BOTH"
+              : "CABINA_ONLY",
+        );
+      }
       setKaraokeMode(anchor.karaokeMode);
       if (anchor.track) {
         applyExternalTrack(toPlayerTrack(anchor.track));
@@ -1156,9 +1162,11 @@ export function PanelPlaybackFooter({
    * TV_ONLY      → Audio SOLO en TV (mute=true, tvMuted=false)
    */
   const handleSetAudioRouting = async (routing: "BOTH" | "CABINA_ONLY" | "TV_ONLY") => {
+    routingLockUntilRef.current = Date.now() + 4500;
     setAudioRouting(routing);
     const nextCabinaMuted = routing === "TV_ONLY";
     const nextTvMuted = routing === "CABINA_ONLY";
+    tvMutedRef.current = nextTvMuted;
 
     // Update cabina mute locally and in DB (never broadcast "mute" over WS or legacy channel to TV!)
     if (nextCabinaMuted !== isMuted) {
@@ -1808,7 +1816,7 @@ export function PanelPlaybackFooter({
               currentTime: curr,
               duration: dur ?? liveTrack.durationSeconds ?? 210,
               isPaused,
-              tvMuted,
+              tvMuted: tvMutedRef.current,
               volume,
               isFromAdminAudio: true,
               track: {

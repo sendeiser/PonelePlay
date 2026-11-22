@@ -340,6 +340,36 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       });
     }, [shouldMountYoutube, trackKey, ytEngine, scheduleYtAutoplayCheck]);
 
+    // Auto-unlock TV audio on first user gesture anywhere on screen (browser autoplay policy)
+    useEffect(() => {
+      if (!audioActive || typeof window === "undefined") return;
+      const unlockOnGesture = () => {
+        if (!audioActiveRef.current || isPausedRef.current) return;
+        const activeTrack = trackRef.current;
+        if (!activeTrack) return;
+        if (activeTrack.source === "upload") {
+          const audio = html5AudioRef.current;
+          if (audio && audio.paused) {
+            tryPlayHtml5(audio);
+          }
+          return;
+        }
+        const state = ytEngine.getPlayerState?.();
+        if (state !== 1) {
+          ytEngine.unMute?.();
+          ytEngine.setVolume?.(volumeRef.current);
+          void ytEngine.play?.();
+          onBlockedChangeRef.current?.(false);
+        }
+      };
+      window.addEventListener("pointerdown", unlockOnGesture, { passive: true });
+      window.addEventListener("keydown", unlockOnGesture, { passive: true });
+      return () => {
+        window.removeEventListener("pointerdown", unlockOnGesture);
+        window.removeEventListener("keydown", unlockOnGesture);
+      };
+    }, [audioActive, tryPlayHtml5, ytEngine]);
+
     // Handle hidden YouTube play/pause changes cleanly without re-loading
     useEffect(() => {
       if (!shouldMountYoutube) return;
@@ -577,7 +607,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       <div
         id="poneleplay-tv-audio-engine"
         aria-hidden="true"
-        className="fixed -left-[9999px] -top-[9999px] w-[200px] h-[112px] opacity-0 pointer-events-none overflow-hidden -z-50"
+        className="fixed bottom-0 right-0 w-[200px] h-[112px] opacity-[0.01] pointer-events-none overflow-hidden -z-10"
       >
         <audio ref={html5AudioRef} preload="auto" className="hidden" />
         {shouldMountYoutube && (
@@ -603,6 +633,10 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
               }
               ytEngine.unMute?.();
               ytEngine.setVolume?.(volumeRef.current);
+              if (!isPausedRef.current) {
+                void ytEngine.play?.();
+                scheduleYtAutoplayCheck();
+              }
             }}
           />
         )}
