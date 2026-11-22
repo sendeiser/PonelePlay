@@ -80,6 +80,7 @@ vi.mock("@/lib/sync/client", () => {
       sendCommand: vi.fn(),
       sendProgress: vi.fn(),
       sendReady: vi.fn(),
+      sendPartyEvent: vi.fn(),
       probeLocalLanHubOnce: vi.fn().mockResolvedValue(false),
       reconnectNow: vi.fn(),
       estimatedServerMs: () => Date.now(),
@@ -293,5 +294,34 @@ describe("PanelPlaybackFooter with Expandable Queue Drawer", () => {
       expect(screen.getByText(/Modos de Sincronización/i)).toBeInTheDocument();
     });
     expect(screen.queryByText(/Stream Cabina en Vivo/i)).not.toBeInTheDocument();
+  });
+
+  it("shows live Karaoke Video/Letra/Normal override controls and toggles lyrics offset pill by presentation", async () => {
+    mockFetchNight.mockResolvedValue({
+      ...activeNightState,
+      nowPlaying: {
+        ...activeNightState.nowPlaying!,
+        youtubeVideoId: "u7K_A06m51U",
+      },
+    });
+    mockFetchPlayback.mockResolvedValue({
+      ...defaultPlayback,
+      karaokeMode: true,
+    });
+
+    render(<PanelPlaybackFooter slug="billar-aurora" />);
+
+    await waitFor(() => {
+      expect(screen.getByTitle(/Mostrar Video Karaoke en pantalla completa/i)).toBeInTheDocument();
+      expect(screen.getByTitle(/Mostrar Solo Letra sincronizada/i)).toBeInTheDocument();
+      // Normal song with karaokeMode=true starts in lyrics presentation -> offset pill visible
+      expect(screen.getByTitle(/Atrasar letra 0\.5s/i)).toBeInTheDocument();
+    });
+
+    // Switch to Video Karaoke -> offset pill hides because burned-in video carries lyrics
+    fireEvent.click(screen.getByTitle(/Mostrar Video Karaoke en pantalla completa/i));
+    await waitFor(() => {
+      expect(screen.queryByTitle(/Atrasar letra 0\.5s/i)).not.toBeInTheDocument();
+    });
   });
 });

@@ -467,9 +467,11 @@ fun NativeTvApp(
     var lanScanStatusText by remember { mutableStateOf<String?>(null) }
     var manualRefreshTick by remember { mutableStateOf(0) }
     var karaokeOffsetSec by remember { mutableStateOf(0f) }
+    var karaokeOverrideMode by remember { mutableStateOf("auto") }
 
     LaunchedEffect(feed?.nowPlaying?.id, feed?.nowPlaying?.youtubeVideoId) {
         karaokeOffsetSec = 0f
+        karaokeOverrideMode = "auto"
     }
 
     var lastAnchorSeq by remember { mutableStateOf(0L) }
@@ -567,7 +569,8 @@ fun NativeTvApp(
                                 storagePath = t.storagePath,
                                 thumbnailUrl = existingFeed.nowPlaying?.thumbnailUrl,
                                 durationSeconds = existingFeed.nowPlaying?.durationSeconds ?: 210,
-                                voteCount = existingFeed.nowPlaying?.voteCount ?: 0
+                                voteCount = existingFeed.nowPlaying?.voteCount ?: 0,
+                                isKaraoke = t.isKaraoke
                             )
                         }
                     } ?: existingFeed.nowPlaying
@@ -612,7 +615,8 @@ fun NativeTvApp(
                             storagePath = preload.track.storagePath,
                             thumbnailUrl = null,
                             durationSeconds = 210,
-                            voteCount = 0
+                            voteCount = 0,
+                            isKaraoke = preload.track.isKaraoke
                         )
                     )
                 }
@@ -686,7 +690,8 @@ fun NativeTvApp(
                                 storagePath = go.track.storagePath,
                                 thumbnailUrl = existingFeed.nowPlaying?.thumbnailUrl,
                                 durationSeconds = existingFeed.nowPlaying?.durationSeconds ?: 210,
-                                voteCount = existingFeed.nowPlaying?.voteCount ?: 0
+                                voteCount = existingFeed.nowPlaying?.voteCount ?: 0,
+                                isKaraoke = go.track.isKaraoke
                             ),
                             playback = existingFeed.playback.copy(
                                 isPaused = go.anchor.isPaused,
@@ -726,6 +731,12 @@ fun NativeTvApp(
                     } else if (evType == "karaoke_offset") {
                         val nextOffset = p.optDouble("offsetSec", 0.0).toFloat().coerceIn(-15f, 15f)
                         karaokeOffsetSec = nextOffset
+                    } else if (evType == "karaoke_override") {
+                        val rawMode = p.optString("mode", "auto").trim()
+                        karaokeOverrideMode = when (rawMode) {
+                            "force_video", "force_lyrics", "off", "auto" -> rawMode
+                            else -> "auto"
+                        }
                     }
                 } catch (_: Exception) {}
             }
@@ -913,6 +924,7 @@ fun NativeTvApp(
                     syncStatus = syncStatus,
                     liveAnchor = liveAnchor,
                     karaokeOffsetSec = karaokeOffsetSec,
+                    karaokeOverrideMode = karaokeOverrideMode,
                     estimatedServerMs = { syncClient.estimatedServerMs() },
                     videoController = videoController,
                     onVideoEnded = {

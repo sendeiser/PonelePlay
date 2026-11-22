@@ -318,4 +318,46 @@ describe("TvAudioEngine (Audio-Only 3-Way Routing)", () => {
     });
     expect(onBlockedChange).toHaveBeenCalledWith(false);
   });
+
+  it("promotes single YouTube iframe to fullscreen muted in CABINA_ONLY when videoVisible is true", () => {
+    const onBlockedChange = vi.fn();
+    const { container, rerender } = render(
+      <TvAudioEngine
+        track={YT_TRACK}
+        audioActive={false}
+        syncBothMode={false}
+        videoVisible={true}
+        isPaused={false}
+        volume={80}
+        anchor={makeAnchor(YT_TRACK, 12, 10_000)}
+        estimatedServerMs={() => 10_000}
+        onBlockedChange={onBlockedChange}
+      />,
+    );
+
+    const wrapper = container.querySelector("#poneleplay-tv-audio-engine");
+    const iframe = container.querySelector("#poneleplay-tv-audio-iframe") as HTMLIFrameElement | null;
+    expect(wrapper?.className).toContain("fixed inset-0");
+    expect(wrapper?.getAttribute("aria-hidden")).toBe("false");
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute("src")).toContain("mute=1");
+    expect(onBlockedChange).not.toHaveBeenCalledWith(true);
+
+    // Switching from CABINA_ONLY to TV_ONLY mid-karaoke keeps the SAME iframe mounted without reload
+    rerender(
+      <TvAudioEngine
+        track={YT_TRACK}
+        audioActive={true}
+        syncBothMode={false}
+        videoVisible={true}
+        isPaused={false}
+        volume={85}
+        anchor={makeAnchor(YT_TRACK, 14, 12_000)}
+        estimatedServerMs={() => 12_000}
+        onBlockedChange={onBlockedChange}
+      />,
+    );
+    const sameIframe = container.querySelector("#poneleplay-tv-audio-iframe");
+    expect(sameIframe).toBe(iframe);
+  });
 });

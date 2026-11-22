@@ -163,6 +163,39 @@ fun getTvScaleFactor(scaleName: String): Float {
     }
 }
 
+private val KARAOKE_KEYWORD_REGEX = Regex(
+    "\\b(?:karaoke|pista\\s+karaoke|con\\s+letra|sing\\s*along|sing\\s+king|karafun|versi[oó]n\\s+karaoke|karaoke\\s+version|instrumental\\s+con\\s+letra|pista\\s+musical)\\b",
+    RegexOption.IGNORE_CASE
+)
+
+private fun isTrackKaraokeCandidate(track: TvTrack?): Boolean {
+    if (track == null) return false
+    if (track.isKaraoke) return true
+    val combined = "${track.title} ${track.artist}".trim()
+    return combined.isNotEmpty() && KARAOKE_KEYWORD_REGEX.containsMatchIn(combined)
+}
+
+private fun resolveKaraokePresentation(
+    track: TvTrack?,
+    boothKaraokeMode: Boolean,
+    overrideMode: String = "auto",
+    videoEmbedFailed: Boolean = false
+): String {
+    if (overrideMode == "off") return "none"
+    val canShowYoutubeVideo = track != null &&
+        !track.source.equals("upload", ignoreCase = true) &&
+        !track.youtubeVideoId.isNullOrBlank() &&
+        !videoEmbedFailed
+    if (overrideMode == "force_video") {
+        return if (canShowYoutubeVideo) "video" else "lyrics"
+    }
+    if (overrideMode == "force_lyrics") return "lyrics"
+    if (isTrackKaraokeCandidate(track)) {
+        return if (canShowYoutubeVideo) "video" else "lyrics"
+    }
+    return if (boothKaraokeMode) "lyrics" else "none"
+}
+
 @Composable
 fun TvScreen(
     feed: TvFeed,
@@ -177,6 +210,7 @@ fun TvScreen(
     syncStatus: SyncStatusState? = null,
     liveAnchor: SyncAnchorData? = null,
     karaokeOffsetSec: Float = 0f,
+    karaokeOverrideMode: String = "auto",
     estimatedServerMs: (() -> Long)? = null,
     videoController: VideoPlayerController,
     onVideoEnded: () -> Unit,
@@ -211,6 +245,39 @@ fun TvScreen(
         else -> "🔊 CABINA + TV"
     }
 
+    val currentTrack = feed.nowPlaying
+    val currentSource = currentTrack?.source ?: "youtube"
+    val currentStoragePath = currentTrack?.storagePath
+    val currentVideoId = currentTrack?.youtubeVideoId ?: ""
+    val currentTrackKey = currentTrack?.let {
+        "${it.source}:${it.storagePath ?: it.youtubeVideoId ?: it.id}"
+    } ?: ""
+    val trackDurationSec = (currentTrack?.durationSeconds ?: 210).coerceAtLeast(1)
+
+    var karaokeVideoEmbedFailed by remember(currentTrackKey) { mutableStateOf(false) }
+    LaunchedEffect(karaokeOverrideMode) {
+        if (karaokeOverrideMode == "force_video" || karaokeOverrideMode == "auto") {
+            karaokeVideoEmbedFailed = false
+        }
+    }
+    val karaokePresentation = remember(
+        currentTrack,
+        feed.playback.karaokeMode,
+        karaokeOverrideMode,
+        karaokeVideoEmbedFailed
+    ) {
+        resolveKaraokePresentation(
+            track = currentTrack,
+            boothKaraokeMode = feed.playback.karaokeMode,
+            overrideMode = karaokeOverrideMode,
+            videoEmbedFailed = karaokeVideoEmbedFailed
+        )
+    }
+    val isKaraokeVideoFullscreen = karaokePresentation == "video"
+    val showKaraokeLyrics = karaokePresentation == "lyrics"
+    val latestKaraokeVideo by rememberUpdatedState(isKaraokeVideoFullscreen)
+    val mediaSurfaceActive = audioActive || isKaraokeVideoFullscreen
+
     // Reactive Control: React to master control commands & seekSeq from DJ booth (Cabina)
     var lastExecutedSeq by remember { mutableStateOf(feed.playback.commandSeq) }
     var lastExecutedSeekSeq by remember { mutableStateOf(feed.playback.seekSeq) }
@@ -218,7 +285,7 @@ fun TvScreen(
         if (feed.playback.seekSeq > 0L && feed.playback.seekSeq != lastExecutedSeekSeq) {
             lastExecutedSeekSeq = feed.playback.seekSeq
             lastExecutedSeq = feed.playback.commandSeq
-            if (audioActive) {
+            if (mediaSurfaceActive) {
                 videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
             }
             return@LaunchedEffect
@@ -227,10 +294,10 @@ fun TvScreen(
             lastExecutedSeq = feed.playback.commandSeq
             when (feed.playback.lastCommand) {
                 "pause" -> videoController.pause()
-                "resume" -> if (audioActive) videoController.play()
-                "toggle_pause" -> if (audioActive) videoController.togglePlayPause()
+                "resume" -> if (mediaSurfaceActive) videoController.play()
+                "toggle_pause" -> if (mediaSurfaceActive) videoController.togglePlayPause()
                 "seek" -> {
-                    if (audioActive) {
+                    if (mediaSurfaceActive) {
                         videoController.seekTo(feed.playback.positionSeconds.coerceAtLeast(0f))
                     }
                 }
@@ -254,7 +321,7 @@ fun TvScreen(
                     if (audioActive) videoController.unMute()
                 }
                 "skip" -> onVideoEnded()
-                "play_now" -> if (audioActive) videoController.play()
+                "play_now" -> if (mediaSurfaceActive) videoController.play()
             }
         }
     }
@@ -267,15 +334,6 @@ fun TvScreen(
             videoController.setVolume(effectiveVolume)
         }
     }
-
-    val currentTrack = feed.nowPlaying
-    val currentSource = currentTrack?.source ?: "youtube"
-    val currentStoragePath = currentTrack?.storagePath
-    val currentVideoId = currentTrack?.youtubeVideoId ?: ""
-    val currentTrackKey = currentTrack?.let {
-        "${it.source}:${it.storagePath ?: it.youtubeVideoId ?: it.id}"
-    } ?: ""
-    val trackDurationSec = (currentTrack?.durationSeconds ?: 210).coerceAtLeast(1)
 
     // Compute live initial position when joining a playing room mid-track using synced clock offset
     val computedInitialSec = remember(currentTrackKey, liveAnchor?.seq, feed.playback.positionSeconds) {
@@ -355,12 +413,12 @@ fun TvScreen(
         }
     }
 
-    LaunchedEffect(currentTrackKey, audioActive, feed.playback.isPaused, syncStatus?.connected, firstFrameTick) {
-        if (!audioActive || syncStatus?.connected != true) return@LaunchedEffect
+    LaunchedEffect(currentTrackKey, audioActive, isKaraokeVideoFullscreen, feed.playback.isPaused, syncStatus?.connected, firstFrameTick) {
+        if ((!audioActive && !isKaraokeVideoFullscreen) || syncStatus?.connected != true) return@LaunchedEffect
 
         var skipInitialDelay = firstFrameTick > 0
         while (isActive) {
-            if (!latestAudioActive) {
+            if (!latestAudioActive && !latestKaraokeVideo) {
                 delay(400L)
                 continue
             }
@@ -412,6 +470,17 @@ fun TvScreen(
             val currentPos = videoController.getLivePositionSec()
             val driftSec = currentPos - expectedSec
             val isEarlyWindow = expectedSec < 10.0 || (checkElapsedNow - lastDriftTrackStartElapsedAt < 10_000L)
+
+            val isMutedKaraokeVideo = !latestAudioActive && latestKaraokeVideo
+            if (isMutedKaraokeVideo) {
+                // CABINA_ONLY + Fullscreen Karaoke Video: keep muted video tightly aligned to Cabina clock
+                videoController.setPlaybackRate(1.0f)
+                if (abs(driftSec) > 0.35 && abs(driftSec) < 25.0 && checkElapsedNow - lastDriftCorrectionElapsedAt > 1200L) {
+                    lastDriftCorrectionElapsedAt = checkElapsedNow
+                    videoController.seekTo((expectedSec + 0.12).toFloat())
+                }
+                continue
+            }
 
             if (!latestSyncBothMode) {
                 // TV_ONLY: keep natural 1.0x playback and only snap major seeks (>2.0s)
@@ -479,12 +548,13 @@ fun TvScreen(
             .fillMaxSize()
             .background(Color(0xFF070A13))
     ) {
-        // 1. Audio-Only Engine (always invisible; completely unmounted in CABINA_ONLY mode)
+        // 1. Single Media Engine (hidden 0%-video for normal music; promoted fullscreen ONLY for YouTube Karaoke)
         NativeVideoPlayer(
             videoId = currentVideoId,
             source = currentSource,
             storagePath = currentStoragePath,
             audioActive = audioActive,
+            videoVisible = isKaraokeVideoFullscreen,
             venueSlug = feed.venue.slug,
             deviceId = deviceId,
             isPaused = feed.playback.isPaused,
@@ -494,11 +564,19 @@ fun TvScreen(
             useLegacySupabaseWs = useLegacySupabaseWs,
             controller = videoController,
             onEnded = onVideoEnded,
-            onDisplayConfig = onDisplayConfig
+            onDisplayConfig = onDisplayConfig,
+            onEmbedError = { karaokeVideoEmbedFailed = true }
         )
 
-        // 2. Pure Music UI Views (Zero Video): SALON (default) or PORTADA (cover + queue/proposals overlays)
-        when (mode) {
+        // 2. Fullscreen Karaoke Video Minimal Overlay OR Pure Music UI Views (Zero Video: SALON | PORTADA)
+        if (isKaraokeVideoFullscreen) {
+            TvModeKaraokeVideoOverlay(
+                feed = feed,
+                qrBitmap = qrBitmap,
+                currentTimeString = currentTimeString,
+                audioRoutingLabel = audioRoutingLabel
+            )
+        } else when (mode) {
             TvScreenMode.PORTADA -> {
                 TvModePortadaOverlays(
                     feed = feed,
@@ -507,6 +585,7 @@ fun TvScreen(
                     elapsedSec = elapsedSec,
                     durationSec = trackDurationSec,
                     audioRoutingLabel = audioRoutingLabel,
+                    showKaraokeLyrics = showKaraokeLyrics,
                     karaokeOffsetSec = karaokeOffsetSec,
                     showQueue = showQueue,
                     showProposals = showProposals,
@@ -523,6 +602,7 @@ fun TvScreen(
                     elapsedSec = elapsedSec,
                     durationSec = trackDurationSec,
                     audioRoutingLabel = audioRoutingLabel,
+                    showKaraokeLyrics = showKaraokeLyrics,
                     karaokeOffsetSec = karaokeOffsetSec,
                     theme = theme,
                     scaleFactor = scaleFactor,
@@ -585,6 +665,106 @@ fun TvScreen(
 }
 
 /**
+ * FULLSCREEN KARAOKE VIDEO OVERLAY: Discreet top-left badge + bottom-right corner QR so lyrics stay 100% unobstructed.
+ */
+@Composable
+private fun TvModeKaraokeVideoOverlay(
+    feed: TvFeed,
+    qrBitmap: Bitmap?,
+    currentTimeString: String,
+    audioRoutingLabel: String
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp, vertical = 20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .background(Color(0xB3070A13), RoundedCornerShape(24.dp))
+                .border(1.dp, Color(0x99EC4899), RoundedCornerShape(24.dp))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "🎤 KARAOKE",
+                color = Color(0xFFF472B6),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = "•",
+                color = Color(0xFF64748B),
+                fontSize = 11.sp
+            )
+            Text(
+                text = feed.nowPlaying?.title ?: "",
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.widthIn(max = 360.dp)
+            )
+            Text(
+                text = "• $audioRoutingLabel",
+                color = Color(0xFF67E8F9),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+
+        if (qrBitmap != null) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .background(Color(0xB3070A13), RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0x55FFFFFF), RoundedCornerShape(16.dp))
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(Color.White, RoundedCornerShape(10.dp))
+                        .padding(4.dp)
+                ) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "QR Mesas",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    modifier = Modifier.padding(end = 6.dp)
+                ) {
+                    Text(
+                        text = "PEDÍ TU TEMA",
+                        color = Color(0xFF67E8F9),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = currentTimeString,
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
  * MODE PORTADA: Musical showcase with Album Art + Progress + floating Queue & Proposals + QR (zero video).
  */
 @Composable
@@ -595,6 +775,7 @@ private fun TvModePortadaOverlays(
     elapsedSec: Int,
     durationSec: Int,
     audioRoutingLabel: String,
+    showKaraokeLyrics: Boolean = false,
     karaokeOffsetSec: Float = 0f,
     showQueue: Boolean = true,
     showProposals: Boolean = true,
@@ -755,14 +936,13 @@ private fun TvModePortadaOverlays(
                 }
             }
 
-            // Center Showcase: Karaoke Lyrics Stage when Karaoke is active, otherwise Album Art
-            val isKaraokeActive = feed.playback.karaokeMode || feed.nowPlaying?.isKaraoke == true
+            // Center Showcase: Karaoke Lyrics Stage when in lyrics mode, otherwise Album Art
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if (isKaraokeActive && feed.nowPlaying != null) {
+                if (showKaraokeLyrics && feed.nowPlaying != null) {
                     Text(
                         text = feed.nowPlaying.title,
                         color = Color.White,
@@ -1025,6 +1205,7 @@ private fun TvModeSalonOverlays(
     elapsedSec: Int,
     durationSec: Int,
     audioRoutingLabel: String,
+    showKaraokeLyrics: Boolean = false,
     karaokeOffsetSec: Float = 0f,
     theme: TvDesignTheme = getTvDesignTheme("neon"),
     scaleFactor: Float = 1.0f,
@@ -1188,9 +1369,8 @@ private fun TvModeSalonOverlays(
 
                             Spacer(modifier = Modifier.height(12.dp))
 
-                            // Album Art / Live Music Visual Card (or Synchronized Karaoke Lyrics when Karaoke is active)
-                            val salonKaraokeActive = feed.playback.karaokeMode || feed.nowPlaying?.isKaraoke == true
-                            if (salonKaraokeActive && feed.nowPlaying != null) {
+                            // Album Art / Live Music Visual Card (or Synchronized Karaoke Lyrics when in lyrics mode)
+                            if (showKaraokeLyrics && feed.nowPlaying != null) {
                                 KaraokeLyricsPanel(
                                     title = feed.nowPlaying.title,
                                     artist = feed.nowPlaying.artist,
@@ -2219,7 +2399,9 @@ private fun KaraokeLyricsPanel(
                 NativeLyricsState(loading = false, found = false)
             }
         }
-        nativeLyricsCache[cacheKey] = fetched
+        if (fetched.found) {
+            nativeLyricsCache[cacheKey] = fetched
+        }
         state = fetched
     }
 

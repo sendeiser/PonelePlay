@@ -26,7 +26,12 @@ export interface IframePlaybackEngine extends PlaybackEngine {
   getCurrentTime(): number;
   getDuration(): number;
   /** Build the initial embed URL for a track. */
-  buildEmbedUrl(videoId: string, startSeconds?: number, autoplay?: boolean): string;
+  buildEmbedUrl(
+    videoId: string,
+    startSeconds?: number,
+    autoplay?: boolean,
+    startMuted?: boolean,
+  ): string;
 }
 
 const YT_ENDED = 0;
@@ -75,7 +80,12 @@ export function createIframeEngine(
   let prebufferStartSec = 0;
   let cueStartedAt = 0;
 
-  function buildEmbedUrl(videoId: string, startSeconds = 0, autoplay = true): string {
+  function buildEmbedUrl(
+    videoId: string,
+    startSeconds = 0,
+    autoplay = true,
+    startMuted = false,
+  ): string {
     const cleanId = parseYoutubeVideoId(videoId) || videoId || "T_FkEw27XJ0";
     if (!currentVideoId) {
       currentVideoId = cleanId;
@@ -83,8 +93,9 @@ export function createIframeEngine(
     const origin =
       typeof window !== "undefined" ? encodeURIComponent(window.location.origin) : "";
     const startParam = startSeconds > 0 ? `&start=${Math.floor(startSeconds)}` : "";
+    const muteParam = startMuted ? "&mute=1" : "";
     const originParam = origin ? `&origin=${origin}&widget_referrer=${origin}` : "";
-    return `https://www.youtube.com/embed/${cleanId}?autoplay=${autoplay ? 1 : 0}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${startParam}${originParam}`;
+    return `https://www.youtube.com/embed/${cleanId}?autoplay=${autoplay ? 1 : 0}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&widgetid=1${muteParam}${startParam}${originParam}`;
   }
 
   function post(func: string, args: unknown[] = []) {
@@ -452,7 +463,7 @@ export function createIframeEngine(
           return;
         }
 
-        const targetSrc = buildEmbedUrl(nextVideoId, 0);
+        const targetSrc = buildEmbedUrl(nextVideoId, 0, desiredPlaying, desiredMuted === true);
         if (!iframe.src || !iframe.src.includes(nextVideoId)) {
           boundIframe = null;
           iframe.src = targetSrc;
@@ -497,7 +508,7 @@ export function createIframeEngine(
           post("loadVideoById", [{ videoId: nextVideoId, startSeconds: startSec }]);
           return;
         }
-        const targetSrc = buildEmbedUrl(nextVideoId, startSec, true);
+        const targetSrc = buildEmbedUrl(nextVideoId, startSec, true, true);
         if (!iframe.src || !iframe.src.includes(nextVideoId)) {
           boundIframe = null;
           iframe.src = targetSrc;

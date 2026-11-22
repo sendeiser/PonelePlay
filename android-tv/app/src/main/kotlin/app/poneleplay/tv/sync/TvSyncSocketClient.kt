@@ -484,7 +484,8 @@ class TvSyncSocketClient(
             youtubeVideoId = rawYt?.takeIf { it.isNotEmpty() && it != "null" },
             storagePath = cleanStorage,
             title = obj.optString("title", ""),
-            artist = obj.optString("artist", "")
+            artist = obj.optString("artist", ""),
+            isKaraoke = obj.optBoolean("isKaraoke", false)
         )
     }
 

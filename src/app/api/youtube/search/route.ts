@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { parseYoutubeVideoId, parseYoutubePlaylistId } from "@/lib/domain/youtube";
+import { isTrackKaraokeCandidate } from "@/lib/domain/karaoke";
 import { demoSearchCatalog } from "@/lib/demo-data";
 import { fetchYouTubePlaylistServer, type YouTubeSearchResult } from "@/lib/server/youtube-playlist";
 
@@ -61,20 +62,7 @@ function parseViewsString(str?: string): number {
 }
 
 function isKaraokeVideo(title: string, channel: string): boolean {
-  const t = `${title} ${channel}`.toLowerCase();
-  return (
-    t.includes("karaoke") ||
-    t.includes("instrumental") ||
-    t.includes("canta") ||
-    t.includes("con letra") ||
-    t.includes("letra") ||
-    t.includes("backing track") ||
-    t.includes("sing along") ||
-    t.includes("sing-along") ||
-    t.includes("cantaokey") ||
-    t.includes("sing king") ||
-    t.includes("karaofun")
-  );
+  return isTrackKaraokeCandidate({ title, artist: channel });
 }
 
 interface YouTubeInitialData {

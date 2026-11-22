@@ -33,11 +33,14 @@ interface CacheItem {
 
 const LYRICS_CACHE = new Map<string, CacheItem>();
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const NEGATIVE_CACHE_TTL_MS = 60 * 1000;
 const MAX_CACHE_SIZE = 250;
 
-const CORS_HEADERS = {
+const RESPONSE_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Cache-Control": "public, max-age=300",
+  "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+  "CDN-Cache-Control": "no-store",
+  "Netlify-CDN-Cache-Control": "no-store",
 };
 
 function setCache(key: string, value: ParsedLyricsResult) {
@@ -45,7 +48,17 @@ function setCache(key: string, value: ParsedLyricsResult) {
     const oldest = LYRICS_CACHE.keys().next().value;
     if (oldest) LYRICS_CACHE.delete(oldest);
   }
-  LYRICS_CACHE.set(key, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+  const ttl = value.found ? CACHE_TTL_MS : NEGATIVE_CACHE_TTL_MS;
+  LYRICS_CACHE.set(key, { value, expiresAt: Date.now() + ttl });
+}
+
+function stripAccents(input: string): string {
+  return input
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function buildResultFromLrcLib(rec: LrcLibRecord | null | undefined): ParsedLyricsResult | null {
@@ -272,7 +285,7 @@ export async function GET(req: NextRequest) {
         plainLines: [],
         error: "title_required",
       },
-      { status: 400, headers: CORS_HEADERS },
+      { status: 400, headers: RESPONSE_HEADERS },
     );
   }
 
@@ -281,7 +294,7 @@ export async function GET(req: NextRequest) {
 
   const cached = LYRICS_CACHE.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return NextResponse.json({ ok: true, ...cached.value }, { headers: CORS_HEADERS });
+    return NextResponse.json({ ok: true, ...cached.value }, { headers: RESPONSE_HEADERS });
   }
 
   // Launch YouTube captions lookup in parallel with LRCLIB lookup for minimum latency
@@ -330,6 +343,22 @@ export async function GET(req: NextRequest) {
         const candidate = buildResultFromLrcLib(pickBestSearchRecord(list, durationSec));
         if (candidate && (!resolved || candidate.synced)) {
           resolved = candidate;
+        }
+      }
+    }
+
+    if ((!resolved || !resolved.synced) && title) {
+      const asciiTitle = stripAccents(title);
+      if (asciiTitle && asciiTitle.toLowerCase() !== title.toLowerCase()) {
+        const searchParams = new URLSearchParams({ q: asciiTitle });
+        const list = await fetchJsonWithTimeout<LrcLibRecord[]>(
+          `https://lrclib.net/api/search?${searchParams.toString()}`,
+        );
+        if (Array.isArray(list) && list.length > 0) {
+          const candidate = buildResultFromLrcLib(pickBestSearchRecord(list, durationSec));
+          if (candidate && (!resolved || candidate.synced)) {
+            resolved = candidate;
+          }
         }
       }
     }
@@ -383,5 +412,5 @@ export async function GET(req: NextRequest) {
   };
 
   setCache(cacheKey, output);
-  return NextResponse.json({ ok: true, ...output }, { headers: CORS_HEADERS });
+  return NextResponse.json({ ok: true, ...output }, { headers: RESPONSE_HEADERS });
 }

@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { NextRequest } from "next/server";
+import { GET } from "@/app/api/lyrics/route";
 import {
   cleanTrackQuery,
   parseLrcLyrics,
@@ -89,5 +91,59 @@ describe("karaoke lyrics domain helpers", () => {
     expect(resolveActiveLyricIndex([], plain, 10, 200, 0)).toBe(0);
     expect(resolveActiveLyricIndex([], plain, 100, 200, 0)).toBeGreaterThanOrEqual(1);
     expect(resolveActiveLyricIndex([], plain, 190, 200, 0)).toBe(3);
+  });
+});
+
+describe("GET /api/lyrics CDN cache headers and distinct song responses", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns no-store CDN headers and serves distinct lyrics per track query", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("lrclib.net/api/get") && url.includes("Persiana")) {
+        return new Response(
+          JSON.stringify({
+            trackName: "Persiana Americana",
+            artistName: "Soda Stereo",
+            syncedLyrics: "[00:10.00] Yo te prefiero fuera de foco",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.includes("lrclib.net/api/get") && url.includes("Flaca")) {
+        return new Response(
+          JSON.stringify({
+            trackName: "Flaca",
+            artistName: "Andrés Calamaro",
+            syncedLyrics: "[00:12.00] Flaca no me claves tus puñales",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify([]), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    const resA = await GET(
+      new NextRequest("http://localhost/api/lyrics?title=Persiana%20Americana&artist=Soda%20Stereo"),
+    );
+    const jsonA = await resA.json();
+    expect(resA.headers.get("Cache-Control")).toContain("no-store");
+    expect(resA.headers.get("Netlify-CDN-Cache-Control")).toBe("no-store");
+    expect(jsonA.found).toBe(true);
+    expect(jsonA.trackName).toBe("Persiana Americana");
+
+    const resB = await GET(
+      new NextRequest("http://localhost/api/lyrics?title=Flaca&artist=Andres%20Calamaro"),
+    );
+    const jsonB = await resB.json();
+    expect(resB.headers.get("Cache-Control")).toContain("no-store");
+    expect(jsonB.found).toBe(true);
+    expect(jsonB.trackName).toBe("Flaca");
+    expect(jsonB.lines[0].text).toContain("puñales");
   });
 });

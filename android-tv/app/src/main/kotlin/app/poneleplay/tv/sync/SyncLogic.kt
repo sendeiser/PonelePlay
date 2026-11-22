@@ -29,7 +29,8 @@ data class SyncTrackData(
     val youtubeVideoId: String?,
     val storagePath: String? = null,
     val title: String,
-    val artist: String
+    val artist: String,
+    val isKaraoke: Boolean = false
 )
 
 data class SyncAnchorData(

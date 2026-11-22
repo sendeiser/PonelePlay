@@ -28,6 +28,11 @@ import { createNightStateSource } from "@/lib/api/night-state";
 import { useNightState } from "@/hooks/use-night-state";
 import { partitionQueueAndProposals } from "@/lib/domain/queue";
 import {
+  isTrackKaraokeCandidate,
+  resolveKaraokePresentation,
+  type KaraokeOverrideMode,
+} from "@/lib/domain/karaoke";
+import {
   DEFAULT_BAR_PARTY_CONFIG,
   resolveEffectiveQueueThreshold,
   type PartyConfig,
@@ -101,6 +106,7 @@ export function PanelPlaybackFooter({
   audioRoutingRef.current = audioRouting;
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [karaokeOffsetSec, setKaraokeOffsetSec] = useState(0);
+  const [karaokeOverride, setKaraokeOverride] = useState<KaraokeOverrideMode>("auto");
   const [elapsed, setElapsed] = useState(0);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
@@ -1211,7 +1217,52 @@ export function PanelPlaybackFooter({
 
   useEffect(() => {
     setKaraokeOffsetSec(0);
+    setKaraokeOverride("auto");
   }, [currentTrack?.itemId, currentTrack?.youtubeVideoId]);
+
+  const karaokePresentation = useMemo(
+    () =>
+      resolveKaraokePresentation({
+        track: currentTrack,
+        boothKaraokeMode: karaokeMode,
+        overrideMode: karaokeOverride,
+      }),
+    [currentTrack, karaokeMode, karaokeOverride],
+  );
+  const showKaraokeOverrideControls = Boolean(
+    karaokeMode || isTrackKaraokeCandidate(currentTrack) || karaokeOverride !== "auto",
+  );
+
+  const broadcastKaraokeOverride = (nextMode: KaraokeOverrideMode) => {
+    const payload = {
+      type: "karaoke_override",
+      mode: nextMode,
+      timestamp: Date.now(),
+    };
+    syncClientRef.current?.sendPartyEvent(payload);
+    if (channelRef.current) {
+      void channelRef.current.send({
+        type: "broadcast",
+        event: "karaoke_override",
+        payload,
+      });
+    }
+  };
+
+  const handleSetKaraokeOverride = (target: KaraokeOverrideMode) => {
+    const nextMode: KaraokeOverrideMode = karaokeOverride === target ? "auto" : target;
+    setKaraokeOverride(nextMode);
+    broadcastKaraokeOverride(nextMode);
+    const label =
+      nextMode === "force_video"
+        ? "🎬 TV Karaoke: Video Fullscreen"
+        : nextMode === "force_lyrics"
+          ? "📝 TV Karaoke: Solo Letra (0% video)"
+          : nextMode === "off"
+            ? "🎧 TV Karaoke: Desactivado en este tema"
+            : "🎤 TV Karaoke: Automático";
+    showToast(label);
+  };
 
   const broadcastKaraokeOffset = (nextOffset: number) => {
     const payload = {
@@ -1663,7 +1714,51 @@ export function PanelPlaybackFooter({
               <span className="hidden lg:inline">{karaokeMode ? "Karaoke ON" : "Karaoke"}</span>
             </button>
 
-            {(karaokeMode || currentTrack?.isKaraoke) && (
+            {showKaraokeOverrideControls && (
+              <div
+                className="h-8 shrink-0 inline-flex items-center rounded-xl border border-th-accent/40 bg-th-recessed p-0.5 gap-0.5"
+                title="Elegir vista Karaoke en TV: Video Fullscreen, Solo Letra o Vista Normal"
+              >
+                <button
+                  type="button"
+                  onClick={() => handleSetKaraokeOverride("force_video")}
+                  className={`h-full px-1.5 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                    karaokePresentation === "video"
+                      ? "bg-pink-500 text-white"
+                      : "text-th-text-2 hover:text-th-text hover:bg-th-hover"
+                  }`}
+                  title="Mostrar Video Karaoke en pantalla completa en la TV"
+                >
+                  🎬 Video
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetKaraokeOverride("force_lyrics")}
+                  className={`h-full px-1.5 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                    karaokePresentation === "lyrics"
+                      ? "bg-th-accent text-white"
+                      : "text-th-text-2 hover:text-th-text hover:bg-th-hover"
+                  }`}
+                  title="Mostrar Solo Letra sincronizada (0% video) en la TV"
+                >
+                  📝 Letra
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetKaraokeOverride("off")}
+                  className={`h-full px-1.5 rounded-lg text-[10px] font-semibold transition-colors cursor-pointer ${
+                    karaokeOverride === "off"
+                      ? "bg-slate-600 text-white"
+                      : "text-th-text-2 hover:text-th-text hover:bg-th-hover"
+                  }`}
+                  title="Ocultar Karaoke en este tema (Vista Normal)"
+                >
+                  Normal
+                </button>
+              </div>
+            )}
+
+            {karaokePresentation === "lyrics" && (
               <div
                 className="h-8 shrink-0 inline-flex items-center rounded-xl border border-th-accent/40 bg-th-recessed p-0.5 gap-0.5"
                 title="Calibrar sincronización de letra Karaoke en vivo en las TVs"

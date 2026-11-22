@@ -15,6 +15,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ import app.poneleplay.tv.sync.SyncClockEstimator
 class YouTubeBridge(
     private val onEnded: () -> Unit,
     private val onError: (errorCode: Int) -> Unit = {},
+    private val shouldAutoSkipOnError: () -> Boolean = { true },
     private val getDeviceId: () -> String = { "" },
     private val onDisplayConfig: (String) -> Unit = {},
     private val onVideoCued: (String) -> Unit = {},
@@ -50,11 +52,12 @@ class YouTubeBridge(
     fun onError(errorCode: Int) {
         mainHandler.post {
             onError(errorCode)
-            // If an unplayable video error occurs (e.g. 100, 101, 150, 152),
-            // auto-advance to next song after 3.5s so screen doesn't stay frozen
-            mainHandler.postDelayed({
-                onEnded()
-            }, 3500)
+            // Only auto-skip if not degrading a fullscreen karaoke video to lyrics
+            if (shouldAutoSkipOnError()) {
+                mainHandler.postDelayed({
+                    onEnded()
+                }, 3500)
+            }
         }
     }
 
@@ -449,6 +452,7 @@ fun NativeVideoPlayer(
     storagePath: String? = null,
     serverUrl: String = "https://poneleplay.netlify.app",
     audioActive: Boolean = false,
+    videoVisible: Boolean = false,
     venueSlug: String = "",
     deviceId: String = "",
     isPaused: Boolean = false,
@@ -459,18 +463,24 @@ fun NativeVideoPlayer(
     controller: VideoPlayerController,
     modifier: Modifier = Modifier,
     onEnded: () -> Unit = {},
-    onDisplayConfig: (String) -> Unit = {}
+    onDisplayConfig: (String) -> Unit = {},
+    onEmbedError: (Int) -> Unit = {}
 ) {
     val isUploadTrack = source.equals("upload", ignoreCase = true) || !storagePath.isNullOrBlank()
-    val shouldMountYoutubeAudio = audioActive && !isUploadTrack && videoId.isNotBlank()
+    val shouldMountYoutube = (audioActive || videoVisible) && !isUploadTrack && videoId.isNotBlank()
     val latestOnEnded by rememberUpdatedState(onEnded)
+    val latestAudioActive by rememberUpdatedState(audioActive)
+    val latestVideoVisible by rememberUpdatedState(videoVisible)
+    val latestOnEmbedError by rememberUpdatedState(onEmbedError)
 
-    // Shut down all TV audio immediately in CABINA_ONLY mode
-    LaunchedEffect(audioActive, isUploadTrack) {
+    // Shut down TV audio in CABINA_ONLY mode (keep video running muted when videoVisible is true for Karaoke)
+    LaunchedEffect(audioActive, videoVisible, isUploadTrack) {
         if (!audioActive) {
             controller.stopUploadAudio()
-            controller.pause()
             controller.mute()
+            if (!videoVisible) {
+                controller.pause()
+            }
         } else if (!isUploadTrack) {
             controller.stopUploadAudio()
         }
@@ -498,16 +508,16 @@ fun NativeVideoPlayer(
         }
     }
 
-    // React to YouTube track changes ONLY when hidden YouTube audio engine is mounted
-    LaunchedEffect(shouldMountYoutubeAudio, videoId) {
-        if (shouldMountYoutubeAudio && controller.activeBarrierVideoId != videoId) {
+    // React to YouTube track changes when YouTube engine is mounted (audio-only OR fullscreen karaoke video)
+    LaunchedEffect(shouldMountYoutube, videoId) {
+        if (shouldMountYoutube && controller.activeBarrierVideoId != videoId) {
             controller.loadVideo(videoId, initialPositionSeconds.coerceAtLeast(0f))
         }
     }
 
-    // Follow server pause state when TV audio is active
-    LaunchedEffect(audioActive, isPaused, videoId, uploadAudioUrl) {
-        if (!audioActive) return@LaunchedEffect
+    // Follow server pause state when TV audio OR fullscreen karaoke video is active
+    LaunchedEffect(audioActive, videoVisible, isPaused, videoId, uploadAudioUrl) {
+        if (!audioActive && !videoVisible) return@LaunchedEffect
         if (isPaused) {
             controller.pause()
         } else if (controller.activeBarrierVideoId != videoId) {
@@ -515,7 +525,7 @@ fun NativeVideoPlayer(
         }
     }
 
-    // React to mute / volume changes
+    // React to mute / volume changes (switches CABINA_ONLY ↔ TV_ONLY ↔ BOTH seamlessly without reloading)
     LaunchedEffect(audioActive, isMuted, volume) {
         if (!audioActive || isMuted) {
             controller.mute()
@@ -526,28 +536,32 @@ fun NativeVideoPlayer(
     }
 
     // Toggle legacy Supabase WebSocket off immediately once LAN/Cloud sync is active
-    LaunchedEffect(shouldMountYoutubeAudio, useLegacySupabaseWs) {
-        if (shouldMountYoutubeAudio) {
+    LaunchedEffect(shouldMountYoutube, useLegacySupabaseWs) {
+        if (shouldMountYoutube) {
             controller.setLegacyWsEnabled(useLegacySupabaseWs)
         }
     }
 
-    // Cleanly destroy hidden YouTube WebView whenever TV leaves YouTube audio mode (prevents dead remounts & saves RAM)
-    DisposableEffect(shouldMountYoutubeAudio) {
-        onDispose {
-            if (!shouldMountYoutubeAudio) {
+    // Single promotable YouTube surface: 200x112dp hidden behind opaque UI for audio-only, or fillMaxSize() for YouTube Karaoke
+    if (shouldMountYoutube) {
+        // Destroy WebView cleanly whenever shouldMountYoutube flips true -> false (saves RAM & prevents leaked timers)
+        DisposableEffect(Unit) {
+            onDispose {
                 controller.detachWebView()
             }
         }
-    }
-
-    // Audio-only: 200x112dp WebView kept behind opaque music UI so YouTube Embed NEVER blocks audio playback
-    if (shouldMountYoutubeAudio) {
         AndroidView(
-            modifier = modifier.size(200.dp, 112.dp).alpha(0.01f),
+            modifier = if (videoVisible) {
+                modifier.fillMaxSize().alpha(1f)
+            } else {
+                modifier.size(200.dp, 112.dp).alpha(0.01f)
+            },
             factory = { context ->
                 WebView(context).apply {
-                    layoutParams = ViewGroup.LayoutParams(200, 112)
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                     setBackgroundColor(0xFF000000.toInt())
 
                     settings.apply {
@@ -575,7 +589,17 @@ fun NativeVideoPlayer(
 
                     addJavascriptInterface(
                         YouTubeBridge(
-                            onEnded = { latestOnEnded() },
+                            onEnded = {
+                                if (latestAudioActive) {
+                                    latestOnEnded()
+                                }
+                            },
+                            onError = { code ->
+                                if (latestVideoVisible && (code == 100 || code == 101 || code == 150 || code == 152)) {
+                                    latestOnEmbedError(code)
+                                }
+                            },
+                            shouldAutoSkipOnError = { !latestVideoVisible && latestAudioActive },
                             getDeviceId = { deviceId },
                             onDisplayConfig = onDisplayConfig,
                             onVideoCued = { cuedId ->
@@ -605,7 +629,7 @@ fun NativeVideoPlayer(
                         deviceId = deviceId,
                         isPaused = isPaused,
                         volume = volume,
-                        isMuted = isMuted,
+                        isMuted = !audioActive || isMuted,
                         initialPositionSeconds = initialPositionSeconds.coerceAtLeast(0f),
                         useLegacySupabaseWs = useLegacySupabaseWs
                     )
@@ -632,7 +656,8 @@ private fun buildPlayerHtml(
 ): String {
     val autoPlayParam = if (isPaused) 0 else 1
     val startParam = initialPositionSeconds.toInt().coerceAtLeast(0)
-    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayParam&start=$startParam&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
+    val muteParam = if (isMuted) "&mute=1" else ""
+    val embedUrl = "https://www.youtube-nocookie.com/embed/$videoId?autoplay=$autoPlayParam&start=$startParam${muteParam}&enablejsapi=1&controls=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&fs=0&widgetid=1&origin=https%3A%2F%2Fponeleplay.netlify.app&widget_referrer=https%3A%2F%2Fponeleplay.netlify.app"
 
     return """
         <!DOCTYPE html>
@@ -685,6 +710,16 @@ private fun buildPlayerHtml(
             var latestMasterTargetSec = ${initialPositionSeconds};
             var latestMasterSentAt = Date.now();
             var lastAppliedSeekSeq = 0;
+            var lastErrorNotifiedKey = '';
+
+            function notifyEmbedError(code) {
+              var key = String(currentVideoId || '') + ':' + String(code);
+              if (lastErrorNotifiedKey === key) return;
+              lastErrorNotifiedKey = key;
+              if (window.AndroidBridge && window.AndroidBridge.onError) {
+                window.AndroidBridge.onError(Number(code) || 150);
+              }
+            }
 
             // Send command directly to YouTube iframe via postMessage AND player instance
             function sendCommand(func, args) {
@@ -711,6 +746,7 @@ private fun buildPlayerHtml(
                 var ifr = document.getElementById('player');
                 if (ifr && ifr.contentWindow) {
                   ifr.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*');
+                  ifr.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onError'], id: 1, channel: 'widget' }), '*');
                 }
               } catch(_) {}
             }
@@ -1084,6 +1120,10 @@ private fun buildPlayerHtml(
                   }
                 }
 
+                if (data.event === 'onError') {
+                  notifyEmbedError(data.info);
+                }
+
                 if (data.event === 'onStateChange') {
                   currentTvState = data.info;
                   reportBridgeTime(true);
@@ -1151,9 +1191,7 @@ private fun buildPlayerHtml(
                       }
                     },
                     'onError': function(e) {
-                      if (window.AndroidBridge && window.AndroidBridge.onError) {
-                        window.AndroidBridge.onError(e.data);
-                      }
+                      notifyEmbedError(e.data);
                     }
                   }
                 });

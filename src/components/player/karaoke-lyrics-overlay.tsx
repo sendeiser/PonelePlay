@@ -100,7 +100,9 @@ export function KaraokeLyricsOverlay({
               plainLines: Array.isArray(data.plainLines) ? (data.plainLines as string[]) : [],
             }
           : { found: false, synced: false, source: "none", lines: [], plainLines: [] };
-        CLIENT_LYRICS_CACHE.set(cacheKey, parsed);
+        if (parsed.found) {
+          CLIENT_LYRICS_CACHE.set(cacheKey, parsed);
+        }
         setLyrics(parsed);
       })
       .catch(() => {

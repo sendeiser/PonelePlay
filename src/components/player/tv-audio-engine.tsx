@@ -23,10 +23,12 @@ import {
 
 export interface TvAudioEngineProps {
   track: PlayerTrack | null;
-  /** True in TV_ONLY or BOTH; false in CABINA_ONLY (keeps TV audio completely idle). */
+  /** True in TV_ONLY or BOTH; false in CABINA_ONLY (keeps TV audio muted/idle). */
   audioActive: boolean;
   /** True only when both Cabina and TV reproduce audio simultaneously (BOTH). */
   syncBothMode: boolean;
+  /** True only for YouTube Karaoke tracks: promotes this single YouTube iframe to fullscreen. */
+  videoVisible?: boolean;
   isPaused: boolean;
   volume: number; // 0 - 100
   anchor: PlaybackAnchor | null;
@@ -34,6 +36,7 @@ export interface TvAudioEngineProps {
   onBlockedChange?: (blocked: boolean) => void;
   onCued?: (videoId: string) => void;
   onEnded?: () => void;
+  onVideoError?: (reason: string) => void;
 }
 
 export interface TvAudioEngineRef {
@@ -73,6 +76,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       track,
       audioActive,
       syncBothMode,
+      videoVisible = false,
       isPaused,
       volume,
       anchor,
@@ -80,6 +84,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       onBlockedChange,
       onCued,
       onEnded,
+      onVideoError,
     },
     ref,
   ) {
@@ -92,6 +97,8 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
     audioActiveRef.current = audioActive;
     const syncBothModeRef = useRef(syncBothMode);
     syncBothModeRef.current = syncBothMode;
+    const videoVisibleRef = useRef(videoVisible);
+    videoVisibleRef.current = videoVisible;
     const isPausedRef = useRef(isPaused);
     isPausedRef.current = isPaused;
     const volumeRef = useRef(volume);
@@ -106,6 +113,8 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
     onCuedRef.current = onCued;
     const onEndedRef = useRef(onEnded);
     onEndedRef.current = onEnded;
+    const onVideoErrorRef = useRef(onVideoError);
+    onVideoErrorRef.current = onVideoError;
 
     const lastSeekAtRef = useRef(0);
     const adaptiveSeekLeadRef = useRef(0.16);
@@ -117,6 +126,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
     const loadedUploadSrcRef = useRef("");
     const pendingCueRef = useRef<{ track: PlayerTrack; startSec: number } | null>(null);
     const ytAutoplayCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const lastVideoFallbackAtRef = useRef(0);
 
     const ytEngine: IframePlaybackEngine = useMemo(
       () =>
@@ -156,14 +166,14 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       ? `${track.source}:${track.storagePath?.trim() || track.youtubeVideoId?.trim() || track.trackId}`
       : "";
     const isUploadTrack = Boolean(track && track.source === "upload");
-    const shouldMountYoutube = Boolean(audioActive && track && !isUploadTrack);
+    const shouldMountYoutube = Boolean((audioActive || videoVisible) && track && !isUploadTrack);
     const initialYtSrc = useMemo(() => {
       if (!shouldMountYoutube || !trackRef.current) return "";
       const vid = resolveVideoId(trackRef.current);
       const startSec = anchorRef.current
         ? Math.floor(computeTargetPositionSec(anchorRef.current, estimatedServerMsRef.current()))
         : 0;
-      return ytEngine.buildEmbedUrl(vid, startSec, !isPausedRef.current);
+      return ytEngine.buildEmbedUrl(vid, startSec, !isPausedRef.current, !audioActiveRef.current);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [shouldMountYoutube]);
 
@@ -182,8 +192,17 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         onCuedRef.current?.(vid);
       });
       const unsubEnded = ytEngine.onEnded(() => {
+        if (Date.now() - lastVideoFallbackAtRef.current < 2500) {
+          return;
+        }
         if (audioActiveRef.current) {
           onEndedRef.current?.();
+        }
+      });
+      const unsubError = ytEngine.onError((reason) => {
+        if (videoVisibleRef.current) {
+          lastVideoFallbackAtRef.current = Date.now();
+          onVideoErrorRef.current?.(reason);
         }
       });
       const handshakeTimer = setInterval(() => ytEngine.handshake(), 2000);
@@ -193,6 +212,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           clearTimeout(ytAutoplayCheckTimerRef.current);
           ytAutoplayCheckTimerRef.current = null;
         }
+        unsubError();
         unsubEnded();
         unsubCued();
         detach();
@@ -218,17 +238,24 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       }
     }, []);
 
-    // Dedicated lightweight volume effect — never re-loads, re-seeks, or re-triggers play()
+    // Dedicated lightweight volume & mute effect — switches CABINA_ONLY ↔ TV_ONLY ↔ BOTH without reloading
     useEffect(() => {
-      if (!audioActive) return;
       const audio = html5AudioRef.current;
-      if (audio) {
+      if (audio && audioActive) {
         audio.volume = Math.max(0, Math.min(1, volume / 100));
       }
-      if (shouldMountYoutube) {
+      if (!shouldMountYoutube) return;
+      if (audioActive) {
+        ytEngine.unMute?.();
         ytEngine.setVolume?.(volume);
+        if (!isPausedRef.current) {
+          scheduleYtAutoplayCheck();
+        }
+      } else {
+        ytEngine.mute?.();
+        onBlockedChangeRef.current?.(false);
       }
-    }, [audioActive, shouldMountYoutube, volume, ytEngine]);
+    }, [audioActive, shouldMountYoutube, volume, ytEngine, scheduleYtAutoplayCheck]);
 
     // Handle HTML5 <audio> track lifecycle and CABINA_ONLY shutdown
     useEffect(() => {
@@ -248,8 +275,10 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         if (!audioActive) {
           pendingCueRef.current = null;
           ytEngine.setPlaybackRate?.(1);
-          ytEngine.pause?.();
           ytEngine.mute?.();
+          if (!videoVisibleRef.current) {
+            ytEngine.pause?.();
+          }
           onBlockedChangeRef.current?.(false);
         }
         return;
@@ -302,7 +331,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       };
     }, [audioActive, trackKey, isPaused, tryPlayHtml5, ytEngine]);
 
-    // Handle hidden YouTube track changes (keyed on stable trackKey, never on volume/object clone)
+    // Handle YouTube track changes (hidden audio or promoted fullscreen karaoke video)
     useEffect(() => {
       const activeTrack = trackRef.current;
       if (!shouldMountYoutube || !activeTrack) return;
@@ -314,10 +343,14 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         return;
       }
 
-      ytEngine.unMute?.();
-      ytEngine.setVolume?.(volumeRef.current);
+      if (audioActiveRef.current) {
+        ytEngine.unMute?.();
+        ytEngine.setVolume?.(volumeRef.current);
+      } else {
+        ytEngine.mute?.();
+      }
       void ytEngine.load(activeTrack).then(() => {
-        if (!audioActiveRef.current) {
+        if (!audioActiveRef.current && !videoVisibleRef.current) {
           ytEngine.pause?.();
           ytEngine.mute?.();
           return;
@@ -331,11 +364,15 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         }
         if (isPausedRef.current) {
           ytEngine.pause?.();
-        } else {
+        } else if (audioActiveRef.current) {
           ytEngine.unMute?.();
           ytEngine.setVolume?.(volumeRef.current);
           void ytEngine.play?.();
           scheduleYtAutoplayCheck();
+        } else {
+          // CABINA_ONLY + fullscreen Karaoke video: muted visual sync with zero audio echo
+          ytEngine.mute?.();
+          void ytEngine.play?.();
         }
       });
     }, [shouldMountYoutube, trackKey, ytEngine, scheduleYtAutoplayCheck]);
@@ -370,7 +407,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       };
     }, [audioActive, tryPlayHtml5, ytEngine]);
 
-    // Handle hidden YouTube play/pause changes cleanly without re-loading
+    // Handle YouTube play/pause changes cleanly without re-loading
     useEffect(() => {
       if (!shouldMountYoutube) return;
       if (isPaused) {
@@ -380,17 +417,20 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         }
         ytEngine.setPlaybackRate?.(1);
         ytEngine.pause?.();
-      } else {
+      } else if (audioActiveRef.current) {
         ytEngine.unMute?.();
         ytEngine.setVolume?.(volumeRef.current);
         void ytEngine.play?.();
         scheduleYtAutoplayCheck();
+      } else {
+        ytEngine.mute?.();
+        void ytEngine.play?.();
       }
     }, [shouldMountYoutube, isPaused, ytEngine, scheduleYtAutoplayCheck]);
 
-    // Continuous clock-driven drift guard (elastic continuous for HTML5 <audio>, buffering-aware for YT)
+    // Continuous clock-driven drift guard (elastic for HTML5 <audio>, buffering-aware for YT audio or muted karaoke video)
     useEffect(() => {
-      if (!audioActive) return;
+      if (!audioActive && !videoVisible) return;
 
       const timer = setInterval(() => {
         const activeAnchor = anchorRef.current;
@@ -466,7 +506,9 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         }
 
         const driftSec = actual - expected;
-        if (!syncBothModeRef.current) {
+        const isMutedKaraokeVideo = !audioActiveRef.current && videoVisibleRef.current;
+
+        if (!syncBothModeRef.current && !isMutedKaraokeVideo) {
           ytEngine.setPlaybackRate?.(1);
           if (Math.abs(driftSec) > 2.0 && now - lastSeekAtRef.current > 2200) {
             lastSeekAtRef.current = now;
@@ -480,7 +522,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           ytEngine.getAvailablePlaybackRates?.(),
           {
             isEarlyWindow,
-            isMuted: false,
+            isMuted: isMutedKaraokeVideo,
           },
         );
         if (decision.action === "rate") {
@@ -489,8 +531,11 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
         }
 
         ytEngine.setPlaybackRate?.(1);
-        const cooldownMs = isEarlyWindow ? 950 : 1800;
-        if (decision.action === "seek" && now - lastSeekAtRef.current > cooldownMs) {
+        const cooldownMs = isMutedKaraokeVideo ? 1200 : isEarlyWindow ? 950 : 1800;
+        const shouldSeek = isMutedKaraokeVideo
+          ? Math.abs(driftSec) > 0.35 && now - lastSeekAtRef.current > cooldownMs
+          : decision.action === "seek" && now - lastSeekAtRef.current > cooldownMs;
+        if (shouldSeek) {
           lastSeekAtRef.current = now;
           const lead = expected > 0.25 ? adaptiveSeekLeadRef.current : 0;
           ytEngine.seekTo?.(expected + lead);
@@ -502,7 +547,7 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
       }, 250);
 
       return () => clearInterval(timer);
-    }, [audioActive, ytEngine]);
+    }, [audioActive, videoVisible, ytEngine]);
 
     useImperativeHandle(
       ref,
@@ -567,11 +612,12 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
           scheduleYtAutoplayCheck();
         },
         seekTo: (seconds: number) => {
-          if (!audioActiveRef.current) return;
+          if (!audioActiveRef.current && !videoVisibleRef.current) return;
           const target = Math.max(0, seconds);
           lastSeekAtRef.current = Date.now();
           const activeTrack = trackRef.current;
           if (activeTrack?.source === "upload") {
+            if (!audioActiveRef.current) return;
             const audio = html5AudioRef.current;
             if (audio) {
               audio.playbackRate = 1;
@@ -606,8 +652,12 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
     return (
       <div
         id="poneleplay-tv-audio-engine"
-        aria-hidden="true"
-        className="fixed bottom-0 right-0 w-[200px] h-[112px] opacity-[0.01] pointer-events-none overflow-hidden -z-10"
+        aria-hidden={!videoVisible}
+        className={
+          videoVisible
+            ? "fixed inset-0 z-30 bg-black pointer-events-none overflow-hidden"
+            : "fixed bottom-0 right-0 w-[200px] h-[112px] opacity-[0.01] pointer-events-none overflow-hidden -z-10"
+        }
       >
         <audio ref={html5AudioRef} preload="auto" className="hidden" />
         {shouldMountYoutube && (
@@ -615,12 +665,12 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
             id="poneleplay-tv-audio-iframe"
             ref={ytIframeRef}
             src={initialYtSrc}
-            title="PonelePlay TV Audio Engine"
+            title={videoVisible ? "PonelePlay TV Karaoke Video" : "PonelePlay TV Audio Engine"}
             className="w-full h-full border-0"
             allow="autoplay; encrypted-media"
             onLoad={() => {
               ytEngine.handshake();
-              if (!audioActiveRef.current) {
+              if (!audioActiveRef.current && !videoVisibleRef.current) {
                 ytEngine.pause?.();
                 ytEngine.mute?.();
                 return;
@@ -631,11 +681,18 @@ export const TvAudioEngine = forwardRef<TvAudioEngineRef, TvAudioEngineProps>(
                 void ytEngine.cue(queued.track, queued.startSec);
                 return;
               }
-              ytEngine.unMute?.();
-              ytEngine.setVolume?.(volumeRef.current);
-              if (!isPausedRef.current) {
-                void ytEngine.play?.();
-                scheduleYtAutoplayCheck();
+              if (audioActiveRef.current) {
+                ytEngine.unMute?.();
+                ytEngine.setVolume?.(volumeRef.current);
+                if (!isPausedRef.current) {
+                  void ytEngine.play?.();
+                  scheduleYtAutoplayCheck();
+                }
+              } else {
+                ytEngine.mute?.();
+                if (!isPausedRef.current) {
+                  void ytEngine.play?.();
+                }
               }
             }}
           />

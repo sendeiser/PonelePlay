@@ -10,6 +10,11 @@ import { PlayerRuntime } from "@/components/player/player-runtime";
 import { resolveVideoId } from "@/components/player/iframe-engine";
 import { TvAudioEngine, type TvAudioEngineRef } from "@/components/player/tv-audio-engine";
 import { KaraokeLyricsOverlay } from "@/components/player/karaoke-lyrics-overlay";
+import {
+  normalizeKaraokeOverrideMode,
+  resolveKaraokePresentation,
+  type KaraokeOverrideMode,
+} from "@/lib/domain/karaoke";
 import type { PlayerStateResponse, PlayerTrack } from "@/lib/api/player";
 import { demoNowPlaying, demoQueue } from "@/lib/demo-data";
 import { fetchFallback } from "@/lib/api/catalog";
@@ -311,6 +316,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   const [tvAudioBlocked, setTvAudioBlocked] = useState(false);
   const [karaokeMode, setKaraokeMode] = useState(false);
   const [karaokeOffsetSec, setKaraokeOffsetSec] = useState(0);
+  const [karaokeOverride, setKaraokeOverride] = useState<KaraokeOverrideMode>("auto");
+  const [karaokeVideoEmbedFailed, setKaraokeVideoEmbedFailed] = useState(false);
   const [hudMessage, setHudMessage] = useState<string | null>(null);
   const [manualNowPlaying, setManualNowPlaying] = useState<PlayerTrack | null>(null);
 
@@ -794,7 +801,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     };
   }, [token, manualNowPlaying, liveNightNowPlaying, liveNightQueue, playerState, allTracks, liveDedicationOverride]);
 
-  // Reset dedication animation when track or dedication changes
+  // Reset per-track karaoke calibration / overrides / embed failure whenever song changes
   useEffect(() => {
     setDedicationFinished(false);
   }, [
@@ -803,6 +810,24 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
     nowPlaying?.dedication,
     liveDedicationOverride?.timestamp,
   ]);
+
+  useEffect(() => {
+    setKaraokeOverride("auto");
+    setKaraokeVideoEmbedFailed(false);
+  }, [nowPlaying?.itemId, nowPlaying?.youtubeVideoId]);
+
+  const karaokePresentation = useMemo(
+    () =>
+      resolveKaraokePresentation({
+        track: nowPlaying,
+        boothKaraokeMode: karaokeMode,
+        overrideMode: karaokeOverride,
+        videoEmbedFailed: karaokeVideoEmbedFailed,
+      }),
+    [nowPlaying, karaokeMode, karaokeOverride, karaokeVideoEmbedFailed],
+  );
+  const isKaraokeVideoFullscreen = karaokePresentation === "video";
+  const showKaraokeLyrics = karaokePresentation === "lyrics";
 
   // Rotated queue: tracks coming after nowPlaying so every Skip genuinely advances to the next track
   const queue: PlayerTrack[] = useMemo(() => {
@@ -1069,6 +1094,22 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         setKaraokeOffsetSec(clamped);
         setHudMessage(`🎤 Letra Karaoke: ${clamped > 0 ? "+" : ""}${clamped.toFixed(1)}s`);
         setTimeout(() => setHudMessage(null), 2000);
+      } else if (p.type === "karaoke_override") {
+        const nextMode = normalizeKaraokeOverrideMode(p.mode);
+        setKaraokeOverride(nextMode);
+        if (nextMode === "force_video" || nextMode === "auto") {
+          setKaraokeVideoEmbedFailed(false);
+        }
+        const label =
+          nextMode === "force_video"
+            ? "🎬 Karaoke: Video Fullscreen"
+            : nextMode === "force_lyrics"
+              ? "📝 Karaoke: Solo Letra"
+              : nextMode === "off"
+                ? "🎧 Vista Normal"
+                : "🎤 Karaoke Automático";
+        setHudMessage(label);
+        setTimeout(() => setHudMessage(null), 2200);
       } else if (p.type === "tv_display_config" && p.config && typeof p.config === "object") {
         const target = typeof p.targetDeviceId === "string" ? p.targetDeviceId : "all";
         if (!target || target === "all" || !token || target === token) {
@@ -1507,6 +1548,28 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
             },
           )
           .on(
+            "broadcast",
+            { event: "karaoke_override" },
+            (msg: { payload?: { mode?: unknown } }) => {
+              if (!active) return;
+              const nextMode = normalizeKaraokeOverrideMode(msg.payload?.mode);
+              setKaraokeOverride(nextMode);
+              if (nextMode === "force_video" || nextMode === "auto") {
+                setKaraokeVideoEmbedFailed(false);
+              }
+              const label =
+                nextMode === "force_video"
+                  ? "🎬 Karaoke: Video Fullscreen"
+                  : nextMode === "force_lyrics"
+                    ? "📝 Karaoke: Solo Letra"
+                    : nextMode === "off"
+                      ? "🎧 Vista Normal"
+                      : "🎤 Karaoke Automático";
+              setHudMessage(label);
+              setTimeout(() => setHudMessage(null), 2200);
+            },
+          )
+          .on(
             "postgres_changes",
             { event: "*", schema: "public", table: "venue_playback_state" },
             (payload: {
@@ -1764,12 +1827,13 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           : "tech-bg relative flex h-screen max-h-screen w-screen flex-col justify-between overflow-hidden p-2.5 sm:p-3 md:p-3.5 lg:p-4 text-[#dfe2ef] select-none"
       }
     >
-      {/* Hidden Audio-Only Engine (idle in CABINA_ONLY; HTML5 <audio> + hidden YT audio in TV_ONLY/BOTH) */}
+      {/* Single Media Engine: hidden 0%-video for normal music; promoted fullscreen ONLY for YouTube Karaoke */}
       <TvAudioEngine
         ref={tvAudioRef}
         track={nowPlaying}
         audioActive={!isMuted}
         syncBothMode={audioRouting === "BOTH"}
+        videoVisible={isKaraokeVideoFullscreen}
         isPaused={!isPlaying}
         volume={volume}
         anchor={syncAnchorState}
@@ -1779,7 +1843,69 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
         onBlockedChange={setTvAudioBlocked}
         onCued={handleTvAudioCued}
         onEnded={handleTvAudioEnded}
+        onVideoError={() => setKaraokeVideoEmbedFailed(true)}
       />
+
+      {/* ================= FULLSCREEN KARAOKE VIDEO MINIMAL OVERLAY (DISCREET CORNER QR ONLY) ================= */}
+      {isKaraokeVideoFullscreen && (
+        <div
+          data-testid="karaoke-fullscreen-overlay"
+          className="fixed inset-0 z-40 pointer-events-none flex flex-col justify-between p-4 sm:p-6"
+        >
+          {/* Top-Left Compact Pill */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-black/65 backdrop-blur-md border border-pink-500/45 shadow-2xl max-w-[75vw]">
+              <span className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs font-extrabold uppercase tracking-wider text-pink-300 shrink-0">
+                <span className="size-2 rounded-full bg-pink-400 animate-pulse" />
+                <span>🎤 KARAOKE</span>
+              </span>
+              <span className="text-slate-500">·</span>
+              <span className="text-xs sm:text-sm font-bold text-white truncate">
+                {decodeHtml(nowPlaying?.title || "")}
+              </span>
+              <span className="hidden sm:inline text-slate-500">·</span>
+              <span className="hidden sm:inline font-mono text-[10px] text-cyan-300 font-semibold shrink-0">
+                {isMuted
+                  ? "🎧 Solo Cabina"
+                  : audioRouting === "BOTH"
+                    ? "🔊 Cabina + TV"
+                    : "📺 Audio TV"}
+              </span>
+            </div>
+          </div>
+
+          {/* Bottom-Right Discreet QR */}
+          <div className="flex items-end justify-end">
+            {qr && (
+              <button
+                type="button"
+                onClick={() => setQrModal(true)}
+                className="pointer-events-auto flex items-center gap-2.5 bg-black/65 backdrop-blur-md border border-white/20 rounded-2xl p-2 pr-3 shadow-2xl hover:scale-105 transition-transform cursor-pointer"
+                title="Click para agrandar QR"
+              >
+                <div className="size-16 rounded-xl bg-white p-1 shrink-0">
+                  <Image
+                    src={qr}
+                    alt="QR Mesas"
+                    width={64}
+                    height={64}
+                    className="w-full h-full object-contain"
+                    unoptimized
+                  />
+                </div>
+                <div className="hidden sm:flex flex-col items-start text-left">
+                  <span className="font-mono text-[10px] font-bold text-cyan-300 uppercase tracking-wider">
+                    Pedí tu tema
+                  </span>
+                  <span className="font-mono text-xs font-bold text-white" suppressHydrationWarning>
+                    {clock}
+                  </span>
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Realtime Master Control HUD Message Toast */}
       {hudMessage && (
@@ -1799,7 +1925,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       ) : null}
 
       {/* ================= TOP BAR (COMPACT & SLEEK BROADCAST HEADER — SALON MODE) ================= */}
-      {screenMode === "SALON" && (
+      {!isKaraokeVideoFullscreen && screenMode === "SALON" && (
         <header className="w-full px-3.5 py-1.5 flex justify-between items-center z-40 bg-[#121622] border border-[#232b42] rounded-lg shadow-md shrink-0 mb-2">
           {/* Brand & Venue Info */}
           <div className="flex items-center gap-2.5">
@@ -1937,7 +2063,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       )}
 
       {/* ================= MODE: PORTADA (MINIMALIST MUSIC-ONLY ALBUM ART VIEW · 0% VIDEO) ================= */}
-      {screenMode === "PORTADA" && (
+      {!isKaraokeVideoFullscreen && screenMode === "PORTADA" && (
         <div
           className="fixed inset-0 z-10 flex flex-col justify-between overflow-hidden select-none"
           onDoubleClick={toggleFullscreen}
@@ -2069,7 +2195,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
             {/* Center Artwork + Vinyl (or Synchronized Karaoke Lyrics Stage when Karaoke is active) */}
             <div className="flex-1 flex flex-col items-center justify-center text-center max-w-2xl mx-auto min-w-0">
-              {karaokeMode || nowPlaying?.isKaraoke ? (
+              {showKaraokeLyrics ? (
                 <div className="w-full space-y-3">
                   <div className="flex flex-col items-center">
                     <h1 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight line-clamp-1">
@@ -2239,7 +2365,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       )}
 
       {/* ================= MODE: SALON (VINILO, PROGRESO, COLA, VOTOS Y QR) ================= */}
-      {screenMode === "SALON" && (
+      {!isKaraokeVideoFullscreen && screenMode === "SALON" && (
         <main className="w-full flex-1 grid grid-cols-12 gap-3 min-h-0 overflow-hidden mb-2">
             {/* COL 1: HERO NOW PLAYING & QR CARD (4 COLS) */}
             <section className="col-span-4 flex flex-col justify-between gap-2.5 min-h-0">
@@ -2265,7 +2391,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
 
                 {/* Central Vinyl & Album Artwork (or Synchronized Karaoke Lyrics when Karaoke is active) */}
                 <div className="flex flex-col items-center justify-center my-auto py-2 text-center">
-                  {karaokeMode || nowPlaying?.isKaraoke ? (
+                  {showKaraokeLyrics ? (
                     <div className="w-full mb-2">
                       <KaraokeLyricsOverlay
                         title={decodeHtml(nowPlaying?.title || "")}
@@ -2578,7 +2704,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
       )}
 
       {/* ================= BOTTOM MARQUEE BAR (COMPACT BROADCAST TICKER — SALON MODE) ================= */}
-      {screenMode === "SALON" && (
+      {!isKaraokeVideoFullscreen && screenMode === "SALON" && (
         <footer className="w-full bg-[#0d1017] border border-[#1e2333] rounded-lg py-1 px-3 overflow-hidden z-40 shrink-0 shadow-sm">
           <div className="animate-marquee items-center gap-10 font-mono text-[10px] text-slate-400 whitespace-nowrap">
             <span className="flex items-center gap-3 shrink-0 whitespace-nowrap">

@@ -6,13 +6,13 @@ export async function GET() {
   return NextResponse.json(
     {
       ok: true,
-      versionCode: 11,
-      versionName: "3.2.0",
+      versionCode: 12,
+      versionName: "3.3.0",
       apkUrl: "https://poneleplay.netlify.app/tv.apk",
       releaseNotes:
-        "Karaoke 0% video potenciado: subtítulos sincronizados de YouTube + LRCLIB + lyrics.ovh y ajuste de sincronización de letras en vivo (±0.5s) desde Cabina.",
+        "Karaoke Híbrido Inteligente: video YouTube fullscreen automático (con QR discreto y cero doble audio) para pistas karaoke + letras sincronizadas arregladas para canciones normales (0% video) y control en vivo desde Cabina.",
       mandatory: false,
-      publishedAt: "2026-11-22T21:30:00.000Z",
+      publishedAt: "2026-11-22T22:15:00.000Z",
     },
     {
       headers: {
