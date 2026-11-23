@@ -42,6 +42,7 @@ import app.poneleplay.tv.data.TvTrack
 import app.poneleplay.tv.sync.DiscoveredLanHub
 import app.poneleplay.tv.sync.LanDiscoveryManager
 import app.poneleplay.tv.sync.SyncAnchorData
+import app.poneleplay.tv.sync.SyncClockEstimator
 import app.poneleplay.tv.sync.SyncGoData
 import app.poneleplay.tv.sync.SyncPreloadData
 import app.poneleplay.tv.sync.SyncStatusState
@@ -469,9 +470,13 @@ fun NativeTvApp(
     var karaokeOffsetSec by remember { mutableStateOf(0f) }
     var karaokeOverrideMode by remember { mutableStateOf("auto") }
 
+    var lastAutoSkipAtMs by remember { mutableStateOf(0L) }
+    var lastAutoSkippedVideoKey by remember { mutableStateOf("") }
+
     LaunchedEffect(feed?.nowPlaying?.id, feed?.nowPlaying?.youtubeVideoId) {
         karaokeOffsetSec = 0f
         karaokeOverrideMode = "auto"
+        lastAutoSkippedVideoKey = ""
     }
 
     var lastAnchorSeq by remember { mutableStateOf(0L) }
@@ -481,6 +486,7 @@ fun NativeTvApp(
 
     val currentIsMuted by rememberUpdatedState(isMuted)
     val currentSyncConnected by rememberUpdatedState(syncStatus.connected)
+    val currentSyncStatus by rememberUpdatedState(syncStatus)
 
     fun persistSyncConfig(cloudWsUrl: String?, lanPort: Int) {
         val cleanCloud = cloudWsUrl?.trim()?.trimEnd('/').orEmpty()
@@ -929,14 +935,26 @@ fun NativeTvApp(
                     videoController = videoController,
                     onVideoEnded = {
                         // When a Cabina master is actively connected, Cabina owns onTrackEnded (prevents double skip)
-                        if (syncStatus.connected && syncStatus.masterCount > 0) {
+                        if (currentSyncStatus.connected && currentSyncStatus.masterCount > 0) {
                             return@TvScreen
                         }
-                        val endedVideoId = currentFeed.nowPlaying?.youtubeVideoId
-                        val sentViaWs = currentSyncConnected
-                        if (sentViaWs) {
-                            syncClient.sendSkip(endedVideoId)
+                        val nowElapsed = android.os.SystemClock.elapsedRealtime()
+                        val endedKey = currentFeed.nowPlaying?.let {
+                            it.youtubeVideoId ?: it.storagePath ?: it.id
+                        }.orEmpty()
+                        if (!SyncClockEstimator.shouldAllowAutoSkip(
+                                nowElapsedMs = nowElapsed,
+                                lastAutoSkipAtMs = lastAutoSkipAtMs,
+                                endedKey = endedKey,
+                                lastAutoSkippedKey = lastAutoSkippedVideoKey
+                            )
+                        ) {
+                            return@TvScreen
                         }
+                        lastAutoSkipAtMs = nowElapsed
+                        lastAutoSkippedVideoKey = endedKey
+
+                        val endedVideoId = currentFeed.nowPlaying?.youtubeVideoId
                         coroutineScope.launch(Dispatchers.IO) {
                             try {
                                 val cmdUrl = URL("${serverUrl.trimEnd('/')}/api/playback/command")
@@ -949,9 +967,6 @@ fun NativeTvApp(
                                 val bodyObj = org.json.JSONObject().apply {
                                     put("slug", venueSlug.trim())
                                     put("command", "skip")
-                                    if (sentViaWs) {
-                                        put("skipSyncNotify", true)
-                                    }
                                     put("payload", org.json.JSONObject().apply {
                                         if (!endedVideoId.isNullOrBlank()) {
                                             put("expectedVideoId", endedVideoId)

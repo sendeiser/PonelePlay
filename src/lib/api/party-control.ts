@@ -582,11 +582,13 @@ export async function castSkipTrackVote(
     if (res.ok) {
       const data = await res.json();
       if (data?.ok) {
-        void broadcastPartyEvent(slug, "party_skip_vote_updated", {
-          activeSkipVote: data.activeSkipVote ?? null,
-          skipped: Boolean(data.skipped),
-          nextTrack: data.nextTrack ?? null,
-        });
+        if (!data.skipped) {
+          void broadcastPartyEvent(slug, "party_skip_vote_updated", {
+            activeSkipVote: data.activeSkipVote ?? null,
+            skipped: false,
+            nextTrack: data.nextTrack ?? null,
+          });
+        }
         return {
           ok: true,
           votes: Number(data.votes ?? 1),

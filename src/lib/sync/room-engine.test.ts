@@ -444,5 +444,84 @@ describe("SyncRoomEngine Ready-Barrier & conflict resolution", () => {
     expect(feedNowPlaying?.source).toBe("upload");
     expect(feedNowPlaying?.storagePath).toBe("venue-1/two.mp3");
   });
+
+  it("clears sticky skip lastCommand across progress reports and external feed merges, and dedupes rapid trackless skips", () => {
+    const engine = new SyncRoomEngine("billar-aurora", undefined, 1000);
+    engine.applyPlaybackCommand("play_now", { track: SAMPLE_TRACK }, 2000, { useBarrier: false });
+
+    // First trackless skip sets lastCommand="skip" and emits anchor
+    const firstSkip = engine.applyPlaybackCommand(
+      "skip",
+      { expectedVideoId: SAMPLE_TRACK.youtubeVideoId },
+      3000,
+    );
+    expect(firstSkip.outbound).toHaveLength(1);
+    expect(engine.getSnapshot(3000).anchor.lastCommand).toBe("skip");
+
+    // Duplicate trackless skip within 4000ms for same video is deduped cleanly
+    const seqAfterFirst = engine.getSnapshot(3000).anchor.seq;
+    const rapidDup = engine.applyPlaybackCommand(
+      "skip",
+      { expectedVideoId: SAMPLE_TRACK.youtubeVideoId },
+      4500,
+    );
+    expect(rapidDup.outbound).toHaveLength(0);
+    expect(engine.getSnapshot(4500).anchor.seq).toBe(seqAfterFirst);
+
+    // Master progress re-anchoring clears sticky "skip" -> "progress"
+    const progressMsg = engine.applyProgressReport(
+      { currentTime: 5.5, isPaused: false, track: SAMPLE_TRACK },
+      5000,
+    );
+    expect(progressMsg.type).toBe("sync:anchor");
+    if (progressMsg.type === "sync:anchor") {
+      expect(progressMsg.anchor.lastCommand).toBe("progress");
+    }
+
+    // Stale external DB feed (extAnchorMs=0, extSeq <= anchor.seq) must NOT overwrite active track
+    const newerTrack: SyncTrack = {
+      ...SAMPLE_TRACK,
+      itemId: "item-2",
+      trackId: "trk-2",
+      title: "Track Two",
+      youtubeVideoId: "trackTwo123",
+    };
+    engine.applyPlaybackCommand("play_now", { track: newerTrack }, 6000, { useBarrier: false });
+    const seqNew = engine.getSnapshot(6000).anchor.seq;
+    const staleDbMerge = engine.mergeExternalTvFeed(
+      {
+        nowPlaying: { ...SAMPLE_TRACK, id: SAMPLE_TRACK.itemId },
+        playback: {
+          commandSeq: seqNew,
+          anchorPositionSeconds: 0,
+          anchorTimestampMs: 0,
+          lastCommand: "skip",
+        },
+      },
+      7000,
+    );
+    if (staleDbMerge.type === "room:snapshot") {
+      expect(staleDbMerge.snapshot.anchor.track?.youtubeVideoId).toBe("trackTwo123");
+      expect(staleDbMerge.snapshot.anchor.lastCommand).toBe("play_now");
+    }
+
+    // Cold room hydrating from DB with lastCommand="skip" + nowPlaying normalizes to "play_now"
+    const coldEngine = new SyncRoomEngine("billar-cold", undefined, 1000);
+    const hydrated = coldEngine.mergeExternalTvFeed(
+      {
+        nowPlaying: { ...SAMPLE_TRACK, id: SAMPLE_TRACK.itemId },
+        playback: {
+          commandSeq: 10,
+          anchorPositionSeconds: 0,
+          anchorTimestampMs: 2000,
+          lastCommand: "skip",
+        },
+      },
+      2500,
+    );
+    if (hydrated.type === "room:snapshot") {
+      expect(hydrated.snapshot.anchor.lastCommand).toBe("play_now");
+    }
+  });
 });
 

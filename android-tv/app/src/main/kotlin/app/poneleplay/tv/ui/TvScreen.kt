@@ -292,7 +292,9 @@ fun TvScreen(
         }
         if (feed.playback.commandSeq > lastExecutedSeq) {
             lastExecutedSeq = feed.playback.commandSeq
-            when (feed.playback.lastCommand) {
+            // "skip" from server/anchor is state telemetry whose resolved track arrives via
+            // feed.nowPlaying / anchor.track / sync:go; TV must never re-trigger onVideoEnded().
+            when (SyncClockEstimator.resolveRemoteCommandAction(feed.playback.lastCommand)) {
                 "pause" -> videoController.pause()
                 "resume" -> if (mediaSurfaceActive) videoController.play()
                 "toggle_pause" -> if (mediaSurfaceActive) videoController.togglePlayPause()
@@ -320,7 +322,6 @@ fun TvScreen(
                 "unmute" -> {
                     if (audioActive) videoController.unMute()
                 }
-                "skip" -> onVideoEnded()
                 "play_now" -> if (mediaSurfaceActive) videoController.play()
             }
         }

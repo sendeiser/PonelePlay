@@ -35,17 +35,19 @@ export function PlayerRuntime({
   const [state, setState] = useState<PlayerStateResponse | null>(null);
   const activeTrackRef = useRef<PlayerTrack | null>(null);
   const isAdvancingRef = useRef(false);
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
 
   const syncState = useCallback(async () => {
     try {
       const data = await fetchState(token);
       setState(data);
-      onStateChange?.(data);
+      onStateChangeRef.current?.(data);
       return data;
     } catch {
       return null;
     }
-  }, [token, fetchState, onStateChange]);
+  }, [token, fetchState]);
 
   // Handle track transition / auto-advance
   useEffect(() => {

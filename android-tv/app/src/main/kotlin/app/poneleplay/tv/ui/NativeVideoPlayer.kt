@@ -28,6 +28,7 @@ class YouTubeBridge(
     private val onEnded: () -> Unit,
     private val onError: (errorCode: Int) -> Unit = {},
     private val shouldAutoSkipOnError: () -> Boolean = { true },
+    private val getCurrentVideoId: () -> String? = { null },
     private val getDeviceId: () -> String = { "" },
     private val onDisplayConfig: (String) -> Unit = {},
     private val onVideoCued: (String) -> Unit = {},
@@ -35,6 +36,7 @@ class YouTubeBridge(
     private val onTimeUpdate: (Float, Int) -> Unit = { _, _ -> }
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var pendingErrorRunnable: Runnable? = null
 
     @JavascriptInterface
     fun onStateChange(state: Int) {
@@ -52,11 +54,19 @@ class YouTubeBridge(
     fun onError(errorCode: Int) {
         mainHandler.post {
             onError(errorCode)
+            pendingErrorRunnable?.let { mainHandler.removeCallbacks(it) }
+            pendingErrorRunnable = null
             // Only auto-skip if not degrading a fullscreen karaoke video to lyrics
             if (shouldAutoSkipOnError()) {
-                mainHandler.postDelayed({
-                    onEnded()
-                }, 3500)
+                val failedVideoId = getCurrentVideoId()
+                val runnable = Runnable {
+                    pendingErrorRunnable = null
+                    if (shouldAutoSkipOnError() && getCurrentVideoId() == failedVideoId) {
+                        onEnded()
+                    }
+                }
+                pendingErrorRunnable = runnable
+                mainHandler.postDelayed(runnable, 3500)
             }
         }
     }
@@ -600,6 +610,7 @@ fun NativeVideoPlayer(
                                 }
                             },
                             shouldAutoSkipOnError = { !latestVideoVisible && latestAudioActive },
+                            getCurrentVideoId = { controller.currentVideoId },
                             getDeviceId = { deviceId },
                             onDisplayConfig = onDisplayConfig,
                             onVideoCued = { cuedId ->
@@ -777,7 +788,7 @@ private fun buildPlayerHtml(
 
             // Anti-freeze watchdog: if the video should be playing but YouTube stays
             // PAUSED / CUED / UNSTARTED (pause icon frozen on screen after a skip), resume it.
-            var lastLoadAt = 0;
+            var lastLoadAt = Date.now();
             setInterval(function() {
               try {
                 if (desiredPaused || isBarrierHolding || isEndedSent || !currentVideoId) return;
@@ -1109,7 +1120,7 @@ private fun buildPlayerHtml(
                     }
 
                     // Track reached end (within 0.35s): stop immediately and trigger next track so it NEVER loops!
-                    if (remaining <= 0.35 && !isEndedSent) {
+                    if (Date.now() - lastLoadAt > 5000 && currentDuration >= 10 && currentTvTime >= 3 && remaining <= 0.35 && !isEndedSent) {
                       isEndedSent = true;
                       sendCommand('pauseVideo', []);
                       sendCommand('mute', []);
@@ -1128,7 +1139,7 @@ private fun buildPlayerHtml(
                   currentTvState = data.info;
                   reportBridgeTime(true);
                   handleBarrierState(data.info);
-                  if (data.info === 0 && !isEndedSent) { // ENDED
+                  if (data.info === 0 && !isEndedSent && Date.now() - lastLoadAt > 5000) { // ENDED
                     isEndedSent = true;
                     if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
                       window.AndroidBridge.onStateChange(0);
@@ -1176,7 +1187,7 @@ private fun buildPlayerHtml(
                       currentTvState = e.data;
                       reportBridgeTime(true);
                       handleBarrierState(e.data);
-                      if (e.data === 0 && !isEndedSent) {
+                      if (e.data === 0 && !isEndedSent && Date.now() - lastLoadAt > 5000) {
                         isEndedSent = true;
                         if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
                           window.AndroidBridge.onStateChange(0);
@@ -1304,10 +1315,6 @@ private fun buildPlayerHtml(
                         unMute();
                       } else if (cmd === 'toggle_mute') {
                         if (currentMuted) unMute(); else mute();
-                      } else if (cmd === 'skip') {
-                        if (window.AndroidBridge && window.AndroidBridge.onStateChange) {
-                          window.AndroidBridge.onStateChange(0);
-                        }
                       } else if (cmd === 'play_now') {
                         var trk = p.track || eventPayload.track;
                         if (trk && trk.youtubeVideoId) {

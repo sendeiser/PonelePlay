@@ -79,6 +79,15 @@ export function createIframeEngine(
   let isPrebuffering = false;
   let prebufferStartSec = 0;
   let cueStartedAt = 0;
+  let trackLoadedAt = 0;
+  let errorSkipTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearErrorSkipTimer() {
+    if (errorSkipTimer) {
+      clearTimeout(errorSkipTimer);
+      errorSkipTimer = null;
+    }
+  }
 
   function buildEmbedUrl(
     videoId: string,
@@ -86,6 +95,7 @@ export function createIframeEngine(
     autoplay = true,
     startMuted = false,
   ): string {
+    trackLoadedAt = Date.now();
     const cleanId = parseYoutubeVideoId(videoId) || videoId || "T_FkEw27XJ0";
     if (!currentVideoId) {
       currentVideoId = cleanId;
@@ -251,7 +261,9 @@ export function createIframeEngine(
     } else if (state === YT_PAUSED) {
       onPlayStateChange?.(false);
     } else if (state === YT_ENDED && lastPlayerState !== YT_ENDED) {
-      endedCallbacks.forEach((cb) => cb());
+      if (Date.now() - trackLoadedAt > 4500) {
+        endedCallbacks.forEach((cb) => cb());
+      }
     }
     lastPlayerState = state;
   }
@@ -290,8 +302,13 @@ export function createIframeEngine(
                 cb(`YouTube player error: ${String(code)}`),
               );
               if (code === 150 || code === 101 || code === 2) {
-                setTimeout(() => {
-                  endedCallbacks.forEach((cb) => cb());
+                const failedVideoId = currentVideoId;
+                clearErrorSkipTimer();
+                errorSkipTimer = setTimeout(() => {
+                  errorSkipTimer = null;
+                  if (currentVideoId === failedVideoId && Date.now() - trackLoadedAt > 3000) {
+                    endedCallbacks.forEach((cb) => cb());
+                  }
                 }, 1200);
               }
             },
@@ -377,6 +394,7 @@ export function createIframeEngine(
   }
 
   function resetBindingState() {
+    clearErrorSkipTimer();
     ytPlayer = null;
     ytReady = false;
     hasLiveBridge = false;
@@ -433,6 +451,8 @@ export function createIframeEngine(
       }
 
       currentVideoId = nextVideoId;
+      trackLoadedAt = Date.now();
+      clearErrorSkipTimer();
       cuedNotifiedVideoId = "";
       currentTime = 0;
       lastTimeUpdateAt = 0;
@@ -476,6 +496,8 @@ export function createIframeEngine(
       const nextVideoId = resolveVideoId(track);
       const startSec = Math.max(0, startSeconds);
       currentVideoId = nextVideoId;
+      trackLoadedAt = Date.now();
+      clearErrorSkipTimer();
       cuedNotifiedVideoId = "";
       currentTime = startSec;
       lastTimeUpdateAt = 0;

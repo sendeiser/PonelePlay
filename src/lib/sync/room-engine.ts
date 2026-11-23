@@ -64,6 +64,8 @@ export class SyncRoomEngine {
   private clients = new Map<string, ConnectedRoomClient>();
   private readonly barrierTimeoutMs: number;
   private readonly barrierStartLeadMs: number;
+  private lastTracklessSkipVideoId: string | null = null;
+  private lastTracklessSkipAtMs = 0;
 
   constructor(slug: string, config?: RoomEngineConfig, nowMs = Date.now()) {
     this.slug = slug;
@@ -243,16 +245,31 @@ export class SyncRoomEngine {
     nowMs = Date.now(),
     options?: { useBarrier?: boolean },
   ): { outbound: SyncOutboundMessage[]; nextAlarmMs: number | null } {
-    if (
-      command === "skip" &&
-      typeof payload.expectedVideoId === "string" &&
-      payload.expectedVideoId.trim().length > 0
-    ) {
+    const expectedVideoId =
+      typeof payload.expectedVideoId === "string" ? payload.expectedVideoId.trim() : "";
+
+    if (command === "skip" && expectedVideoId.length > 0) {
       const currentVideoId = this.anchor.track?.youtubeVideoId;
-      if (currentVideoId && currentVideoId !== payload.expectedVideoId.trim()) {
+      if (currentVideoId && currentVideoId !== expectedVideoId) {
         this.syncAnchorIntoTvFeed(nowMs);
         return { outbound: [], nextAlarmMs: null };
       }
+    }
+
+    if (command === "skip" && !payload.track) {
+      if (
+        this.lastTracklessSkipAtMs > 0 &&
+        nowMs - this.lastTracklessSkipAtMs < 4000 &&
+        (!expectedVideoId ||
+          !this.lastTracklessSkipVideoId ||
+          expectedVideoId === this.lastTracklessSkipVideoId)
+      ) {
+        this.syncAnchorIntoTvFeed(nowMs);
+        return { outbound: [], nextAlarmMs: null };
+      }
+      this.lastTracklessSkipVideoId =
+        expectedVideoId || this.anchor.track?.youtubeVideoId || null;
+      this.lastTracklessSkipAtMs = nowMs;
     }
 
     const livePos = computeTargetPositionSec(this.anchor, nowMs);
@@ -383,6 +400,9 @@ export class SyncRoomEngine {
     ) {
       const track = sanitizeSyncTrack(payload.track);
       if (track) {
+        this.lastTracklessSkipVideoId = null;
+        this.lastTracklessSkipAtMs = 0;
+        const resolvedLastCommand = command === "skip" ? "play_now" : command;
         const startPositionSec = Math.max(0, Number(payload.startPositionSec ?? 0));
         const shouldUseBarrier = options?.useBarrier !== false && this.shouldCoordinateBarrier();
 
@@ -399,7 +419,7 @@ export class SyncRoomEngine {
             isPaused: true,
             anchorPositionSec: startPositionSec,
             anchorServerMs: nowMs,
-            lastCommand: command,
+            lastCommand: resolvedLastCommand,
           };
           this.activeBarrier = {
             barrierId,
@@ -436,7 +456,7 @@ export class SyncRoomEngine {
             isPaused: false,
             anchorPositionSec: startPositionSec,
             anchorServerMs: startAtServerMs,
-            lastCommand: command,
+            lastCommand: resolvedLastCommand,
           };
           this.bumpRevision(nowMs);
           outbound.push({
@@ -522,10 +542,20 @@ export class SyncRoomEngine {
       (!sameTrack &&
         this.anchor.seq > 0 &&
         Boolean(this.anchor.track) &&
-        ((extAnchorMs > 0 && this.anchor.anchorServerMs > extAnchorMs + 250 && extSeq <= this.anchor.seq) ||
+        ((extSeq <= this.anchor.seq &&
+          (extAnchorMs <= 0 ||
+            this.anchor.anchorServerMs > extAnchorMs + 250 ||
+            !extNowPlaying)) ||
           (!extNowPlaying && extSeq <= this.anchor.seq)));
 
     if (!localTimingIsNewer) {
+      const rawLastCommand =
+        typeof extPlayback.lastCommand === "string"
+          ? extPlayback.lastCommand
+          : this.anchor.lastCommand;
+      const normalizedLastCommand =
+        rawLastCommand === "skip" && Boolean(extNowPlaying) ? "play_now" : rawLastCommand;
+
       this.anchor = {
         ...this.anchor,
         seq: Math.max(this.anchor.seq + 1, extSeq),
@@ -549,10 +579,7 @@ export class SyncRoomEngine {
           extPlayback.displayConfig && typeof extPlayback.displayConfig === "object"
             ? (extPlayback.displayConfig as Record<string, unknown>)
             : this.anchor.displayConfig,
-        lastCommand:
-          typeof extPlayback.lastCommand === "string"
-            ? extPlayback.lastCommand
-            : this.anchor.lastCommand,
+        lastCommand: normalizedLastCommand,
       };
     } else {
       // Keep fresher live playback timing, only refresh display/settings metadata
@@ -630,6 +657,10 @@ export class SyncRoomEngine {
       timeDiff >= driftThresholdSec;
 
     if (shouldReanchor) {
+      if (isTrackDifferent) {
+        this.lastTracklessSkipVideoId = null;
+        this.lastTracklessSkipAtMs = 0;
+      }
       this.anchor = {
         ...this.anchor,
         seq: this.anchor.seq + 1,
@@ -644,6 +675,7 @@ export class SyncRoomEngine {
         anchorServerMs: nowMs,
         tvMuted: typeof report.tvMuted === "boolean" ? report.tvMuted : this.anchor.tvMuted,
         volume: typeof report.volume === "number" ? report.volume : this.anchor.volume,
+        lastCommand: isTrackDifferent ? "play_now" : "progress",
       };
       this.bumpRevision(nowMs);
       this.syncAnchorIntoTvFeed(nowMs);

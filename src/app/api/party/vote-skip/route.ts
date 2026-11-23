@@ -106,6 +106,9 @@ export async function POST(req: NextRequest) {
 
     if (shouldSkip) {
       nextSkipState = null;
+      const nowMs = Date.now();
+      const prevSeekSeq = Number(curTrack?.seekSeq ?? 0);
+      const prevTvMuted = curTrack?.tvMuted ?? true;
 
       // Advance playback in DB
       const { data: night } = await admin
@@ -134,7 +137,7 @@ export async function POST(req: NextRequest) {
 
         const { data: queuedItems } = await admin
           .from("queue_items")
-          .select("id, track_id, vote_count, created_at, proposed_by_participant_id, tracks(id, title, artist, duration_seconds, thumbnail_url, youtube_video_id, source)")
+          .select("id, track_id, vote_count, created_at, proposed_by_participant_id, tracks(id, title, artist, duration_seconds, thumbnail_url, youtube_video_id, storage_path, source)")
           .eq("night_session_id", night.id)
           .eq("status", "queued");
 
@@ -184,13 +187,74 @@ export async function POST(req: NextRequest) {
               source: String(tr.source || "youtube"),
               durationSeconds: Number(tr.duration_seconds ?? 210),
               youtubeVideoId: tr.youtube_video_id ? String(tr.youtube_video_id) : null,
+              storagePath: tr.storage_path ? String(tr.storage_path) : null,
               thumbnailUrl: tr.thumbnail_url ? String(tr.thumbnail_url) : null,
               voteCount: cleanVotes,
               guestName: meta.guestName ?? null,
               dedication: meta.dedication ?? null,
               isKaraoke: Boolean(meta.isKaraoke),
+              tvMuted: prevTvMuted,
+              positionSeconds: 0,
+              anchorTimestampMs: nowMs,
+              startedAtMs: nowMs,
+              seekSeq: prevSeekSeq + 1,
             };
           }
+        }
+      }
+
+      if (!nextTrackPayload) {
+        const curVideoId = curTrack?.youtubeVideoId ? String(curTrack.youtubeVideoId) : null;
+        const { data: fallbacks } = await admin
+          .from("fallback_tracks")
+          .select("id, position, tracks(id, title, artist, source, duration_seconds, thumbnail_url, youtube_video_id, storage_path)")
+          .eq("venue_id", venueId)
+          .order("position", { ascending: true });
+
+        const fbList = (fallbacks || [])
+          .map((row) => {
+            const t = Array.isArray(row.tracks) ? row.tracks[0] : row.tracks;
+            return t as {
+              id: string;
+              title: string;
+              artist: string;
+              source: string;
+              duration_seconds: number | null;
+              thumbnail_url: string | null;
+              youtube_video_id: string | null;
+              storage_path: string | null;
+            } | null;
+          })
+          .filter((t): t is NonNullable<typeof t> => Boolean(t && (t.youtube_video_id || t.storage_path)));
+
+        if (fbList.length > 0) {
+          const curIdx = fbList.findIndex(
+            (t) =>
+              (curVideoId && t.youtube_video_id === curVideoId) ||
+              String(t.id) === String(curTrack?.trackId || ""),
+          );
+          const nextFb = fbList[(curIdx + 1) % fbList.length];
+          const fbMeta = itemMeta[`fb-${nextFb.id}`] || itemMeta[nextFb.id] || {};
+          nextTrackPayload = {
+            itemId: `fb-${nextFb.id}`,
+            trackId: nextFb.id,
+            title: nextFb.title,
+            artist: nextFb.artist,
+            source: nextFb.source || "youtube",
+            durationSeconds: Number(nextFb.duration_seconds ?? 210),
+            youtubeVideoId: nextFb.youtube_video_id,
+            storagePath: nextFb.storage_path ?? null,
+            thumbnailUrl: nextFb.thumbnail_url ?? null,
+            voteCount: 0,
+            guestName: fbMeta.guestName ?? null,
+            dedication: fbMeta.dedication ?? null,
+            isKaraoke: Boolean(fbMeta.isKaraoke),
+            tvMuted: prevTvMuted,
+            positionSeconds: 0,
+            anchorTimestampMs: nowMs,
+            startedAtMs: nowMs,
+            seekSeq: prevSeekSeq + 1,
+          };
         }
       }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   BadgeCheck,
@@ -205,41 +205,39 @@ export function ClientNight({ slug }: { slug: string }) {
 
     let unsubWsParty: (() => void) | null = null;
     let syncClientRef: import("@/lib/sync/client").PoneleSyncClient | null = null;
-    let wsTargetsConfigured = false;
+    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
+
     void import("@/lib/sync/client").then(({ acquireSyncClient, releaseSyncClient }) => {
       if (!active) return;
       const sc = acquireSyncClient({ slug, role: "client" });
       if (sc.hasTargetsConfigured()) {
-        wsTargetsConfigured = true;
         syncClientRef = sc;
         unsubWsParty = sc.on("party:event", ({ payload }) => {
           handlePartyPayload(payload);
         });
-      } else {
-        releaseSyncClient(sc);
+        return;
       }
-    });
+      releaseSyncClient(sc);
 
-    let channel: import("@supabase/supabase-js").RealtimeChannel | null = null;
-
-    void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
-      if (!active || wsTargetsConfigured) return;
-      try {
-        const supabase = createBrowserSupabase();
-        channel = supabase
-          .channel(`guest-party:${slug}`)
-          .on(
-            "broadcast",
-            { event: "party_event" },
-            (msg: { payload?: Record<string, unknown> }) => {
-              if (!active || !msg.payload) return;
-              handlePartyPayload(msg.payload);
-            },
-          )
-          .subscribe();
-      } catch {
-        // Non-blocking fallback
-      }
+      void import("@/lib/api/supabase/browser").then(({ createBrowserSupabase }) => {
+        if (!active) return;
+        try {
+          const supabase = createBrowserSupabase();
+          channel = supabase
+            .channel(`guest-party:${slug}`)
+            .on(
+              "broadcast",
+              { event: "party_event" },
+              (msg: { payload?: Record<string, unknown> }) => {
+                if (!active || !msg.payload) return;
+                handlePartyPayload(msg.payload);
+              },
+            )
+            .subscribe();
+        } catch {
+          // Non-blocking fallback
+        }
+      });
     });
 
     return () => {
@@ -341,6 +339,7 @@ export function ClientNight({ slug }: { slug: string }) {
   const stateCandidates = state?.candidates;
 
   const [clientRoundSeconds, setClientRoundSeconds] = useState<number>(180);
+  const lastRoundRefreshAtRef = useRef<number>(0);
   useEffect(() => {
     if (state?.votingRound?.remainingSeconds !== undefined) {
       setClientRoundSeconds(state.votingRound.remainingSeconds);
@@ -352,7 +351,11 @@ export function ClientNight({ slug }: { slug: string }) {
     const interval = setInterval(() => {
       setClientRoundSeconds((prev) => {
         if (prev <= 1) {
-          void refresh();
+          const now = Date.now();
+          if (now - lastRoundRefreshAtRef.current >= 10_000) {
+            lastRoundRefreshAtRef.current = now;
+            void refresh();
+          }
           return state?.votingRound?.durationSeconds ?? 180;
         }
         return prev - 1;

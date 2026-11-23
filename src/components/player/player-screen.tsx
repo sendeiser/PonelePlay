@@ -942,14 +942,18 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
   useEffect(() => {
     handleSkipNextRef.current = handleSkipNext;
   }, [handleSkipNext]);
+  const lastTvAutoSkipAtRef = useRef<number>(0);
+  const lastRemoteSkipAtRef = useRef<number>(0);
 
   const handleTvAudioEnded = useCallback(() => {
+    if (Date.now() - lastTvAutoSkipAtRef.current < 4500) return;
     const client = syncClientRef.current;
     const hasConnectedMaster = Boolean(
       client?.isConnected() && (client.getStatus().presence?.masterCount ?? 0) > 0,
     );
     if (hasConnectedMaster) return;
     if (Date.now() - lastAdminProgressAtRef.current > 12000) {
+      lastTvAutoSkipAtRef.current = Date.now();
       void handleSkipNextRef.current(false);
     }
   }, []);
@@ -1462,6 +1466,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                 setHudMessage(tvMuted ? "🔇 Audio TV Silenciado desde Cabina" : "🔊 Audio TV Activado desde Cabina");
                 setTimeout(() => setHudMessage(null), 3500);
               } else if (cmd === "skip") {
+                if (Date.now() - lastRemoteSkipAtRef.current < 2500) return;
+                lastRemoteSkipAtRef.current = Date.now();
                 void handleSkipNextRef.current(true);
               } else if (cmd === "seek") {
                 const sec = Math.max(0, Number(p.seconds ?? 0));
@@ -1639,7 +1645,8 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
                   setManualNowPlaying(st.current_track);
                   setElapsed(0);
                   elapsedRef.current = 0;
-                } else {
+                } else if (Date.now() - lastRemoteSkipAtRef.current >= 2500) {
+                  lastRemoteSkipAtRef.current = Date.now();
                   void handleSkipNextRef.current(true);
                 }
               } else if (isNewCommand && st.last_command === "play_now" && st.current_track) {
@@ -1920,7 +1927,7 @@ export function PlayerScreen({ slug }: PlayerScreenProps) {
           token={token}
           slug={slug}
           pollIntervalMs={syncConnected ? 60_000 : 30_000}
-          onStateChange={(st) => setPlayerState(st)}
+          onStateChange={setPlayerState}
         />
       ) : null}
 

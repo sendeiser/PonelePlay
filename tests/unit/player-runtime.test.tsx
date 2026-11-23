@@ -160,5 +160,52 @@ describe("PlayerRuntime component", () => {
     expect(normalizeTvDisplayMode(null)).toBe("SALON");
     expect(normalizeTvDisplayMode(undefined)).toBe("SALON");
   });
+
+  it("does not re-trigger fetchState when parent re-renders with a new inline onStateChange callback", async () => {
+    const initialState: PlayerStateResponse = {
+      ok: true,
+      deviceId: "dev-1",
+      venue: { id: "v-1", name: "Bar", slug: "bar" },
+      nightId: "n-1",
+      nightStatus: "active",
+      nowPlaying: trackA,
+      queue: [trackB],
+      fallback: [],
+      serverTime: "2026-10-31T23:00:00Z",
+    };
+
+    const mockFetchState = vi.fn().mockResolvedValue(initialState);
+    const mockSendEvent = vi.fn().mockResolvedValue(undefined);
+
+    const { rerender } = render(
+      <PlayerRuntime
+        token="tok-123"
+        slug="bar"
+        fetchState={mockFetchState}
+        sendEvent={mockSendEvent}
+        pollIntervalMs={60_000}
+        onStateChange={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockFetchState).toHaveBeenCalledTimes(1);
+    });
+
+    // Simulate parent re-render passing a brand-new closure identity
+    rerender(
+      <PlayerRuntime
+        token="tok-123"
+        slug="bar"
+        fetchState={mockFetchState}
+        sendEvent={mockSendEvent}
+        pollIntervalMs={60_000}
+        onStateChange={() => {}}
+      />,
+    );
+
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mockFetchState).toHaveBeenCalledTimes(1);
+  });
 });
 

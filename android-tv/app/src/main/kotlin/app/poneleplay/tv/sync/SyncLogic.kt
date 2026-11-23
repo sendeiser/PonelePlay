@@ -331,5 +331,40 @@ object SyncClockEstimator {
 
         return candidates
     }
+
+    /**
+     * Maps remote playback commands to local TV side effects. Server "skip" is state telemetry
+     * whose resolved next track arrives via feed/anchor/sync:go, never a trigger to skip again.
+     */
+    fun resolveRemoteCommandAction(lastCommand: String?): String? {
+        return when (lastCommand?.trim()) {
+            "pause", "resume", "toggle_pause", "seek", "set_volume", "set_tv_mute", "mute", "unmute", "toggle_mute", "play_now" -> lastCommand.trim()
+            else -> null
+        }
+    }
+
+    /**
+     * Guards standalone TV auto-skip against rapid duplicate or post-load skip cascades.
+     */
+    fun shouldAllowAutoSkip(
+        nowElapsedMs: Long,
+        lastAutoSkipAtMs: Long,
+        endedKey: String,
+        lastAutoSkippedKey: String,
+        cooldownMs: Long = 4500L,
+        sameTrackDedupMs: Long = 12_000L
+    ): Boolean {
+        if (lastAutoSkipAtMs > 0L && nowElapsedMs - lastAutoSkipAtMs < cooldownMs) {
+            return false
+        }
+        if (endedKey.isNotBlank() &&
+            endedKey == lastAutoSkippedKey &&
+            lastAutoSkipAtMs > 0L &&
+            nowElapsedMs - lastAutoSkipAtMs < sameTrackDedupMs
+        ) {
+            return false
+        }
+        return true
+    }
 }
 

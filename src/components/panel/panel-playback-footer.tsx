@@ -145,6 +145,7 @@ export function PanelPlaybackFooter({
   currentTrackRef.current = currentTrack;
   const lastProgressBroadcastRef = useRef<number>(0);
   const isSkippingRef = useRef(false);
+  const lastSkipVoteEventTsRef = useRef<number>(0);
   const hasPreloadedRef = useRef(false);
   // Tracks already played/skipped in this session so stale activeQueue snapshots never replay them
   const playedItemIdsRef = useRef<Set<string>>(new Set());
@@ -728,6 +729,10 @@ export function PanelPlaybackFooter({
       unsubParty = syncClient.on("party:event", ({ payload }) => {
         if (!active || !payload) return;
         if (payload.type === "party_skip_vote_updated" && payload.skipped) {
+          const ts = typeof payload.timestamp === "number" ? payload.timestamp : 0;
+          if (ts > 0 && ts === lastSkipVoteEventTsRef.current) return;
+          if (Date.now() - lastSkipVoteEventTsRef.current < 3500) return;
+          lastSkipVoteEventTsRef.current = ts || Date.now();
           const next = payload.nextTrack as PlayerTrack | null | undefined;
           if (next && (next.youtubeVideoId || next.itemId)) {
             const nextKey = trackAudioKey(next);
@@ -806,6 +811,10 @@ export function PanelPlaybackFooter({
               if (!active || !msg.payload) return;
               const p = msg.payload;
               if (p.type === "party_skip_vote_updated" && p.skipped) {
+                const ts = typeof p.timestamp === "number" ? p.timestamp : 0;
+                if (ts > 0 && ts === lastSkipVoteEventTsRef.current) return;
+                if (Date.now() - lastSkipVoteEventTsRef.current < 3500) return;
+                lastSkipVoteEventTsRef.current = ts || Date.now();
                 const next = p.nextTrack as PlayerTrack | null | undefined;
                 if (next && (next.youtubeVideoId || next.itemId)) {
                   const nextKey = trackAudioKey(next);
@@ -970,7 +979,7 @@ export function PanelPlaybackFooter({
     isSkippingRef.current = true;
     setTimeout(() => {
       isSkippingRef.current = false;
-    }, 2500);
+    }, 3500);
 
     showToast("⏭️ Salteando a la siguiente canción...");
     // Always read the LIVE current track (never a stale render closure)
@@ -2039,7 +2048,7 @@ export function PanelPlaybackFooter({
             syncClientRef.current.sendReady(activeBarrierIdRef.current);
           }
         }}
-        onAudioBlockedChange={(blocked) => setIsAudioBlocked(blocked)}
+        onAudioBlockedChange={setIsAudioBlocked}
       />
 
       {/* Manual Track Selection Modal */}

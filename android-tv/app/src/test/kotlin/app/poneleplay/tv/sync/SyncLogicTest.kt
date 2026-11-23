@@ -170,5 +170,22 @@ class SyncLogicTest {
         assertEquals("PORTADA", SyncClockEstimator.normalizeScreenModeName("CLEAN"))
         assertEquals("PORTADA", SyncClockEstimator.normalizeScreenModeName("PORTADA"))
     }
+
+    @Test
+    fun remoteCommandAndAutoSkipGuards_preventInfiniteSkipLoops() {
+        // Server "skip" telemetry must never map to a TV side-effect
+        assertEquals(null, SyncClockEstimator.resolveRemoteCommandAction("skip"))
+        assertEquals(null, SyncClockEstimator.resolveRemoteCommandAction("progress"))
+        assertEquals(null, SyncClockEstimator.resolveRemoteCommandAction(null))
+        assertEquals("play_now", SyncClockEstimator.resolveRemoteCommandAction("play_now"))
+        assertEquals("pause", SyncClockEstimator.resolveRemoteCommandAction("pause"))
+
+        // Auto-skip cooldown + same-track deduplication
+        assertTrue(SyncClockEstimator.shouldAllowAutoSkip(10_000L, 0L, "vid1", ""))
+        assertFalse(SyncClockEstimator.shouldAllowAutoSkip(12_000L, 10_000L, "vid2", "vid1"))
+        assertFalse(SyncClockEstimator.shouldAllowAutoSkip(16_000L, 10_000L, "vid1", "vid1"))
+        assertTrue(SyncClockEstimator.shouldAllowAutoSkip(16_000L, 10_000L, "vid2", "vid1"))
+        assertTrue(SyncClockEstimator.shouldAllowAutoSkip(23_000L, 10_000L, "vid1", "vid1"))
+    }
 }
 

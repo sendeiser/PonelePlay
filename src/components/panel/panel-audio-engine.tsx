@@ -81,6 +81,8 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     onProgressRef.current = onProgress;
     const onTrackBufferedRef = useRef(onTrackBuffered);
     onTrackBufferedRef.current = onTrackBuffered;
+    const onAudioBlockedChangeRef = useRef(onAudioBlockedChange);
+    onAudioBlockedChangeRef.current = onAudioBlockedChange;
     const lastReportedTimeRef = useRef<number>(0);
     const errorSkipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const trackLoadedAtRef = useRef<number>(0);
@@ -172,7 +174,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
     const unlockAudio = useCallback(() => {
       isUnlockedRef.current = true;
       setIsBlockedState(false);
-      onAudioBlockedChange?.(false);
+      onAudioBlockedChangeRef.current?.(false);
 
       if (isMutedRef.current || volumeRef.current === 0) {
         sendIframeCommand("mute");
@@ -197,7 +199,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           // Non-blocking
         }
       }
-    }, [onAudioBlockedChange]);
+    }, [sendIframeCommand]);
 
     // Listen for user gesture anywhere to unlock audio
     useEffect(() => {
@@ -259,6 +261,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       }
 
       if (fileUrl) {
+        trackLoadedAtRef.current = Date.now();
         audio.src = fileUrl;
         audio.volume = isMuted ? 0 : volume / 100;
         audio.muted = isMuted;
@@ -267,14 +270,16 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
             audio.play().catch((err: unknown) => {
               console.warn("Autoplay blocked for local audio:", err);
               setIsBlockedState(true);
-              onAudioBlockedChange?.(true);
+              onAudioBlockedChangeRef.current?.(true);
             });
           } catch {}
         }
       }
 
       const handleEnded = () => {
-        onTrackEndedRef.current();
+        if (Date.now() - trackLoadedAtRef.current > 3000) {
+          onTrackEndedRef.current();
+        }
       };
 
       audio.addEventListener("ended", handleEnded);
@@ -282,7 +287,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         audio.removeEventListener("ended", handleEnded);
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentTrack?.itemId, currentTrack?.source, currentTrack?.storagePath, onAudioBlockedChange]);
+    }, [currentTrack?.itemId, currentTrack?.source, currentTrack?.storagePath]);
 
     // Handle YouTube audio initialization and track changes
     useEffect(() => {
@@ -381,6 +386,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
           containerRef.current.appendChild(host);
 
           currentVideoIdRef.current = videoId;
+          trackLoadedAtRef.current = Date.now();
           playerRef.current = new window.YT.Player(host, {
             width: "160",
             height: "90",
@@ -411,7 +417,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                   }
                 } catch {
                   setIsBlockedState(true);
-                  onAudioBlockedChange?.(true);
+                  onAudioBlockedChangeRef.current?.(true);
                 }
               },
               onStateChange: (event) => {
@@ -451,16 +457,37 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
                 // Ignore spurious ENDED events that occur within 6s of loading a track
                 // (caused by stopVideo or YouTube releasing the previous video)
                 if (event.data === 0 && Date.now() - trackLoadedAtRef.current > 6000) {
-                  onTrackEndedRef.current();
+                  let matchesActiveVideo = true;
+                  try {
+                    const vd = (
+                      playerRef.current as unknown as {
+                        getVideoData?: () => { video_id?: string };
+                      } | null
+                    )?.getVideoData?.();
+                    if (
+                      vd?.video_id &&
+                      currentVideoIdRef.current &&
+                      vd.video_id !== currentVideoIdRef.current
+                    ) {
+                      matchesActiveVideo = false;
+                    }
+                  } catch {}
+                  if (matchesActiveVideo) {
+                    onTrackEndedRef.current();
+                  }
                 }
               },
               onError: (event) => {
                 console.warn("YouTube audio playback error code:", event.data);
                 if (event.data === 150 || event.data === 101 || event.data === 2) {
+                  const erroredVideoId = currentVideoIdRef.current;
                   if (errorSkipTimerRef.current) clearTimeout(errorSkipTimerRef.current);
                   errorSkipTimerRef.current = setTimeout(() => {
                     errorSkipTimerRef.current = null;
-                    if (Date.now() - trackLoadedAtRef.current > 3000) {
+                    if (
+                      currentVideoIdRef.current === erroredVideoId &&
+                      Date.now() - trackLoadedAtRef.current > 3000
+                    ) {
                       onTrackEndedRef.current();
                     }
                   }, 800);
@@ -481,7 +508,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
         }
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentTrack?.itemId, currentTrack?.youtubeVideoId, currentTrack?.source, onAudioBlockedChange]);
+    }, [currentTrack?.itemId, currentTrack?.youtubeVideoId, currentTrack?.source]);
 
     // Handle isPaused changes
     useEffect(() => {
@@ -497,7 +524,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
             try {
               html5AudioRef.current.play().catch(() => {
                 setIsBlockedState(true);
-                onAudioBlockedChange?.(true);
+                onAudioBlockedChangeRef.current?.(true);
               });
             } catch {}
           }
@@ -510,7 +537,7 @@ export const PanelAudioEngine = forwardRef<PanelAudioEngineRef, PanelAudioEngine
       }
 
       sendIframeCommand(isPaused ? "pauseVideo" : "playVideo");
-    }, [isPaused, currentTrack?.source, onAudioBlockedChange]);
+    }, [isPaused, currentTrack?.source, sendIframeCommand]);
 
     // Handle volume & mute changes
     useEffect(() => {

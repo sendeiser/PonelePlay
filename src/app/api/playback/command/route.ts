@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
     let newKaraoke = Boolean(playState?.karaoke_mode);
     let newCurrentTrack: Record<string, unknown> | null =
       Object.keys(curTrack).length > 0 ? { ...curTrack } : null;
+    let nextPicked: Record<string, unknown> | null = null;
 
     if (command === "pause") {
       newPaused = true;
@@ -605,7 +606,9 @@ export async function POST(req: NextRequest) {
 
       if (
         (expectedVideoId && curVideoId && expectedVideoId !== curVideoId) ||
-        (startedAtMs > 0 && nowMs - startedAtMs < 2500 && playState?.last_command === "play_now")
+        (startedAtMs > 0 &&
+          nowMs - startedAtMs < 3500 &&
+          (playState?.last_command === "play_now" || playState?.last_command === "skip"))
       ) {
         return NextResponse.json({
           ok: true,
@@ -628,7 +631,7 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle();
 
-      let nextPicked: Record<string, unknown> | null = null;
+      nextPicked = null;
 
       if (openNight?.id) {
         const { partyConfig, itemMeta } = await loadVenuePartyConfigFromDb(admin, venue.slug);
@@ -756,6 +759,7 @@ export async function POST(req: NextRequest) {
     }
 
     const nextSeq = Number(playState?.command_seq ?? 0) + 1;
+    const persistedLastCommand = command === "skip" && nextPicked ? "play_now" : command;
 
     const { data: updatedState, error: updateErr } = await admin
       .from("venue_playback_state")
@@ -765,7 +769,7 @@ export async function POST(req: NextRequest) {
         is_muted: newMuted,
         karaoke_mode: newKaraoke,
         current_track: newCurrentTrack,
-        last_command: command,
+        last_command: persistedLastCommand,
         command_seq: nextSeq,
         updated_at: new Date().toISOString(),
       })
@@ -801,7 +805,7 @@ export async function POST(req: NextRequest) {
       isMuted: Boolean(updatedState.is_muted),
       karaokeMode: Boolean(updatedState.karaoke_mode),
       commandSeq: Number(updatedState.command_seq ?? nextSeq),
-      lastCommand: updatedState.last_command ?? command,
+      lastCommand: updatedState.last_command ?? persistedLastCommand,
       currentTrack: updatedState.current_track ?? null,
     });
   } catch (err: unknown) {
